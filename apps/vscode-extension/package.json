@@ -2,7 +2,7 @@
   "name": "omni-schematics",
   "displayName": "Omni Schematics",
   "description": "Schematic capture, component authoring and circuit/system simulation inside VS Code. Runs the general-simulator engine today, and is built to run others.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": false,
   "publisher": "gensim",
   "engines": {
