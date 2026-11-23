@@ -96,3 +96,46 @@ describe("#130: a failed kernel start tells the webview", () => {
     kernel.dispose();
   });
 });
+
+describe("#134: a prepared environment is used instead of a checkout", () => {
+  it("fails naming kernelPython, without falling through to the workspace search", async () => {
+    // The distinguishing assertion is the *absence* of the pyproject.toml
+    // message. If `kernelPython` were merely consulted and then ignored, the
+    // user would be told to fix `workspaceRoot` -- which is precisely the
+    // wrong advice for someone who has named an environment.
+    __setTestState({ config: { kernelPython: "/envs/does-not-exist" } });
+
+    const log = createRecordingChannel();
+    const kernel = new KernelSidecar(log);
+    const { seen, dispose } = subscribe(kernel);
+
+    const result = await kernel.start();
+
+    expect(result).toBeNull();
+    expect(seen).toEqual([null]);
+    expect(kernel.lastFailure ?? "").toContain("kernelPython");
+    expect(kernel.lastFailure ?? "").toContain("/envs/does-not-exist");
+    expect(kernel.lastFailure ?? "").not.toContain("pyproject.toml");
+
+    dispose();
+    kernel.dispose();
+  });
+
+  it("does not require a workspace folder at all when kernelPython is set", async () => {
+    // No folder open, no workspaceRoot: under the old arrangement this could
+    // not even be attempted. The attempt failing on a bogus path is fine; what
+    // matters is which failure it is.
+    __setTestState({
+      config: { kernelPython: "/envs/does-not-exist" },
+      workspaceFolders: undefined,
+    });
+
+    const log = createRecordingChannel();
+    const kernel = new KernelSidecar(log);
+
+    await kernel.start();
+
+    expect(kernel.lastFailure ?? "").toMatch(/kernelPython/);
+    kernel.dispose();
+  });
+});

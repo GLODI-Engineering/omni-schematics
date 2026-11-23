@@ -9,6 +9,12 @@
 # native code here is WebAssembly, which is built once and runs everywhere), so there is no
 # reason to spend Windows or macOS runner minutes to produce a file that would be identical.
 #
+# Two artifacts, because the .vsix is only half of an install. It carries the editor and no
+# kernel: simulation runs in a Python process the extension spawns. `omniSchematics.kernelPython`
+# (#134) lets that be an environment the user prepared, which is only a reasonable thing to ask
+# if the packages to put in it are downloadable -- hence the wheels job below. Built from the
+# same tag as the .vsix, so the pair cannot disagree about the protocol version they speak.
+#
 # The Marketplace is deliberately not published to. That needs the `gensim` publisher's
 # token, which is a decision and a credential belonging to the repository owner rather than
 # to CI; see GLODI-Engineering/general-simulator#85. Until then the Release asset is the
@@ -85,3 +91,77 @@ jobs:
           || gh release upload "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber "${{ steps.name.outputs.path }}"
+
+  wheels:
+    name: Build the kernel wheels and attach them
+    runs-on: ubuntu-latest
+    # Serialised after `vsix` rather than run beside it: that job is the one that creates the
+    # release, and two jobs racing `gh release create` for the same tag is a flake waiting to
+    # happen. This one only ever uploads.
+    needs: vsix
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+
+      # The seven workspace packages the kernel is assembled from. `--all-packages` builds
+      # every member of the uv workspace, which is exactly that set; naming them individually
+      # would be a second list to keep in step with `pyproject.toml`.
+      #
+      # Deliberately *not* built here: `gsim_py` (a maturin build belonging to gsim-core) and
+      # `gsim-tools` (a private repository). Those two are what a user installs by hand, and
+      # the kernel starts without them -- a run then answers `SolverUnavailable` naming the
+      # build step. Shipping an editor that opens schematics is worth doing on its own.
+      - name: Build the wheels
+        run: uv build --all-packages --out-dir dist
+
+      # A wheel per package, or the environment a user builds from these is incomplete in a
+      # way that only shows up as an ImportError at spawn time.
+      - name: All seven packages built
+        run: |
+          missing=0
+          for pkg in kernel_core schemas components synthesis gsim_model simulator kernel_sidecar; do
+            if ls dist/"$pkg"-*.whl >/dev/null 2>&1; then
+              echo "ok: $(ls dist/"$pkg"-*.whl)"
+            else
+              echo "::error::no wheel built for $pkg"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      # Proves the set is installable and the kernel starts from it, before anyone is told to
+      # install it. A wheel that builds and cannot be installed together with its siblings is
+      # the failure this is here to catch, and it costs one venv.
+      - name: A venv of nothing but these wheels starts the kernel
+        run: |
+          python3 -m venv /tmp/kernel-venv
+          /tmp/kernel-venv/bin/pip install --quiet dist/*.whl
+          set +e
+          timeout 90 /tmp/kernel-venv/bin/python -m kernel_sidecar \
+            --port 0 --token ci --connect-timeout 5 > /tmp/kernel.log 2>&1
+          set -e
+          cat /tmp/kernel.log
+          if ! grep -q "KERNEL_READY" /tmp/kernel.log; then
+            echo "::error::the kernel did not reach KERNEL_READY from a wheel-only venv"
+            exit 1
+          fi
+          # The host refuses an environment whose protocol it does not share (#134), so a
+          # release whose wheels announce nothing would be rejected by the .vsix beside it.
+          if ! grep -qE "KERNEL_READY .*protocol=[0-9]+" /tmp/kernel.log; then
+            echo "::error::KERNEL_READY carried no protocol= field"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernel-wheels
+          path: dist/*.whl
+
+      - name: Attach them to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber dist/*.whl
