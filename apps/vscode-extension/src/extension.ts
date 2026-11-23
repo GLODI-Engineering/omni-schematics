@@ -13,6 +13,7 @@
  */
 import * as vscode from "vscode";
 
+import { openExample } from "./examples";
 import { GsimHost } from "./host";
 import { LIBRARY_VIEW_ID, LibraryViewProvider } from "./libraryView";
 import { mirrorToConsole } from "./log";
@@ -95,6 +96,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<GsimTe
       }
     }),
     vscode.commands.registerCommand("omniSchematics.showKernelLog", () => log.show()),
+    /**
+     * Open one of the bundled examples (#131).
+     *
+     * A copy is opened, never the shipped file: editing inside the extension's own
+     * directory means losing that work on the next update, which replaces it.
+     */
+    vscode.commands.registerCommand("omniSchematics.openExample", () =>
+      openExample(context.extensionUri),
+    ),
     /**
      * Hand a keyboard shortcut VS Code claimed to the schematic.
      *

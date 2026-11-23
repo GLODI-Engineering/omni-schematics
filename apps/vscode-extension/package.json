@@ -77,6 +77,11 @@
         "category": "Omni Schematics"
       },
       {
+        "command": "omniSchematics.openExample",
+        "title": "Open Example Schematic…",
+        "category": "Omni Schematics"
+      },
+      {
         "command": "omniSchematics.openSchematic",
         "title": "Open Schematic…",
         "category": "Omni Schematics"
