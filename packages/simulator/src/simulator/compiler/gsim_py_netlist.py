@@ -39,7 +39,6 @@ project's own dependency closure in this workspace's configuration, not every me
 
 from __future__ import annotations
 
-import copy
 import json
 from typing import Any
 
@@ -48,63 +47,51 @@ from typing import Any
 # behind every Schematic method that needs it) with a message naming the build step.
 from gsim_tools.schematic import GsimPyNotAvailable
 
+# Everything done to a document before the compiler sees it lives there, so the
+# gate in `scripts/check-examples.mjs` can run it without gsim_tools (#143).
+from simulator.compiler.compile_input import (
+    assert_ports_are_declared,
+    prepare_document,
+)
+
 __all__ = [
     "GsimPyNotAvailable",
+    "assert_ports_are_declared",
     "compile_gsim_document",
     "compile_gsim_document_full",
 ]
 
 
-#: `gsim_py.load_document` (via `gsim_tools.schematic.Schematic.load`) requires the *full*
-#: `.gsim_sch` document shape, `{"schema_version": 2, "model": {...}}` — but the IPC
-#: `simulate` payload's own `model` field (see `apps/frontend/src/ipc/types.ts`'s
-#: `SimulateRequest.model`, and `apps/frontend/src/shell/run.ts`, which sends
-#: `useGraphStore.getState().document.model`, deliberately just the inner model, not the
-#: wrapping document) is the *bare* model object — `id`/`name`/`blocks`/`wires`/... at the
-#: top level, no `schema_version` key at all. `_ensure_document_shape` wraps it before
-#: handing it to `Schematic.load`, rather than requiring every caller of this function to
-#: know that distinction.
-_SCHEMA_VERSION = 2
-
-
 def _ensure_document_shape(gsim_doc: dict[str, Any]) -> dict[str, Any]:
-    if "schema_version" in gsim_doc and "model" in gsim_doc:
-        return gsim_doc
-    return {"schema_version": _SCHEMA_VERSION, "model": gsim_doc}
+    """Kept as a name; the work is `compile_input.prepare_document` (#143)."""
+    return prepare_document(gsim_doc)
 
 
-#: A real, confirmed cross-repo divergence, independently rediscovered and documented by
-#: every one of the schematic-drawing benchmark's rows from row 2 onward (see the private
-#: wiki's own row write-ups, and every benchmark script's own `CATALOGUE_PORT_NAMES`
-#: constant): `gsim-core`'s compile registry (`compile/spec.rs`) and the frontend's own
-#: block catalogue (`packages/blocks/src/blocks/passive/{resistor,capacitor,inductor}/
-#: metadata.yaml`, `.../routing/ground/metadata.yaml`) spell these four types' port ids
-#: differently. A document authored/wired through the real frontend UI — not just a
-#: benchmark script — uses the catalogue's spelling, so compiling it through gsim-core's
-#: registry as-is fails with `floating-port` on every wire touching one of these four
-#: types, for every real document, not just a corner case. Respelling here (catalogue ->
-#: gsim-core, the inverse of what every benchmark script's own
-#: `retargeted_to_the_catalogue` does for rendering) is the fix, not a workaround: it
-#: makes the one real ambiguity (which spelling is "correct") a solved question for this
-#: bridge specifically, while the underlying two-vocabulary divergence itself — which
-#: repo should actually change — stays an open, correctly-unresolved cross-repo design
-#: question (recorded in the wiki, not this repo's to decide unilaterally).
-_GSIM_CORE_PORT_NAMES: dict[str, dict[str, str]] = {
-    "passive.resistor": {"p": "p1", "n": "p2"},
-    "passive.inductor": {"p": "p1", "n": "p2"},
-    "passive.capacitor": {"p": "p1", "n": "p2"},
-    "routing.ground": {"gnd": "p"},
-}
-
-
-def _retargeted_to_gsim_core(model: dict[str, Any]) -> dict[str, Any]:
-    block_types = {b["id"]: b.get("type", "") for b in model.get("blocks", [])}
-    for wire in model.get("wires", []):
-        for end in ("from", "to"):
-            renames = _GSIM_CORE_PORT_NAMES.get(block_types.get(wire[end]["block"], ""))
-            if renames and wire[end]["port"] in renames:
-                wire[end]["port"] = renames[wire[end]["port"]]
-    return model
+#: Deliberately empty, and kept as a note rather than deleted silently (#143).
+#:
+#: This module used to respell four types' port ids on the way in --
+#: `passive.{resistor,inductor,capacitor}`'s `p`/`n` to `p1`/`p2`, and
+#: `routing.ground`'s `gnd` to `p` -- to bridge a real divergence: gsim-core's
+#: compile registry once spelled them one way while the frontend catalogue
+#: spelled them the other, so a document drawn in the UI failed with
+#: `floating-port` on every wire touching a passive.
+#:
+#: gsim-core changed. Its own catalogue now declares `p`/`n` and `gnd`, the same
+#: as the frontend's. The two vocabularies agree, so the bridge was the only
+#: thing left creating a divergence -- and it created one on every document that
+#: contains a resistor, capacitor, inductor or ground, which is every document.
+#: `wire4` of `examples/buck_converter.gsim_sch` arrived at the compiler pointing
+#: at `l1.p1`, a port that does not exist, and the error named `l1.p`, which
+#: does.
+#:
+#: The lesson worth keeping is about where it hid rather than about port names:
+#: `scripts/check-examples.mjs` compiles with `gsim_py` directly (gsim-tools is
+#: private, so a gate needing it would run on one machine), which means the gate
+#: and the product reached the compiler by two different routes. A transform on
+#: only one of those routes is invisible to the gate by construction. Hence
+#: `simulator.compiler.compile_input`, which holds both the preparation step and
+#: the check -- so a transform added to the one is automatically run by the gate
+#: that applies the other. Put nothing on the way in anywhere but there.
 
 
 def compile_gsim_document(gsim_doc: Any, target: str = "general-simulator") -> str:
@@ -136,10 +123,8 @@ def compile_gsim_document_full(
     """
     from gsim_tools.schematic import Schematic
 
-    doc = json.loads(gsim_doc) if isinstance(gsim_doc, str) else copy.deepcopy(gsim_doc)
-    doc = _ensure_document_shape(doc)
-    doc["model"] = _retargeted_to_gsim_core(doc["model"])
-    text = json.dumps(doc)
+    doc = json.loads(gsim_doc) if isinstance(gsim_doc, str) else gsim_doc
+    text = json.dumps(prepare_document(doc))
     sch = Schematic.load(text)
     # gsim_tools ships no type stubs, so the real return types are Any to mypy; the
     # conversions below make this function's own declared type honest.
