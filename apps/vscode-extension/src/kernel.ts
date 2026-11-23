@@ -7,17 +7,23 @@
  * stdout, hands that to every webview, and tears the child down on shutdown.
  */
 import { type ChildProcess, spawn } from "node:child_process";
+import * as path from "node:path";
 import * as readline from "node:readline";
 import * as vscode from "vscode";
 
 import { buildKernelEnvironment } from "./kernel-environment";
 
 import {
+  KERNEL_PROTOCOL_VERSION,
   type KernelConfig,
+  type SpawnPlan,
+  buildPreparedSpawnPlan,
   buildSpawnPlan,
   generateToken,
+  isProtocolCompatible,
   kernelConfigFromEnv,
   parseKernelReady,
+  resolveKernelPython,
   resolveWorkspaceRoot,
 } from "./kernel-core";
 
@@ -140,6 +146,34 @@ export class KernelSidecar implements vscode.Disposable {
     const configuredRoot = (settings.get<string>("workspaceRoot") ?? "").trim();
     const runner = (settings.get<string>("pythonRunner") ?? "uv").trim() || "uv";
 
+    // #134: a prepared environment, named rather than built. This comes first
+    // because when it is set there is nothing to discover -- the interpreter
+    // already has `kernel_sidecar` and its dependencies in it, so `uv`, the
+    // checkout and `workspaceRoot` are all irrelevant.
+    //
+    // Worth stating why this is the better shape rather than a shortcut: `uv
+    // sync` never produced a kernel that could simulate. `gsim-tools` is in a
+    // private sibling repo and `gsim_py` is a maturin build, so both are
+    // hand-installed afterwards -- and a sync prunes them again. The
+    // environment was always the user's to assemble; this stops pretending
+    // otherwise.
+    const configuredPython = (settings.get<string>("kernelPython") ?? "").trim();
+    if (configuredPython) {
+      const interpreter = resolveKernelPython(configuredPython);
+      if (!interpreter) {
+        return this.failStart(
+          `omniSchematics.kernelPython is set to "${configuredPython}", but there is no ` +
+            "interpreter there. Give either a virtualenv directory or a path to a Python " +
+            "executable.",
+        );
+      }
+      const workdir =
+        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(interpreter);
+      return this.launch(buildPreparedSpawnPlan(interpreter, generateToken(), workdir), settings, {
+        workspaceRoot: workdir,
+      });
+    }
+
     const candidates = configuredRoot
       ? [configuredRoot]
       : (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
@@ -162,9 +196,25 @@ export class KernelSidecar implements vscode.Disposable {
       );
     }
 
-    const token = generateToken();
-    const plan = buildSpawnPlan(workspaceRoot, token, runner);
+    return this.launch(buildSpawnPlan(workspaceRoot, generateToken(), runner), settings, {
+      workspaceRoot,
+    });
+  }
 
+  /**
+   * Spawn a plan and wait for its handshake.
+   *
+   * Shared by both ways of getting a kernel: the `uv` workspace a developer
+   * works in, and the prepared environment a user names (#134). Everything
+   * from here down is identical between them -- which is the argument for the
+   * split being a spawn-plan decision and nothing more.
+   */
+  private async launch(
+    plan: SpawnPlan,
+    settings: { get<T>(key: string): T | undefined },
+    context: { workspaceRoot: string },
+  ): Promise<KernelConfig | null> {
+    const workspaceRoot = context.workspaceRoot;
     const kernelEnv = buildKernelEnvironment({
       base: process.env,
       workspaceRoot,
@@ -240,11 +290,48 @@ export class KernelSidecar implements vscode.Disposable {
               `Check the General Simulator output channel, and that \`uv sync\` has been run in ${workspaceRoot}.`,
       );
     }
+    // #134: a prepared environment is version-independent of the editor, so a
+    // venv built for one release can be pointed at a later one. That is a new
+    // failure mode created by the feature, and an incompatible sidecar fails in
+    // ways that look like bugs in the editor -- so refuse it here, naming both
+    // numbers, rather than letting it half-work.
+    if (!isProtocolCompatible(ready.protocol)) {
+      this.discardChild(child);
+      const reported =
+        ready.protocol === undefined
+          ? "reports no protocol version, so it predates this check"
+          : `speaks protocol ${ready.protocol}`;
+      return this.failStart(
+        `The kernel at "${plan.command}" ${reported}, and this editor speaks ` +
+          `protocol ${KERNEL_PROTOCOL_VERSION}. Reinstall the kernel packages into that ` +
+          "environment to match this version of the extension.",
+      );
+    }
+
     this.log.appendLine(`[kernel] ready on port ${ready.port}`);
     this.failure = null;
     this.config = ready;
     this.onDidChangeEmitter.fire(ready);
     return ready;
+  }
+
+  /**
+   * Abandon a child we are not going to use.
+   *
+   * `this.child` is cleared *before* the kill, so the `exit` handler's
+   * `this.child === child` guard is false and it does not fire
+   * `onDidChange(null)` -- `failStart()` is about to fire exactly one event and
+   * two would be a lie about what happened.
+   */
+  private discardChild(child: ChildProcess): void {
+    if (this.child === child) {
+      this.child = null;
+    }
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // Already gone; nothing to do.
+    }
   }
 
   /** Resolves on the KERNEL_READY handshake line, or null if the child dies first. */

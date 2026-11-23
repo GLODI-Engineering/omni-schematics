@@ -19,6 +19,35 @@ import * as path from "node:path";
 export interface KernelConfig {
   port: number;
   token: string;
+  /**
+   * The IPC protocol version the sidecar reports (#134).
+   *
+   * Absent when the sidecar predates the handshake carrying one, which is
+   * itself the signal that a prepared environment is too old to trust.
+   */
+  protocol?: number;
+}
+
+/**
+ * The IPC protocol version this extension speaks.
+ *
+ * Introduced with #134, which lets a user point the extension at a Python
+ * environment they prepared themselves rather than one the extension builds.
+ * That removes `uv`, the checkout and `workspaceRoot` -- and introduces one new
+ * way to fail: an environment prepared for a different version of the editor.
+ * Pinning the *protocol* rather than any package version is deliberate; package
+ * versions drift for reasons that do not change the wire contract, and a check
+ * that fires on those would be noise.
+ *
+ * Bump this, and `KERNEL_PROTOCOL_VERSION` in
+ * `apps/kernel-sidecar/src/kernel_sidecar/server.py`, together and only when
+ * the IPC contract changes incompatibly.
+ */
+export const KERNEL_PROTOCOL_VERSION = 1;
+
+/** Whether a sidecar reporting `protocol` can talk to this extension. */
+export function isProtocolCompatible(protocol: number | undefined): boolean {
+  return protocol === KERNEL_PROTOCOL_VERSION;
 }
 
 export interface SpawnPlan {
@@ -119,7 +148,74 @@ export function buildSpawnPlan(workspaceRoot: string, token: string, runner = "u
 }
 
 /**
- * Parse a `KERNEL_READY port=<n> token=<hex>` handshake line.
+ * Resolve `omniSchematics.kernelPython` to an interpreter that exists.
+ *
+ * Accepts either a virtualenv directory or a path to an interpreter, because
+ * both are things a user naturally has to hand, and guessing wrong costs them
+ * a confusing failure. Returns null for "not configured" *and* for "configured
+ * but not there", which the caller distinguishes by whether the setting was
+ * empty -- that is what lets the failure name which of the two happened.
+ *
+ * `exists` is injectable so tests need no tree on disk.
+ */
+export function resolveKernelPython(
+  configured: string,
+  exists: (candidate: string) => boolean = fs.existsSync,
+): string | null {
+  const trimmed = configured.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  // A direct path to an interpreter.
+  if (exists(trimmed)) {
+    // A venv directory also "exists"; prefer an interpreter inside it when
+    // there is one, and otherwise treat the path as the interpreter itself.
+    const inside = interpreterInsideVenv(trimmed, exists);
+    return inside ?? trimmed;
+  }
+
+  return interpreterInsideVenv(trimmed, exists);
+}
+
+/**
+ * The interpreter inside a venv directory, in the order worth trying.
+ *
+ * `Scripts\python.exe` is the Windows layout -- a venv there has no `bin/` at
+ * all -- and Windows is the machine of record for this feature.
+ */
+function interpreterInsideVenv(dir: string, exists: (candidate: string) => boolean): string | null {
+  const candidates = [
+    path.join(dir, "bin", "python"),
+    path.join(dir, "bin", "python3"),
+    path.join(dir, "Scripts", "python.exe"),
+  ];
+  for (const candidate of candidates) {
+    if (exists(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * Spawn plan for an environment the user prepared (#134).
+ *
+ * No `uv`, no `--project`, no workspace root: the interpreter already has
+ * `kernel_sidecar` and its dependencies installed, which is the entire point.
+ * `cwd` is somewhere to resolve relative paths from, not a place anything is
+ * looked up -- the sidecar's own `--workdir` governs where results land.
+ */
+export function buildPreparedSpawnPlan(interpreter: string, token: string, cwd: string): SpawnPlan {
+  return {
+    command: interpreter,
+    args: ["-m", "kernel_sidecar", "--port", "0", "--token", token, "--connect-timeout", "0"],
+    cwd,
+  };
+}
+
+/**
+ * Parse a `KERNEL_READY port=<n> token=<hex> [protocol=<n>]` handshake line.
  * Returns null for any other line.
  */
 export function parseKernelReady(line: string): KernelConfig | null {
@@ -129,6 +225,7 @@ export function parseKernelReady(line: string): KernelConfig | null {
   }
   let port: number | null = null;
   let token: string | null = null;
+  let protocol: number | undefined;
   for (const part of rest.split(/\s+/)) {
     if (part.startsWith("port=")) {
       const parsed = Number.parseInt(part.slice("port=".length), 10);
@@ -137,9 +234,19 @@ export function parseKernelReady(line: string): KernelConfig | null {
       }
     } else if (part.startsWith("token=")) {
       token = part.slice("token=".length);
+    } else if (part.startsWith("protocol=")) {
+      const parsed = Number.parseInt(part.slice("protocol=".length), 10);
+      if (Number.isInteger(parsed)) {
+        protocol = parsed;
+      }
     }
   }
-  return port !== null && token !== null ? { port, token } : null;
+  if (port === null || token === null) {
+    return null;
+  }
+  // Omitted rather than set to undefined, so a sidecar that reports no version
+  // is distinguishable from one that reports a bad one.
+  return protocol === undefined ? { port, token } : { port, token, protocol };
 }
 
 /**

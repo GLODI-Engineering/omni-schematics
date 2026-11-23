@@ -1,7 +1,8 @@
 """WebSocket server — main event loop (BE-02, BE-03).
 
 Binds to 127.0.0.1 only. Accepts one connection at a time.
-Prints KERNEL_READY port=<n> token=<hex> to stdout after binding.
+Prints ``KERNEL_READY port=<n> token=<hex> protocol=<n>`` to stdout after
+binding.
 """
 
 from __future__ import annotations
@@ -13,6 +14,21 @@ import pathlib
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+#: IPC protocol version announced in the KERNEL_READY handshake.
+#:
+#: Added with omni-schematics#134, which lets a user point the editor at a Python
+#: environment they prepared themselves instead of one the editor builds from a
+#: checkout. That decouples this package's version from the editor's, so the
+#: handshake has to state what it speaks or a mismatched environment fails in
+#: ways that look like editor bugs.
+#:
+#: It versions the *protocol*, not this package: package versions drift for
+#: reasons that do not change the wire contract, and a check that fired on those
+#: would be noise. Bump this and ``KERNEL_PROTOCOL_VERSION`` in
+#: ``apps/vscode-extension/src/kernel-core.ts`` together, and only on an
+#: incompatible change.
+KERNEL_PROTOCOL_VERSION = 1
 
 # Ruff guard: 0.0.0.0 must never appear in this file's bind call.
 # (The ruff rule catches it at lint time; this comment documents the intent.)
@@ -170,8 +186,13 @@ async def run_server(
 
     async with _ws_serve(handler, _BIND_HOST, port, process_request=process_request) as server:
         bound_port = server.sockets[0].getsockname()[1]
-        # Print the KERNEL_READY signal for Tauri to parse.
-        print(f"KERNEL_READY port={bound_port} token={token}", flush=True)
+        # Print the KERNEL_READY signal for the host to parse. `protocol` lets a
+        # host reject an environment prepared for a different release (#134); a
+        # host that does not know the field ignores it.
+        print(
+            f"KERNEL_READY port={bound_port} token={token} protocol={KERNEL_PROTOCOL_VERSION}",
+            flush=True,
+        )
         logger.info("Kernel listening on %s:%d", _BIND_HOST, bound_port)
 
         if connect_timeout > 0:

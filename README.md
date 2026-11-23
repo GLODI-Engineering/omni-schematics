@@ -78,6 +78,45 @@ pnpm package               # builds the webviews + extension, writes omni-schema
 code --install-extension omni-schematics.vsix
 ```
 
+### Installing the `.vsix` on a machine you do not develop on
+
+The `.vsix` is the editor. It carries no simulation kernel and no engine, so on
+a fresh machine nothing can run until you give it both. Two settings do that,
+and then the editor does not care how either was built:
+
+```jsonc
+// settings.json
+"omniSchematics.kernelPython": "/path/to/gsim-venv",
+"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"
+```
+
+With `kernelPython` set there is no `uv`, no checkout of this repo, and
+`workspaceRoot` is ignored entirely.
+
+Preparing that environment once:
+
+```sh
+python -m venv gsim-venv
+gsim-venv/bin/pip install numpy scipy matplotlib pandas sympy websockets h5py
+# the kernel packages themselves, from a checkout or from the release assets:
+gsim-venv/bin/pip install ./packages/kernel-core ./packages/schemas \
+    ./packages/components ./packages/synthesis ./packages/gsim-model \
+    ./packages/simulator ./apps/kernel-sidecar
+# and the two that cannot come from a public index:
+gsim-venv/bin/pip install <path-to>/gsim_py-*.whl      # maturin build of gsim-core/crates/gsim-py
+gsim-venv/bin/pip install -e <sibling-repos-root>/gsim-tools
+```
+
+On Windows the interpreter is `gsim-venv\Scripts\python.exe`; either the
+directory or the executable is accepted.
+
+The kernel announces a protocol version in its handshake, and the extension
+refuses an environment that does not match its own — so if you upgrade the
+extension and the kernel stops starting, the message tells you to reinstall
+those packages, rather than failing somewhere less obvious.
+
+### Working on this repository
+
 Then **open this repository as your VS Code workspace folder** and open
 `examples/buck_converter.gsim_sch`. It opens in the schematic editor, with
 the block library in the Activity Bar.
