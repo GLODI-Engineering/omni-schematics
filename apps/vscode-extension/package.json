@@ -113,6 +113,12 @@
     "configuration": {
       "title": "Omni Schematics",
       "properties": {
+        "omniSchematics.kernelPython": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to a Python environment that already has the simulation kernel installed — either a virtualenv directory or a Python executable inside one.\n\nWhen set, this is used directly and **nothing else is needed**: no `uv`, no checkout of this repo, and `#omniSchematics.workspaceRoot#` is ignored. Prepare the environment once, point here, and the editor does not care how you built it.\n\nThat environment needs the `kernel_sidecar`, `simulator`, `kernel-core`, `gsim-model`, `schemas`, `components` and `synthesis` packages, their scientific dependencies (`numpy`, `scipy`, `matplotlib`, `pandas`, `sympy`, `websockets`, `h5py`), a `gsim_py` wheel, and `gsim-tools`.\n\nLeave empty to fall back to launching the kernel from a checkout with `uv`, which is the arrangement for working on this repo itself.",
+          "description": "Path to a Python environment (virtualenv directory or interpreter) that already has the simulation kernel installed. When set, it is used directly and no uv, checkout or workspaceRoot is needed. Leave empty to fall back to launching the kernel from a checkout with uv."
+        },
         "omniSchematics.workspaceRoot": {
           "type": "string",
           "default": "",

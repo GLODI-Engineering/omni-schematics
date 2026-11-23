@@ -18,6 +18,8 @@ import time
 import pytest
 import websockets
 
+from kernel_sidecar.server import KERNEL_PROTOCOL_VERSION
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -131,6 +133,14 @@ def test_kernel_ready_stdout_within_2_seconds(tmp_path) -> None:  # type: ignore
 
         assert re.search(r"port=\d+", line), f"port= not in KERNEL_READY line: {line!r}"
         assert "token=" in line, f"token= not in KERNEL_READY line: {line!r}"
+        # omni-schematics#134: the host refuses an environment whose protocol
+        # does not match its own, so the real process must actually announce
+        # one. Asserted here rather than only against the constant, because a
+        # constant that never reaches stdout would pass that check and fail
+        # every user.
+        protocol = re.search(r"protocol=(\d+)", line)
+        assert protocol, f"protocol= not in KERNEL_READY line: {line!r}"
+        assert int(protocol.group(1)) == KERNEL_PROTOCOL_VERSION
     finally:
         proc.terminate()
         try:
