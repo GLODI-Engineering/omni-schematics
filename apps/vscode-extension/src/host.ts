@@ -80,7 +80,11 @@ export class GsimHost implements vscode.Disposable {
       this.onDidReceiveEmitter,
       this.kernel.onDidChange((config) => {
         this.broadcast(
-          config ? { type: "gsim/kernelConfig", kernel: config } : { type: "gsim/kernelStopped" },
+          config
+            ? { type: "gsim/kernelConfig", kernel: config }
+            : // `reason` is what makes a failed Run click explainable rather
+              // than merely failed (#130).
+              { type: "gsim/kernelStopped", reason: this.kernel.lastFailure ?? undefined },
         );
       }),
     );

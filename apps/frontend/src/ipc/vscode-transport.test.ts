@@ -3,7 +3,7 @@
  * Tauri-specific integration point (`invoke("restart_kernel")` in
  * `reconnectKernel()`).
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initKernelFromVsCode, reconnectKernel, setIpcClient } from "./transport";
 import { applyKernelConfig, isVsCodeHost, setVsCodeApi } from "./vscode-host";
@@ -142,5 +142,52 @@ describe("reconnectKernel", () => {
     hostSays({ type: "gsim/kernelStopped" });
 
     await expect(pending).rejects.toThrow(/stopped before it became ready/i);
+  });
+
+  /**
+   * #130. The host has failure paths on which it sends neither
+   * `gsim/kernelConfig` nor `gsim/kernelStopped`. This wait used to be
+   * unbounded, so on those paths it settled never -- and `triggerRun()`, which
+   * awaits it before touching the UI, never reached the toast written to
+   * report exactly this. The Run button did nothing at all, with no message,
+   * for as long as the editor stayed open.
+   *
+   * The host is fixed to always answer. This bound is the backstop for a
+   * silence nobody has anticipated, and it must fail the click rather than
+   * hang it.
+   */
+  it("rejects when the host never answers either way, instead of waiting forever", async () => {
+    vi.useFakeTimers();
+    try {
+      installFakeHost();
+
+      const pending = reconnectKernel();
+      const settled = vi.fn();
+      pending.then(settled, settled);
+
+      // The host says nothing at all.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(settled).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(130_000);
+      await expect(pending).rejects.toThrow(/did not report a simulation kernel/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects with the host's own reason when it gives one", async () => {
+    installFakeHost();
+
+    const pending = reconnectKernel();
+    // What the extension host now sends on a failed start: the diagnosis that
+    // used to exist only in an output channel that is closed by default.
+    hostSays({
+      type: "gsim/kernelStopped",
+      reason:
+        'omniSchematics.workspaceRoot is set to "/nope", which has no pyproject.toml in it or above it.',
+    });
+
+    await expect(pending).rejects.toThrow(/workspaceRoot is set to "\/nope"/);
   });
 });

@@ -116,8 +116,8 @@
         "omniSchematics.workspaceRoot": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to the general-simulator checkout (the directory containing pyproject.toml). Leave empty to auto-discover from the open workspace folders.",
-          "markdownDescription": "Folder holding the Omni Schematics Python checkout (the one with `pyproject.toml`) that the simulation kernel is started from. Empty uses the open workspace folders."
+          "description": "Absolute path to an omni-schematics checkout (the directory containing pyproject.toml), which is what the simulation kernel is started from. This is not the general-simulator repository -- that one is pure Rust and has no pyproject.toml; for the solver binary see omniSchematics.generalSimulatorPath. Run `uv sync` in this directory once before the kernel can start. Leave empty to auto-discover from the open workspace folders.",
+          "markdownDescription": "Absolute path to an **omni-schematics** checkout — the directory containing `pyproject.toml`. The simulation kernel is the Python `kernel_sidecar` package in that checkout, so without it **nothing can run**.\n\nThis is **not** the `general-simulator` repository: that one is pure Rust and contains no `pyproject.toml`. For the solver binary see `#omniSchematics.generalSimulatorPath#`.\n\nRun `uv sync` in this directory once before the kernel can start. Leave empty to auto-discover from the open workspace folders."
         },
         "omniSchematics.pythonRunner": {
           "type": "string",
@@ -134,7 +134,7 @@
         "omniSchematics.generalSimulatorPath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Absolute path to the `general-simulator` binary — the engine that actually runs a simulation.\n\nLeave empty to search, in order: this setting, `GENSIM_GENERAL_SIMULATOR_PATH`, then `PATH`, then a sibling `general-simulator` checkout beside the workspace. Build it with `cargo build --release -p general-simulator-cli` and point here at `target/release/general-simulator`.",
+          "markdownDescription": "Absolute path to the `general-simulator` binary — the engine that does the numerical work.\n\nThis is handed to the simulation kernel **after** the kernel has started, so it cannot start one by itself: if `#omniSchematics.workspaceRoot#` does not point at an omni-schematics checkout, nothing here is ever read. Set that one first.\n\nLeave empty to search, in order: this setting, `GENSIM_GENERAL_SIMULATOR_PATH`, then `PATH`, then a sibling `general-simulator` checkout beside the workspace. Build it with `cargo build --release -p general-simulator-cli` and point here at `target/release/general-simulator`.",
           "scope": "machine-overridable"
         },
         "omniSchematics.octaveCliPath": {
