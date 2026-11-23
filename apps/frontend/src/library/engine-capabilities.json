@@ -997,7 +997,7 @@
       ]
     },
     {
-      "type": "passive.switch.ideal",
+      "type": "ideal.switch",
       "emits": {
         "card": "element_and_block",
         "letter": "D",
@@ -1062,7 +1062,7 @@
       ]
     },
     {
-      "type": "passive.diode.ideal",
+      "type": "ideal.diode",
       "emits": {
         "card": "element_and_block",
         "letter": "D",

@@ -73,6 +73,13 @@ export const SYMBOL_DRAWINGS: Record<string, SymbolDrawing> = {
   "semi.jfet.p": jfetPDrawing,
 
   // ── Switches ─────────────────────────────────────────────────────────────
+  // gsim-core#60 renamed `passive.switch.ideal` to `ideal.switch`, keeping the old
+  // spelling as its first alias so a sheet saved before the rename still resolves.
+  // Both keys are held on purpose. `getSchematicSymbol` tries `metadata.name` first --
+  // now `ideal.switch` -- but a sheet whose metadata does not resolve falls back to the
+  // type string it was saved with, and without the old key that walk continues to the
+  // `physical-electrical.switch.generic` alias below and draws a *different* device.
+  "ideal.switch": idealSwitchDrawing,
   "passive.switch.ideal": idealSwitchDrawing,
   "passive.switch.generic": genericSwitchDrawing,
 
