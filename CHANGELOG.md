@@ -1,5 +1,90 @@
 # Changelog
 
+## 2026-11-23 — Omni Schematics (0.7.0)
+
+### Install it
+
+Two downloads on this release, because the `.vsix` is only half an install:
+
+* `omni-schematics-0.7.0.vsix` — the editor. **Extensions → … → Install from VSIX**.
+* seven `.whl` files — the simulation kernel.
+
+The editor carries no simulator. Simulation runs in a Python process the extension
+starts, and that process was previously expected to come from a checkout of this
+repository launched with `uv`. It no longer is:
+
+```sh
+python -m venv gsim-venv
+gsim-venv/bin/pip install <the seven wheels>
+```
+
+then in settings:
+
+```jsonc
+"omniSchematics.kernelPython": "/path/to/gsim-venv",
+"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"
+```
+
+With `kernelPython` set there is no `uv`, no clone, and `workspaceRoot` is ignored.
+On Windows the interpreter is `gsim-venv\Scripts\python.exe`; either the directory or
+the executable is accepted. The wheels declare `numpy`, `scipy`, `matplotlib`, `pandas`,
+`sympy`, `websockets` and `h5py`, so pip resolves those for you.
+
+To **simulate** rather than only edit, that environment also needs a `gsim_py` wheel and
+`gsim-tools`, neither of which can come from a public index. Without them the kernel
+still starts and a run answers `SolverUnavailable` naming the missing step.
+
+### Fixed — Run told you nothing when it could not run
+
+Reported as *"I'm clicking on the run button and nothing is happening"*, and that was
+exact: the click hung rather than failed. Three paths gave up on starting the kernel
+without telling the editor anything, and the editor's wait for that answer had no
+timeout, so the promise never settled — no message, no log line, not even the button
+changing state. It hung for as long as the window stayed open.
+
+Every failed start now reports its reason, in a notification rather than only in an
+output channel that is closed by default. If `kernelPython` points somewhere without an
+interpreter, it says so and names the path. If the kernel is prepared for a different
+version of the editor, it says that and names both versions.
+
+The two settings most likely to be reached for in that situation now explain how they
+relate. `generalSimulatorPath` is read only *after* the kernel is running, so setting it
+alone cannot start one — which was the trap. `workspaceRoot` wants a checkout of this
+repository, not of `general-simulator`, which has no `pyproject.toml` in it at all.
+
+### Added — five example converters, and they run
+
+The palette is no help with an empty sheet, and this release is the first to carry any
+example: 0.6.0 contained none. **Omni Schematics: Open Example Schematic…** opens a copy
+of one into your workspace.
+
+| example | in | out |
+| --- | --- | --- |
+| Buck converter | 48 V | ~19 V at 40 % duty |
+| Boost converter | 12 V | ~24 V at 50 % duty |
+| PFC boost front end | 230 V RMS, 50 Hz | 400 V bus |
+| LLC resonant converter | 400 V | ~48 V |
+| Phase-shifted full bridge | 400 V | ~48 V |
+
+All five switch at 100 kHz and run open loop — fixed pulse trains, not regulators. They
+show topology and give you something that runs on the first click; they are not
+reference designs.
+
+A copy is opened rather than the shipped file, so editing one cannot damage the
+installation and your changes survive the next update.
+
+### Fixed — the one example that existed was broken, five ways
+
+Worth stating plainly, because it is the reason the examples are now checked in CI. The
+previous buck converter used a block type the engine no longer declares; two more that
+are *aliases*, which resolve in the palette and are rejected by the netlist compiler; a
+gate drive for a switch that no longer has those terminals; and a document the loader
+could not read at all. It had also drifted from the script that generated it.
+
+Every example is now held to four things on every change: it parses, its block types are
+canonical names the engine declares and can compile, it compiles with the real compiler,
+and it still matches its generator.
+
 ## 2026-11-23 — Omni Schematics (0.6.0)
 
 ### Install it
