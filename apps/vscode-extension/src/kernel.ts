@@ -30,6 +30,7 @@ export class KernelSidecar implements vscode.Disposable {
   private child: ChildProcess | null = null;
   private config: KernelConfig | null = null;
   private starting: Promise<KernelConfig | null> | null = null;
+  private failure: string | null = null;
 
   private readonly onDidChangeEmitter = new vscode.EventEmitter<KernelConfig | null>();
   /** Fires with the new config on (re)start, and with `null` when the sidecar stops. */
@@ -39,6 +40,37 @@ export class KernelSidecar implements vscode.Disposable {
 
   get current(): KernelConfig | null {
     return this.config;
+  }
+
+  /**
+   * Why the last start attempt failed, or null if none has.
+   *
+   * #130: the three ways a start can fail used to be recorded only in the
+   * output channel, which is closed by default. The webview needs the reason
+   * too, so `gsim/kernelStopped` can carry it and the Run click can say what
+   * is wrong instead of just that something is.
+   */
+  get lastFailure(): string | null {
+    return this.failure;
+  }
+
+  /**
+   * The single exit for a start attempt that cannot produce a config.
+   *
+   * Every `return null` in `doStart()` goes through here, because the webview
+   * learns the kernel's fate from `onDidChange` and nowhere else: a path that
+   * returns without firing leaves the webview's wait pending forever, and the
+   * Run button silently does nothing. That was #130.
+   */
+  private failStart(reason: string): null {
+    this.failure = reason;
+    this.log.appendLine(`[kernel] ${reason}`);
+    this.config = null;
+    this.onDidChangeEmitter.fire(null);
+    // The output channel is closed by default, so the diagnosis has to reach
+    // somewhere the user is actually looking.
+    void vscode.window.showErrorMessage(`Simulation kernel did not start. ${reason}`);
+    return null;
   }
 
   /** Idempotent: concurrent callers share one in-flight start. */
@@ -98,6 +130,7 @@ export class KernelSidecar implements vscode.Disposable {
     const fromEnv = kernelConfigFromEnv();
     if (fromEnv) {
       this.log.appendLine(`[kernel] using GENSIM_KERNEL_* override on port ${fromEnv.port}`);
+      this.failure = null;
       this.config = fromEnv;
       this.onDidChangeEmitter.fire(fromEnv);
       return fromEnv;
@@ -113,11 +146,20 @@ export class KernelSidecar implements vscode.Disposable {
 
     const workspaceRoot = resolveWorkspaceRoot(candidates);
     if (!workspaceRoot) {
-      this.log.appendLine(
-        "[kernel] could not locate a general-simulator checkout (no pyproject.toml found). " +
-          "Set omniSchematics.workspaceRoot.",
+      // The message used to say "general-simulator checkout", which sends the
+      // reader to the wrong repository: `general-simulator` is a pure Rust
+      // workspace with no pyproject.toml in it. The directory wanted here is a
+      // checkout of *this* repo, which is where the Python `kernel_sidecar`
+      // package lives. Reported by a user who had correctly set
+      // `generalSimulatorPath` and could not see why Run still did nothing.
+      const where = configuredRoot
+        ? `omniSchematics.workspaceRoot is set to "${configuredRoot}", which has no pyproject.toml in it or above it.`
+        : "No folder is open that contains a pyproject.toml.";
+      return this.failStart(
+        `${where} That file marks a checkout of omni-schematics itself, which is where the ` +
+          "kernel_sidecar Python package lives — not the general-simulator repository. " +
+          "Set omniSchematics.workspaceRoot to an omni-schematics checkout (and run `uv sync` in it).",
       );
-      return null;
     }
 
     const token = generateToken();
@@ -154,15 +196,28 @@ export class KernelSidecar implements vscode.Disposable {
         env: kernelEnv,
       });
     } catch (error) {
-      this.log.appendLine(`[kernel] spawn failed: ${String(error)}`);
-      return null;
+      return this.failStart(
+        `Could not launch "${plan.command}": ${String(error)}. ` +
+          "Install it, or set omniSchematics.pythonRunner to a runner that is on PATH.",
+      );
     }
     this.child = child;
 
     child.stderr?.on("data", (chunk: Buffer) => {
       this.log.append(`[kernel:stderr] ${chunk.toString()}`);
     });
+    // `spawn` does not throw for a missing executable -- it emits `error`
+    // asynchronously, so the try/catch above cannot see it. Without this, a
+    // machine with no `uv` took a path that logged and then waited for a
+    // KERNEL_READY that could never come (#130).
+    let spawnError: Error | null = null;
+    // Read through an accessor: TypeScript's control-flow analysis does not
+    // follow the assignment inside the callback below, so a direct read of
+    // `spawnError` narrows to `null` and the branch that uses it becomes
+    // unreachable in the type system.
+    const lastSpawnError = (): Error | null => spawnError;
     child.on("error", (error) => {
+      spawnError = error;
       this.log.appendLine(`[kernel] process error: ${error.message}`);
     });
     child.on("exit", (code, signal) => {
@@ -176,10 +231,17 @@ export class KernelSidecar implements vscode.Disposable {
 
     const ready = await this.awaitReady(child);
     if (!ready) {
-      this.log.appendLine("[kernel] never signalled KERNEL_READY");
-      return null;
+      const failed = lastSpawnError();
+      return this.failStart(
+        failed
+          ? `Could not launch "${plan.command}": ${failed.message}. ` +
+              "Install it, or set omniSchematics.pythonRunner to a runner that is on PATH."
+          : "The kernel started but never signalled KERNEL_READY. " +
+              `Check the General Simulator output channel, and that \`uv sync\` has been run in ${workspaceRoot}.`,
+      );
     }
     this.log.appendLine(`[kernel] ready on port ${ready.port}`);
+    this.failure = null;
     this.config = ready;
     this.onDidChangeEmitter.fire(ready);
     return ready;

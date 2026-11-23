@@ -95,8 +95,16 @@ export type HostBoundMessage =
 export type WebviewBoundMessage =
   /** Kernel sidecar became ready (or was restarted on a new port). */
   | { type: "gsim/kernelConfig"; kernel: KernelConfig }
-  /** Kernel sidecar went away; the webview should fall back / show a warning. */
-  | { type: "gsim/kernelStopped" }
+  /**
+   * Kernel sidecar went away, or never came up; the webview should fall back /
+   * show a warning.
+   *
+   * `reason` carries the host's own diagnosis when there is one (#130) -- "no
+   * pyproject.toml above the configured workspaceRoot", "uv is not on PATH".
+   * It is the only useful sentence a user can be given at that moment, and it
+   * used to exist only in an output channel that is closed by default.
+   */
+  | { type: "gsim/kernelStopped"; reason?: string }
   /** Replace the schematic document (initial load, revert, external file change). */
   | { type: "gsim/setDocument"; text: string }
   /** Host asks the webview to serialise its current document (save / backup). */

@@ -100,22 +100,36 @@ export function hasAnythingToSimulate(): boolean {
   return (model.blocks?.length ?? 0) > 0;
 }
 
-async function ensureKernelConnected(): Promise<boolean> {
+/**
+ * Connect if needed, and on failure hand back the reason rather than a bare
+ * false.
+ *
+ * #130: this used to `catch {}` and return false, on the grounds that
+ * `reconnectKernel()` had already written the reason to Output and Problems.
+ * Both of those live in the bottom panel, which starts hidden -- so the caller
+ * could only offer "see the Output panel for why", and the one sentence that
+ * would have explained everything ("workspaceRoot points at a directory with
+ * no pyproject.toml in it") stayed hidden. The reason now travels with the
+ * failure.
+ */
+type KernelConnection = { ok: true } | { ok: false; reason: string };
+
+async function ensureKernelConnected(): Promise<KernelConnection> {
   const status = useIpcStore.getState().status;
   if (status === "idle" || status === "busy" || status === "connecting") {
     // "connecting" is already handled transparently by getIpcClient()'s
     // proxy — execute() will wait for it, no need to kick off another one.
-    return true;
+    return { ok: true };
   }
 
   useIpcStore.getState().appendOutput("Kernel is disconnected — connecting to the kernel sidecar…");
   try {
     await reconnectKernel();
-    return true;
-  } catch {
-    // reconnectKernel() already set status to "error" and appended the
-    // specific reason to Output/Problems — nothing more to add here.
-    return false;
+    return { ok: true };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    useIpcStore.getState().appendOutput(`Kernel did not start: ${reason}`);
+    return { ok: false, reason };
   }
 }
 
@@ -175,10 +189,10 @@ export async function triggerRun(): Promise<void> {
     return;
   }
 
-  if (!(await ensureKernelConnected())) {
-    useToastStore
-      .getState()
-      .pushToast("Could not reach the simulation kernel. See the Output panel for why.");
+  const connection = await ensureKernelConnected();
+  if (!connection.ok) {
+    // The host's own diagnosis, in the toast, where the click happened.
+    reportRunFailure("Could not start the simulation kernel", connection.reason);
     return;
   }
 
@@ -295,10 +309,10 @@ export async function triggerRunAnalysis(analysisId: string): Promise<void> {
     return;
   }
 
-  if (!(await ensureKernelConnected())) {
-    useToastStore
-      .getState()
-      .pushToast("Could not reach the simulation kernel. See the Output panel for why.");
+  const connection = await ensureKernelConnected();
+  if (!connection.ok) {
+    // The host's own diagnosis, in the toast, where the click happened.
+    reportRunFailure("Could not start the simulation kernel", connection.reason);
     return;
   }
 

@@ -130,21 +130,56 @@ export function initKernelFromVsCode(): void {
   });
 }
 
+/**
+ * How long to wait for the host to report either outcome.
+ *
+ * #130: this wait used to have no bound. The host has three ways to abandon a
+ * start, and on those paths it sent neither `gsim/kernelConfig` nor
+ * `gsim/kernelStopped`, so this promise settled never -- and `triggerRun()`,
+ * which awaits it on its second line, never reached the toast written to
+ * report exactly this. Clicking Run did nothing at all, forever.
+ *
+ * The host side is fixed to always answer, so in practice this bound is never
+ * reached. It stays because "the host did not answer" must fail the click
+ * rather than hang it, including for a reason nobody has thought of yet. A
+ * `uv` cold start that downloads an interpreter can take a while, hence
+ * minutes rather than seconds.
+ */
+const KERNEL_HANDSHAKE_TIMEOUT_MS = 180_000;
+
 /** Resolve once the extension host reports a ready kernel sidecar. */
-function awaitKernelFromHost(): Promise<IpcClient> {
+function awaitKernelFromHost(timeoutMs = KERNEL_HANDSHAKE_TIMEOUT_MS): Promise<IpcClient> {
   return new Promise<IpcClient>((resolve, reject) => {
+    const settle = () => {
+      clearTimeout(timer);
+      dispose();
+      connectPromise = null;
+    };
+
+    const timer = setTimeout(() => {
+      settle();
+      reject(
+        new Error(
+          `The extension host did not report a simulation kernel within ${Math.round(
+            timeoutMs / 1000,
+          )}s. See the General Simulator output channel.`,
+        ),
+      );
+    }, timeoutMs);
+
     const dispose = onHostMessage((message) => {
       if (message.type === "gsim/kernelConfig") {
-        dispose();
+        settle();
         applyKernelConfig(message.kernel);
         const client = createIPCClient();
         setRealClient(client);
-        connectPromise = null;
         resolve(client);
       } else if (message.type === "gsim/kernelStopped") {
-        dispose();
-        connectPromise = null;
-        reject(new Error("Kernel sidecar stopped before it became ready."));
+        settle();
+        // The host's own diagnosis when it has one -- which workspaceRoot it
+        // looked at, or which runner it could not launch. Far more use than
+        // "stopped before it became ready" (#130).
+        reject(new Error(message.reason ?? "Kernel sidecar stopped before it became ready."));
       }
     });
   });
