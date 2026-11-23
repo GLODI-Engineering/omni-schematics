@@ -18,6 +18,7 @@ import { GsimHost } from "./host";
 import { LIBRARY_VIEW_ID, LibraryViewProvider } from "./libraryView";
 import { mirrorToConsole } from "./log";
 import { RESULTS_VIEW_TYPE, ResultsEditorProvider } from "./resultsEditor";
+import { createRecordingRunOutput, createRunOutputChannel } from "./run-output";
 import { SCHEMATIC_VIEW_TYPE, SchematicEditorProvider } from "./schematicEditor";
 import { symbolWatchPattern } from "./symbolLibrary";
 import { type GsimTestApi, createTestApi } from "./test-api";
@@ -29,7 +30,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<GsimTe
   context.subscriptions.push(channel);
   const log = mirrorToConsole(channel);
 
-  const host = new GsimHost(log);
+  // In integration mode the host is given a recording channel instead of a real
+  // one, because VS Code offers no way to read an output channel back and the
+  // webview -> host -> panel path (#139) would otherwise be untestable end to
+  // end. Outside integration mode this is the real LogOutputChannel.
+  const host = new GsimHost(
+    log,
+    isIntegrationTest() ? createRecordingRunOutput() : createRunOutputChannel(vscode.window),
+  );
   context.subscriptions.push(host);
 
   const waveforms = new WaveformPanel(context.extensionUri, host);

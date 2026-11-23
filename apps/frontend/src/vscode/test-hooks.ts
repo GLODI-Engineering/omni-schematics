@@ -12,6 +12,7 @@
 import { getActiveDragBlock, setActiveDragBlock } from "../canvas/dnd";
 import { serialize } from "../file/serializer";
 import { getWebviewInit, postToHost, requestSource } from "../ipc/vscode-host";
+import { type RunOutputLine, reportRunOutput } from "../shell/run-output";
 import { useGraphStore, useLibraryStore } from "../store";
 
 type Probe = (args: Record<string, unknown>) => unknown;
@@ -130,6 +131,21 @@ async function readSourceProbe(args: Record<string, unknown>): Promise<unknown> 
 }
 
 const PROBES: Record<string, Probe> = {
+  /**
+   * Emit labelled run output, so the webview -> host -> Output panel path can
+   * be tested end to end (#139).
+   *
+   * Exists because nothing else can reach it: the browser suite has no
+   * extension host, and VS Code offers no API to read an output channel back,
+   * so without driving the real path from inside a real webview this feature
+   * would be covered only by unit tests of its two halves.
+   */
+  emitRunOutput: (args: Record<string, unknown>) => {
+    const lines = Array.isArray(args.lines) ? (args.lines as RunOutputLine[]) : [];
+    reportRunOutput(lines);
+    return { sent: lines.length };
+  },
+
   /** Proof the React app actually mounted and painted inside this webview. */
   mounted: () => {
     const root = document.getElementById("root");
