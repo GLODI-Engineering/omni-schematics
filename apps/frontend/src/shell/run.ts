@@ -8,6 +8,7 @@ import { analysisToPayload } from "../store/model";
 import { useSimSettingsStore } from "../store/sim-settings";
 import { useToastStore } from "../store/toast";
 import { useWaveformStore } from "../store/waveform";
+import { type RunOutputSource, reportRunLine, reportRunOutput } from "./run-output";
 
 // If the backend never answers a simulate request at all — hung solver
 // process, a crash that doesn't reach the point of sending simulate_result,
@@ -160,9 +161,16 @@ async function ensureKernelConnected(): Promise<KernelConnection> {
  * still goes to Output and Problems, because a solver's answer is often many lines and a toast
  * is the wrong place to read them.
  */
-function reportRunFailure(summary: string, details?: string): void {
+function reportRunFailure(
+  summary: string,
+  details?: string,
+  source: RunOutputSource = "solver",
+): void {
   const full = details && details !== summary ? `${summary}: ${details}` : summary;
   useIpcStore.getState().appendOutput(`Backend error: ${full}`);
+  // Into the VS Code Output panel too (#139), where it is visible without the
+  // webview's own bottom panel being open -- which, by default, it is not.
+  reportRunLine(source, "error", full);
   useIpcStore.getState().setProblems([{ id: "solver-1", severity: "error", message: full }]);
   useUiStore.getState().focusBottomTab("core.problems");
   // First line only: a SolverUnavailable answer is a whole paragraph of build instructions,
@@ -186,13 +194,14 @@ export async function triggerRun(): Promise<void> {
     useToastStore
       .getState()
       .pushToast("Nothing to simulate — the schematic is empty. Add a component first.");
+    reportRunLine("editor", "warning", "Nothing to simulate — the schematic is empty.");
     return;
   }
 
   const connection = await ensureKernelConnected();
   if (!connection.ok) {
     // The host's own diagnosis, in the toast, where the click happened.
-    reportRunFailure("Could not start the simulation kernel", connection.reason);
+    reportRunFailure("Could not start the simulation kernel", connection.reason, "kernel");
     return;
   }
 
@@ -279,6 +288,18 @@ export async function triggerRun(): Promise<void> {
     for (const chunk of result.chunks ?? []) {
       useIpcStore.getState().appendOutput(chunk);
     }
+    // Labelled `solver` for now, and plainly incomplete. Telling a compiler
+    // diagnostic apart from a solver message needs the kernel to say which it
+    // is -- `chunks` is `string[]` on the wire and carries nothing to
+    // distinguish them (#139 steps 2 and 3). Guessing from the text would be
+    // worse than saying "solver" and being visibly unfinished.
+    reportRunOutput(
+      (result.chunks ?? []).map((chunk) => ({
+        source: "solver" as const,
+        severity: "info" as const,
+        text: chunk,
+      })),
+    );
 
     useIpcStore
       .getState()
@@ -306,13 +327,14 @@ export async function triggerRunAnalysis(analysisId: string): Promise<void> {
     useToastStore
       .getState()
       .pushToast("Nothing to simulate — the schematic is empty. Add a component first.");
+    reportRunLine("editor", "warning", "Nothing to simulate — the schematic is empty.");
     return;
   }
 
   const connection = await ensureKernelConnected();
   if (!connection.ok) {
     // The host's own diagnosis, in the toast, where the click happened.
-    reportRunFailure("Could not start the simulation kernel", connection.reason);
+    reportRunFailure("Could not start the simulation kernel", connection.reason, "kernel");
     return;
   }
 
@@ -355,6 +377,18 @@ export async function triggerRunAnalysis(analysisId: string): Promise<void> {
     for (const chunk of result.chunks ?? []) {
       useIpcStore.getState().appendOutput(chunk);
     }
+    // Labelled `solver` for now, and plainly incomplete. Telling a compiler
+    // diagnostic apart from a solver message needs the kernel to say which it
+    // is -- `chunks` is `string[]` on the wire and carries nothing to
+    // distinguish them (#139 steps 2 and 3). Guessing from the text would be
+    // worse than saying "solver" and being visibly unfinished.
+    reportRunOutput(
+      (result.chunks ?? []).map((chunk) => ({
+        source: "solver" as const,
+        severity: "info" as const,
+        text: chunk,
+      })),
+    );
     _populateWaveformViewer(result.manifest);
   } catch (error) {
     useIpcStore.getState().setSimProgress(null);

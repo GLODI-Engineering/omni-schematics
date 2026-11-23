@@ -72,6 +72,15 @@ export type HostBoundMessage =
   /** A simulation finished; carries the sim id the waveform panel should attach to. */
   | { type: "gsim/simulationFinished"; simId: string }
   /**
+   * Lines a run produced, for the VS Code Output panel (#139).
+   *
+   * The webview opens its own socket to the kernel, so the extension host sees
+   * nothing of a run unless the webview tells it. Output used to go only to the
+   * webview's own bottom-panel Output tab, which is not the VS Code Output
+   * panel and is not mounted in every shell.
+   */
+  | { type: "gsim/output"; lines: RunOutputLine[] }
+  /**
    * Persist an authored component to `.gsim/symbols/<name>.gsim_sym` in the
    * workspace. Without this the symbol editor's output lived only in the
    * running catalog and was lost on reload.
@@ -87,6 +96,30 @@ export type HostBoundMessage =
   | { type: "gsim/log"; level: "info" | "warn" | "error"; message: string }
   /** Integration-harness only: reply to a `gsim/test/exec`. */
   | { type: "gsim/test/report"; requestId: string; ok: boolean; result: unknown };
+
+/**
+ * Where a line of run output came from.
+ *
+ * Carried so the Output panel can distinguish a compiler diagnostic from a
+ * solver complaint -- they read identically as bare text and mean entirely
+ * different things to whoever has to fix them.
+ *
+ * - `solver`  the simulation engine's own messages
+ * - `build`   compiling a `cscript` / `pyblock` / `octfunc` code block
+ * - `kernel`  the sidecar process itself
+ * - `compile` turning the schematic into a netlist
+ * - `editor`  the front end's own reporting, e.g. "the schematic is empty"
+ */
+export type RunOutputSource = "solver" | "build" | "kernel" | "compile" | "editor";
+
+/** Severity, mapped onto the output channel's own levels. */
+export type RunOutputSeverity = "info" | "warning" | "error";
+
+export interface RunOutputLine {
+  source: RunOutputSource;
+  severity: RunOutputSeverity;
+  text: string;
+}
 
 // ---------------------------------------------------------------------------
 // extension host -> webview

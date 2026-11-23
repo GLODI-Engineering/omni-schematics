@@ -34,6 +34,7 @@ import {
   type WebviewRole,
   isHostBoundMessage,
 } from "./protocol";
+import { type LevelledChannel, createRunOutputChannel, writeRunOutput } from "./run-output";
 import {
   SYMBOLS_DIR,
   SymbolLibraryError,
@@ -71,7 +72,15 @@ export class GsimHost implements vscode.Disposable {
   }>();
   readonly onDidReceive = this.onDidReceiveEmitter.event;
 
-  constructor(readonly log: vscode.OutputChannel) {
+  constructor(
+    readonly log: vscode.OutputChannel,
+    /**
+     * Where a run's own output goes (#139). Injected rather than created here
+     * so a test can hand in a recording channel: VS Code offers no way to read
+     * a real one back.
+     */
+    readonly runOutput: LevelledChannel = createRunOutputChannel(vscode.window),
+  ) {
     this.kernel = new KernelSidecar(log);
     this.disposables.push(
       this.kernel,
@@ -308,6 +317,14 @@ export class GsimHost implements vscode.Disposable {
 
       case "gsim/log":
         this.log.appendLine(`[webview:${message.level}] ${message.message}`);
+        return true;
+
+      // #139. A separate channel from `this.log`: that one is the kernel
+      // process's own diary -- what was spawned, its stderr, the handshake --
+      // and a run's output is what the user asked for. Mixing a solver's
+      // results into a lifecycle log makes both harder to read.
+      case "gsim/output":
+        writeRunOutput(this.runOutput, message.lines);
         return true;
 
       case "gsim/ready":

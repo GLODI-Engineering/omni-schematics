@@ -94,7 +94,6 @@ suite("Omni Schematics — VS Code integration", () => {
     assert.equal(contributes.views.omniSchematics[0].id, "omniSchematics.library");
     assert.equal(contributes.views.omniSchematics[0].type, "webview");
   });
-
   // -------------------------------------------------------------------------
   suite("library sidebar webview", () => {
     suiteSetup(async () => {
@@ -410,6 +409,73 @@ suite("Omni Schematics — VS Code integration", () => {
       assert.ok(config.port > 0 && config.port <= 65535, `bound a real port (${config.port})`);
       assert.match(config.token, /^[0-9a-f]{32}$/, "token round-tripped through KERNEL_READY");
       assert.deepEqual(api.kernelConfig(), config, "the host cached the config");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  suite("run output reaches VS Code's Output panel (#139)", () => {
+    /**
+     * The whole point of testing this here rather than in a unit test: the
+     * webview opens its own socket to the kernel, so output only reaches the
+     * host because the webview forwards it. That hop is a real postMessage
+     * across a real webview boundary, and only a real VS Code has one.
+     *
+     * What this cannot assert is colour. VS Code renders a LogOutputChannel's
+     * levels itself and exposes neither the channel's contents nor its
+     * rendering, so the host is handed a recording stand-in in integration
+     * mode and the colour stays a visual check.
+     */
+    suiteSetup(async () => {
+      await api.waitForWebview("schematic");
+    });
+
+    test("a labelled line emitted in the webview arrives at the host's channel", async () => {
+      const before = api.runOutput().length;
+
+      const result = await api.probe<{ sent: number }>("schematic", "emitRunOutput", {
+        lines: [
+          { source: "build", severity: "error", text: "blk.c:12:5: error: 'x' undeclared" },
+          { source: "solver", severity: "info", text: "solved 1000 steps" },
+        ],
+      });
+      assert.equal(result.sent, 2, "the webview reported sending both lines");
+
+      // The forward is a postMessage; give the host a moment to receive it.
+      const deadline = Date.now() + 5000;
+      while (api.runOutput().length < before + 2 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      const written = api.runOutput().slice(before);
+      assert.deepEqual(
+        written,
+        [
+          { level: "error", text: "[build] blk.c:12:5: error: 'x' undeclared" },
+          { level: "info", text: "[solver] solved 1000 steps" },
+        ],
+        "both lines reached the channel, each tagged with its source and level",
+      );
+    });
+
+    test("a multi-line chunk becomes one entry per line", async () => {
+      // Solver and compiler output arrives in chunks, not lines; an unsplit
+      // chunk would land as one dated, levelled blob.
+      const before = api.runOutput().length;
+
+      await api.probe("schematic", "emitRunOutput", {
+        lines: [{ source: "build", severity: "error", text: "first\nsecond\n\nthird" }],
+      });
+
+      const deadline = Date.now() + 5000;
+      while (api.runOutput().length < before + 3 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      assert.deepEqual(api.runOutput().slice(before), [
+        { level: "error", text: "[build] first" },
+        { level: "error", text: "[build] second" },
+        { level: "error", text: "[build] third" },
+      ]);
     });
   });
 });

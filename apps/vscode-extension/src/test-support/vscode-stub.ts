@@ -60,6 +60,29 @@ export function createRecordingChannel(): OutputChannel & { readonly lines: stri
   };
 }
 
+/**
+ * A `LogOutputChannel` that records level and text.
+ *
+ * VS Code offers no way to read an output channel's contents, so the mapping
+ * from a labelled line to a channel call can only be checked against a stand-in
+ * (#139). Colour cannot be checked at all, from here or from the integration
+ * suite -- it is a visual property of the level, and stays a visual check.
+ */
+export function createRecordingLogChannel(): {
+  readonly entries: { level: "info" | "warn" | "error"; text: string }[];
+  info(message: string): void;
+  warn(message: string): void;
+  error(message: string): void;
+} {
+  const entries: { level: "info" | "warn" | "error"; text: string }[] = [];
+  return {
+    entries,
+    info: (text: string) => entries.push({ level: "info", text }),
+    warn: (text: string) => entries.push({ level: "warn", text }),
+    error: (text: string) => entries.push({ level: "error", text }),
+  };
+}
+
 // --- mutable test state -----------------------------------------------------
 
 type ConfigValues = Record<string, unknown>;

@@ -37,6 +37,15 @@ export interface GsimTestApi {
   /** The live kernel sidecar config, if it has started. */
   kernelConfig(): KernelConfig | null;
   startKernel(): Promise<KernelConfig | null>;
+  /**
+   * What the run-output channel has been given (#139).
+   *
+   * VS Code exposes no way to read an output channel, so in integration mode
+   * the host is handed a recording stand-in and this returns its entries. The
+   * real channel's *colour* is not observable from here or anywhere else; that
+   * remains a visual check.
+   */
+  runOutput(): { level: string; text: string }[];
 }
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -123,6 +132,11 @@ export function createTestApi(host: GsimHost): GsimTestApi {
         }),
         timeout(timeoutMs, `a "${type}" message from ${role}`),
       ]);
+    },
+
+    runOutput: () => {
+      const channel = host.runOutput as { entries?: { level: string; text: string }[] };
+      return [...(channel.entries ?? [])];
     },
 
     kernelConfig: () => host.kernel.current,
