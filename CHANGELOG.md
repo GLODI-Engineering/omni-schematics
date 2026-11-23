@@ -1,6 +1,52 @@
 # Changelog
 
-## 2026-11-19 — Omni Schematics
+## 2026-11-23 — Omni Schematics (0.6.0)
+
+### Install it
+
+This release carries `omni-schematics-0.6.0.vsix`. Download it and use
+**Extensions → … → Install from VSIX**. Previous releases carried no artifact: the
+.vsix was built by hand, so installing meant cloning the repository and having pnpm,
+Node and a Rust toolchain. It is now built from the tag by CI.
+
+### Changed — the palette shows what the engine can actually simulate
+
+The component library was cut from 240 entries to the 78 the engine can compile. The
+palette used to offer components that produced a block the simulator then refused, which
+is a worse experience than not offering them: the failure arrived after you had drawn
+the schematic rather than before.
+
+Most of what went had artwork and parameters and no model behind it — MOSFETs, BJTs,
+thermal and mechanical devices among them. Their symbols are kept in the editor,
+unreferenced, for the day a target can emit them.
+
+**Some things you could place are gone, and this is the part to read before upgrading.**
+The subsystem container (`hierarchy.subsystem.*`) and the bus creator
+(`routing.bus_creator`) are no longer in the library, and neither are
+`signal.constant` or the two `converter.*_signal` blocks. Inport and Outport remain.
+A schematic that uses any of them has blocks the editor no longer has a definition for;
+it is not yet established what that looks like when you open it, which is tracked as
+GLODI-Engineering/omni-schematics#126 rather than guessed at here.
+
+Whether subsystems and buses belong to the editor rather than to the engine's library is
+an open question — GLODI-Engineering/gsim-core#61 — so their machinery is deliberately
+left in place with nothing to place from the palette, rather than deleted.
+
+### Changed — the ideal devices are their own family, with their own palette section
+
+`passive.switch.ideal` is now **`ideal.switch`**, and `passive.diode.ideal` is
+**`ideal.diode`**. They appear under a new **Ideal Devices** heading in the palette
+instead of among the passives.
+
+The old names were wrong in a way worth fixing: an ideal switch declares a drain, a
+source, a gate-driven threshold and a body diode. That is an active device, and filing
+it beside the resistor invited reading it as a passive component with extra parameters.
+
+**Schematics saved with the old names still open.** Both old spellings are kept as
+aliases and resolve to the renamed components, and both still draw their own symbol. If
+you refer to either type by name in a Python or C script, update the name.
+
+## 2026-11-19 — Renamed to Omni Schematics
 
 ### Changed — action required if you have custom keybindings
 
