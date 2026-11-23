@@ -14,6 +14,8 @@ import { tmpdir } from "node:os";
 
 import * as vscode from "vscode";
 
+import { SCHEMATIC_VIEW_TYPE } from "./schematicEditor";
+
 /** Human-readable titles, by file name without its extension. */
 const TITLES: Record<string, string> = {
   buck_converter: "Buck converter — 48 V to 19 V, switch and LC filter",
@@ -94,7 +96,9 @@ export async function openExample(extensionUri: vscode.Uri): Promise<void> {
   }
 
   await vscode.workspace.fs.writeFile(destination, bytes);
-  await vscode.commands.executeCommand("vscode.openWith", destination, "omniSchematics.schematic");
+  // The constant, not the literal: a rename of the view type would otherwise
+  // leave this command opening a text editor with no error anywhere.
+  await vscode.commands.executeCommand("vscode.openWith", destination, SCHEMATIC_VIEW_TYPE);
 }
 
 async function exists(uri: vscode.Uri): Promise<boolean> {
