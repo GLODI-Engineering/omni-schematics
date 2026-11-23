@@ -20,8 +20,8 @@
  * anything new that starts borrowing fails here instead of drawing the wrong thing.
  */
 import { describe, expect, it } from "vitest";
-import engineCatalog from "../../library/engine-catalog.json";
 import { loadCatalogFromManifest } from "../../library/catalog";
+import engineCatalog from "../../library/engine-catalog.json";
 import { getSchematicSymbol } from "./component-symbols";
 
 type Entry = { filePath?: string; metadata?: Record<string, unknown> };
