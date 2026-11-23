@@ -20,8 +20,8 @@ import sys
 # and the checker is entitled to run this in isolated mode.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from _builder import add  # noqa: E402
-from gsim_tools.schematic import Schematic  # noqa: E402
+from _builder import add
+from gsim_tools.schematic import Schematic
 
 EL = "physical-electrical"
 SIG = "signal"
@@ -37,8 +37,17 @@ def build() -> Schematic:
     add(sheet, "source.voltage.dc", "vin", V=12.0)
     add(sheet, "passive.inductor", "l1", L=220e-6)
     add(sheet, "ideal.switch", "sw", r_on=0.01)
-    add(sheet, "source.pulsewave", "gate", v1=0.0, v2=5.0, tr=EDGE, tf=EDGE,
-        pw=PERIOD * DUTY, per=PERIOD)
+    add(
+        sheet,
+        "source.pulsewave",
+        "gate",
+        v1=0.0,
+        v2=5.0,
+        tr=EDGE,
+        tf=EDGE,
+        pw=PERIOD * DUTY,
+        per=PERIOD,
+    )
     add(sheet, "converter.sig2phys", "gate_drive")
     add(sheet, "ideal.diode", "dout")
     add(sheet, "passive.capacitor", "cout", C=470e-6)

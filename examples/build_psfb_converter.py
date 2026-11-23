@@ -36,8 +36,8 @@ import sys
 # and the checker is entitled to run this in isolated mode.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from _builder import add  # noqa: E402
-from gsim_tools.schematic import Schematic  # noqa: E402
+from _builder import add
+from gsim_tools.schematic import Schematic
 
 EL = "physical-electrical"
 SIG = "signal"
@@ -55,10 +55,30 @@ def leg(sheet, name: str, delay: float) -> None:
     """One half bridge, with complementary drives offset by `delay`."""
     add(sheet, "ideal.switch", f"{name}_hi", r_on=0.05)
     add(sheet, "ideal.switch", f"{name}_lo", r_on=0.05)
-    add(sheet, "source.pulsewave", f"g_{name}_hi", v1=0.0, v2=5.0, td=delay,
-        tr=EDGE, tf=EDGE, pw=HALF, per=PERIOD)
-    add(sheet, "source.pulsewave", f"g_{name}_lo", v1=0.0, v2=5.0, td=delay + HALF,
-        tr=EDGE, tf=EDGE, pw=HALF, per=PERIOD)
+    add(
+        sheet,
+        "source.pulsewave",
+        f"g_{name}_hi",
+        v1=0.0,
+        v2=5.0,
+        td=delay,
+        tr=EDGE,
+        tf=EDGE,
+        pw=HALF,
+        per=PERIOD,
+    )
+    add(
+        sheet,
+        "source.pulsewave",
+        f"g_{name}_lo",
+        v1=0.0,
+        v2=5.0,
+        td=delay + HALF,
+        tr=EDGE,
+        tf=EDGE,
+        pw=HALF,
+        per=PERIOD,
+    )
     add(sheet, "converter.sig2phys", f"d_{name}_hi")
     add(sheet, "converter.sig2phys", f"d_{name}_lo")
 

@@ -184,7 +184,7 @@ function regenerates(name, documentPath, failures) {
     return `generator did not run (${String(error.message ?? error).split("\n")[0]})`;
   }
   if (!existsSync(scratch)) {
-    return `generator wrote nothing to the path it was given`;
+    return "generator wrote nothing to the path it was given";
   }
   if (normaliseJson(readFileSync(scratch, "utf8")) !== normaliseJson(committed)) {
     failures.push(`${name}: the committed document differs from what build_${name}.py emits`);
@@ -276,7 +276,7 @@ for (const file of files) {
     if (canonicalName) {
       failures.push(
         `${name}: block type "${type}" is an alias of "${canonicalName}"; the netlist ` +
-          `emitter only accepts the canonical name`,
+          "emitter only accepts the canonical name",
       );
       console.log(`  ✗ ${type} — alias of ${canonicalName}, not accepted by the emitter`);
     } else {

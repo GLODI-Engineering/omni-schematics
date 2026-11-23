@@ -128,6 +128,30 @@ refuses an environment that does not match its own — so if you upgrade the
 extension and the kernel stops starting, the message tells you to reinstall
 those packages, rather than failing somewhere less obvious.
 
+### The example schematics
+
+Five textbook converters ship inside the `.vsix`. **Omni Schematics: Open
+Example Schematic…** in the command palette opens a copy of one into your
+workspace — a copy, so that editing it cannot damage the installation and your
+changes survive the next update.
+
+| example | what it is | in | out |
+| --- | --- | --- | --- |
+| `buck_converter` | switch, freewheel diode, LC filter | 48 V | ~19 V at 40 % duty |
+| `boost_converter` | inductor on the input, diode to the output | 12 V | ~24 V at 50 % duty |
+| `pfc_boost` | full-bridge rectifier feeding a boost stage | 230 V RMS, 50 Hz | 400 V bus |
+| `llc_converter` | half bridge, series `Lr`/`Cr`, parallel `Lm`, transformer, secondary bridge | 400 V | ~48 V |
+| `psfb_converter` | four switches, transformer, output `LC` filter | 400 V | ~48 V |
+
+All five switch at 100 kHz and run **open loop**: the gate drives are fixed
+pulse trains, not a regulator. They are here to show the topology and to give
+you something that runs on the first click, not to serve as reference designs.
+
+`scripts/check-examples.mjs --check` holds them to that, in CI. For each one it
+asserts the document parses, every block type is a canonical name the engine
+declares and can compile, the document compiles with the real compiler, and it
+still matches the `build_*.py` script that generated it.
+
 ### Working on this repository
 
 Then **open this repository as your VS Code workspace folder** and open

@@ -38,8 +38,8 @@ import sys
 # and the checker is entitled to run this in isolated mode.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from _builder import add  # noqa: E402
-from gsim_tools.schematic import Schematic  # noqa: E402
+from _builder import add
+from gsim_tools.schematic import Schematic
 
 EL = "physical-electrical"
 SIG = "signal"
@@ -57,11 +57,20 @@ def build() -> Schematic:
     # Half bridge.
     add(sheet, "ideal.switch", "sw_hi", r_on=0.05)
     add(sheet, "ideal.switch", "sw_lo", r_on=0.05)
-    add(sheet, "source.pulsewave", "gate_hi", v1=0.0, v2=5.0, tr=EDGE, tf=EDGE,
-        pw=HALF, per=PERIOD)
+    add(sheet, "source.pulsewave", "gate_hi", v1=0.0, v2=5.0, tr=EDGE, tf=EDGE, pw=HALF, per=PERIOD)
     # The complement: the same waveform delayed by half a period.
-    add(sheet, "source.pulsewave", "gate_lo", v1=0.0, v2=5.0, td=HALF, tr=EDGE, tf=EDGE,
-        pw=HALF, per=PERIOD)
+    add(
+        sheet,
+        "source.pulsewave",
+        "gate_lo",
+        v1=0.0,
+        v2=5.0,
+        td=HALF,
+        tr=EDGE,
+        tf=EDGE,
+        pw=HALF,
+        per=PERIOD,
+    )
     add(sheet, "converter.sig2phys", "drive_hi")
     add(sheet, "converter.sig2phys", "drive_lo")
 
