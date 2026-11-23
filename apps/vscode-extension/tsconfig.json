@@ -16,5 +16,12 @@
     "types": ["node", "vscode", "mocha"]
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "comment:exclude": [
+    "Test-only sources are not compiled. `.vscodeignore` cannot keep them out of the",
+    "package on its own: its `!out/**/*.js` force-includes everything in `out/`, which",
+    "beats any later exclude, so anything compiled there ships to users. vitest does not",
+    "use tsc, so excluding the stub here costs nothing and is the only reliable way to",
+    "keep it out of the .vsix."
+  ],
+  "exclude": ["src/**/*.test.ts", "src/test-support/**"]
 }

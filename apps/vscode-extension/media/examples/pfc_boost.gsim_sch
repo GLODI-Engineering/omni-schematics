@@ -1,0 +1,514 @@
+{
+  "schema_version": 2,
+  "model": {
+    "id": "pfc_boost",
+    "name": "PFC boost front end",
+    "grid": 20,
+    "params": [],
+    "blocks": [
+      {
+        "id": "vac",
+        "type": "source.voltage.sin",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          0,
+          0
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "FREQ": 50.0,
+          "PHASE": 0,
+          "TD": 0,
+          "THETA": 0,
+          "VA": 325.0,
+          "VO": 0.0
+        },
+        "ic": {}
+      },
+      {
+        "id": "d1",
+        "type": "ideal.diode",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          40,
+          0
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "g_breakdown": 0,
+          "g_off": 1e-9,
+          "g_on": 5,
+          "v_breakdown": -100,
+          "v_f": 0.6
+        },
+        "ic": {}
+      },
+      {
+        "id": "d2",
+        "type": "ideal.diode",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          40,
+          40
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "g_breakdown": 0,
+          "g_off": 1e-9,
+          "g_on": 5,
+          "v_breakdown": -100,
+          "v_f": 0.6
+        },
+        "ic": {}
+      },
+      {
+        "id": "d3",
+        "type": "ideal.diode",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          40,
+          80
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "g_breakdown": 0,
+          "g_off": 1e-9,
+          "g_on": 5,
+          "v_breakdown": -100,
+          "v_f": 0.6
+        },
+        "ic": {}
+      },
+      {
+        "id": "d4",
+        "type": "ideal.diode",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          40,
+          120
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "g_breakdown": 0,
+          "g_off": 1e-9,
+          "g_on": 5,
+          "v_breakdown": -100,
+          "v_f": 0.6
+        },
+        "ic": {}
+      },
+      {
+        "id": "lboost",
+        "type": "passive.inductor",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          80,
+          0
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "IC": 0,
+          "L": 0.001
+        },
+        "ic": {}
+      },
+      {
+        "id": "sw",
+        "type": "ideal.switch",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          120,
+          0
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "body_g_breakdown": 0,
+          "body_g_off": 1e-9,
+          "body_g_on": 5,
+          "body_v_breakdown": -100,
+          "body_v_f": 0.6,
+          "r_on": 0.05,
+          "v_gs_th": 0.5
+        },
+        "ic": {}
+      },
+      {
+        "id": "gate",
+        "type": "source.pulsewave",
+        "paradigm": "signal-flow",
+        "domain": "signal",
+        "fidelity": "ideal",
+        "position": [
+          0,
+          40
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "per": 0.00001,
+          "pw": 5e-6,
+          "td": 0,
+          "tf": 1.0000000000000001e-7,
+          "tr": 1.0000000000000001e-7,
+          "v1": 0.0,
+          "v2": 5.0
+        },
+        "ic": {}
+      },
+      {
+        "id": "gate_drive",
+        "type": "converter.sig2phys",
+        "paradigm": "converter",
+        "domain": "mixed",
+        "fidelity": "ideal",
+        "position": [
+          40,
+          160
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "domain": "voltage"
+        },
+        "ic": {}
+      },
+      {
+        "id": "dboost",
+        "type": "ideal.diode",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          0,
+          80
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "g_breakdown": 0,
+          "g_off": 1e-9,
+          "g_on": 5,
+          "v_breakdown": -100,
+          "v_f": 0.6
+        },
+        "ic": {}
+      },
+      {
+        "id": "cbus",
+        "type": "passive.capacitor",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          40,
+          200
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "C": 0.0001,
+          "IC": 0
+        },
+        "ic": {}
+      },
+      {
+        "id": "rload",
+        "type": "passive.resistor",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          40,
+          240
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "R": 400.0
+        },
+        "ic": {}
+      },
+      {
+        "id": "gnd",
+        "type": "routing.ground",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          160,
+          0
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {},
+        "ic": {}
+      }
+    ],
+    "wires": [
+      {
+        "id": "wire1",
+        "from": {
+          "block": "vac",
+          "port": "p"
+        },
+        "to": {
+          "block": "d1",
+          "port": "a"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire2",
+        "from": {
+          "block": "vac",
+          "port": "p"
+        },
+        "to": {
+          "block": "d2",
+          "port": "k"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire3",
+        "from": {
+          "block": "vac",
+          "port": "n"
+        },
+        "to": {
+          "block": "d3",
+          "port": "a"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire4",
+        "from": {
+          "block": "vac",
+          "port": "n"
+        },
+        "to": {
+          "block": "d4",
+          "port": "k"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire5",
+        "from": {
+          "block": "d1",
+          "port": "k"
+        },
+        "to": {
+          "block": "lboost",
+          "port": "p"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire6",
+        "from": {
+          "block": "d3",
+          "port": "k"
+        },
+        "to": {
+          "block": "lboost",
+          "port": "p"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire7",
+        "from": {
+          "block": "d2",
+          "port": "a"
+        },
+        "to": {
+          "block": "gnd",
+          "port": "gnd"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire8",
+        "from": {
+          "block": "d4",
+          "port": "a"
+        },
+        "to": {
+          "block": "gnd",
+          "port": "gnd"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire9",
+        "from": {
+          "block": "lboost",
+          "port": "n"
+        },
+        "to": {
+          "block": "sw",
+          "port": "d"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire10",
+        "from": {
+          "block": "sw",
+          "port": "s"
+        },
+        "to": {
+          "block": "gnd",
+          "port": "gnd"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire11",
+        "from": {
+          "block": "dboost",
+          "port": "a"
+        },
+        "to": {
+          "block": "lboost",
+          "port": "n"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire12",
+        "from": {
+          "block": "dboost",
+          "port": "k"
+        },
+        "to": {
+          "block": "cbus",
+          "port": "p"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire13",
+        "from": {
+          "block": "dboost",
+          "port": "k"
+        },
+        "to": {
+          "block": "rload",
+          "port": "p"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire14",
+        "from": {
+          "block": "gate",
+          "port": "out"
+        },
+        "to": {
+          "block": "gate_drive",
+          "port": "in"
+        },
+        "kind": "signal",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire15",
+        "from": {
+          "block": "gate_drive",
+          "port": "out"
+        },
+        "to": {
+          "block": "sw",
+          "port": "g"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire16",
+        "from": {
+          "block": "cbus",
+          "port": "n"
+        },
+        "to": {
+          "block": "gnd",
+          "port": "gnd"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      },
+      {
+        "id": "wire17",
+        "from": {
+          "block": "rload",
+          "port": "n"
+        },
+        "to": {
+          "block": "gnd",
+          "port": "gnd"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false
+      }
+    ],
+    "subckt_defs": [],
+    "lines": [],
+    "nets": [],
+    "simulation": {},
+    "metadata": {}
+  }
+}

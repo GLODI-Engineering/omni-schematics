@@ -7,3 +7,9 @@ vitest.config.ts
 **/*.map
 **/*.ts
 !out/**/*.js
+
+# Note: an exclude here cannot override the `!out/**/*.js` above -- a `!` pattern
+# force-includes, and later excludes lose to it. Test-only sources are therefore
+# kept out of the package by not compiling them at all (see tsconfig.json's
+# `exclude`). The integration harness is still packaged for that reason and is
+# tracked separately.
