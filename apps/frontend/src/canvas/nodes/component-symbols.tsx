@@ -432,10 +432,10 @@ function currentSwitchRender(ctx: SymbolContext): ReactNode {
 
 // ── Ideal switch (3 ports: d/g/s -- gate-controlled, bbox 80×110) ───────────
 //
-// `passive.switch.ideal`'s own metadata lists `passive.switch.voltage` among its
+// `ideal.switch`'s own metadata lists `passive.switch.voltage` among its
 // `aliases` (search/picker text, e.g. "this is like a voltage-controlled switch"), and
 // `getSchematicSymbol` walks metadata.name, metadataType, *then every alias* looking for a
-// registry hit. Before this entry existed there was no `"passive.switch.ideal"` key, so the
+// registry hit. Before this entry existed there was no key for the type itself, so the
 // lookup fell through to the `"passive.switch.voltage"` alias and silently rendered this
 // block with *that* type's symbol -- a real, different 4-port device (p/cp/n/cn at fixed
 // y=10/30) whose hardcoded geometry has no relationship to this type's actual 3 ports.
@@ -1208,6 +1208,10 @@ export const SCHEMATIC_SYMBOLS: Record<string, SchematicSymbol> = {
   "passive.switch.current": {
     render: (ctx) => currentSwitchRender(ctx),
   },
+  // Renamed by gsim-core#60; the old spelling is kept for sheets saved before it.
+  "ideal.switch": {
+    render: () => idealSwitchRender(),
+  },
   "passive.switch.ideal": {
     render: () => idealSwitchRender(),
   },
@@ -1458,6 +1462,10 @@ export const SCHEMATIC_SYMBOLS: Record<string, SchematicSymbol> = {
       />
     ),
   },
+  // Renamed by gsim-core#60; the old spelling is kept for sheets saved before it. Without
+  // the `ideal.diode` key the lookup would reach the `physical_electrical.semiconductor.diode`
+  // alias instead.
+  "ideal.diode": { staticLabel: "D", render: (ctx) => diodeRender(ctx, "standard") },
   "passive.diode.ideal": { staticLabel: "D", render: (ctx) => diodeRender(ctx, "standard") },
   "physical_electrical.semiconductor.zener": {
     staticLabel: "Z",
