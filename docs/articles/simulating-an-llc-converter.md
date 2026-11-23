@@ -81,36 +81,47 @@ checkout. Everything after this section is identical either way.
 
 </details>
 
-### 1.3 Point the extension at the engine
+### 1.3 Point the extension at the engine and at a Python environment
 
 Open your settings (`Ctrl+,`, or `Cmd+,` on a Mac) and search for
-`generalSimulator`. The only setting you must fill in is the path to the
-solver binary.
+`omniSchematics`. Two settings must be filled in: the solver binary, and the
+Python environment the simulation kernel runs in. The editor builds neither —
+it runs what you give it.
 
 It is usually faster to edit the JSON directly. Open the command palette
 (`Ctrl+Shift+P`) → **Preferences: Open User Settings (JSON)** → add:
 
 ```jsonc
 {
-  // The binary that actually runs a simulation. This is the one setting
-  // you cannot skip.
+  // The binary that actually runs a simulation.
   "omniSchematics.generalSimulatorPath": "/path/to/general-simulator",
 
-  // The checkout that holds pyproject.toml. Leave empty and the extension
-  // looks for it next to the open workspace.
-  "omniSchematics.workspaceRoot": "",
-
-  // How the kernel sidecar is launched. 'uv' is the default and needs no
-  // further setup.
-  "omniSchematics.pythonRunner": "uv",
+  // The Python environment the simulation kernel runs in. Required: with this
+  // empty, Run tells you so instead of doing nothing.
+  "omniSchematics.kernelPython": "/path/to/gsim-venv",
 
   // Start the kernel when the extension wakes up, so Run works immediately.
   "omniSchematics.autoStartKernel": true
 }
 ```
 
-That path is the binary you unpacked in §1.2 — the file itself, not the
+The first path is the binary you unpacked in §1.2 — the file itself, not the
 folder holding it.
+
+The second is a virtualenv with the kernel packages in it. From a checkout of
+the repository, one command builds it and prints the path to paste here:
+
+```sh
+node scripts/make-kernel-venv.mjs
+```
+
+Without a checkout, make a virtualenv and `pip install` the wheels attached to
+the release, which is the same set of packages:
+
+```sh
+python -m venv gsim-venv
+gsim-venv/bin/pip install <wheels>/*.whl
+```
 
 **How to tell it worked.** Open any `.gsim_sch` and press Run. If the path is
 wrong you get a named error — `SolverUnavailable`, with the message saying the

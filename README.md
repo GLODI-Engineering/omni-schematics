@@ -82,7 +82,8 @@ code --install-extension omni-schematics.vsix
 
 The `.vsix` is the editor. It carries no simulation kernel and no engine, so on
 a fresh machine nothing can run until you give it both. Two settings do that,
-and then the editor does not care how either was built:
+and they are the only two that matter — the editor does not care how either was
+built, and it will not build or look for one itself:
 
 ```jsonc
 // settings.json
@@ -90,10 +91,22 @@ and then the editor does not care how either was built:
 "omniSchematics.generalSimulatorPath": "/path/to/general-simulator"
 ```
 
-With `kernelPython` set there is no `uv`, no checkout of this repo, and
-`workspaceRoot` is ignored entirely.
+`kernelPython` is **required**. There is no `uv`, no checkout discovery and no
+fallback: with that setting empty, a Run click says so and names the command
+below. That is the whole arrangement, deliberately (#141).
 
-Preparing that environment once:
+Preparing that environment once, from a checkout of this repo:
+
+```sh
+node scripts/make-kernel-venv.mjs            # ~/.omni-schematics/kernel-venv
+```
+
+It installs the seven kernel packages and their dependencies, adds `gsim_py` and
+`gsim-tools` if it finds them beside this checkout, starts the kernel to check
+the result, and prints the path to paste into the setting. `--out <dir>` puts it
+somewhere else and `--python <exe>` picks the base interpreter.
+
+Without a checkout, the same thing by hand from a release's wheels:
 
 ```sh
 python -m venv gsim-venv
@@ -105,8 +118,8 @@ declared by those wheels, so pip resolves them — you do not list them yourself
 Verified: a venv holding nothing but the seven wheels starts the kernel and
 prints its `KERNEL_READY` line.
 
-Build the wheels from a checkout with `uv build --all-packages --out-dir dist`,
-or take them from a release.
+The wheels are attached to every release; `uv build --all-packages --out-dir dist`
+builds them from a checkout.
 
 That is enough for the editor to **open and edit** schematics. To **simulate**,
 the environment also needs the two packages that cannot come from a public
@@ -158,28 +171,19 @@ Then **open this repository as your VS Code workspace folder** and open
 `examples/buck_converter.gsim_sch`. It opens in the schematic editor, with
 the block library in the Activity Bar.
 
-Opening the repo folder matters: the extension spawns a Python kernel as a
-child process and finds it by looking for `pyproject.toml` in your open
-workspace folders. Working in a different folder, set the path explicitly:
-
-```jsonc
-// settings.json
-"omniSchematics.workspaceRoot": "/path/to/omni-schematics"
-```
-
-**Warm the Python environment before the first run**, or the first launch
-sits for several minutes while uv downloads an interpreter and the
-dependency set:
+Working on this repo needs the same `omniSchematics.kernelPython` a user needs
+— there is no developer shortcut, because a shortcut is how the user-facing path
+stays broken without anyone noticing:
 
 ```sh
-uv sync
-uv run --project . --package kernel-sidecar python -m kernel_sidecar --port 0 --token dev --connect-timeout 0
+node scripts/make-kernel-venv.mjs
 ```
 
-That prints `KERNEL_READY port=… token=…` once it is up; Ctrl-C it, and the
-extension will start its own instantly thereafter. `General Simulator: Show
-Kernel Log` in the command palette shows exactly what was spawned when
-something goes wrong.
+Then paste the path it prints into `omniSchematics.kernelPython`. Rerun it with
+`--force` after changing anything under `packages/` or `apps/kernel-sidecar`.
+
+`General Simulator: Show Kernel Log` in the command palette shows exactly what
+was spawned, which is the first place to look when a run does nothing.
 
 The engine binary is not bundled. Point the extension at your own build with
 `omniSchematics.generalSimulatorPath`, or set `GENSIM_GENERAL_SIMULATOR_PATH`
@@ -200,7 +204,8 @@ pnpm dev:webviews          # http://localhost:5173
 
 Everything the extension needs to find lives under **General Simulator** in VS Code's settings
 (`Ctrl+,`, then search `omniSchematics`). Every path may be left empty, in which case it is
-searched for.
+searched for — with one exception: `omniSchematics.kernelPython` has nowhere to be searched
+for and must be set.
 
 | Setting | What it is for |
 | --- | --- |
@@ -208,8 +213,7 @@ searched for.
 | `omniSchematics.octaveCliPath` | The `octave-cli` binary, for `octfunc` / `octblock` code blocks. |
 | `omniSchematics.pythonPath` | Extra directories on `PYTHONPATH`, so a `pyblock` / `pyfunc` block can import your own modules. Relative entries resolve against the workspace folder. |
 | `omniSchematics.environment` | Extra environment variables for the kernel and everything it starts. The escape hatch for anything without its own setting. |
-| `omniSchematics.workspaceRoot` | The Python checkout the simulation kernel starts from. Empty uses the open workspace folders. |
-| `omniSchematics.pythonRunner` | Command that starts the kernel — `uv` by default. |
+| `omniSchematics.kernelPython` | **Required.** The Python environment the simulation kernel runs in. Nothing simulates until it is set; `scripts/make-kernel-venv.mjs` builds one. |
 | `omniSchematics.autoStartKernel` | Start the kernel when the extension activates. |
 
 ### How a binary is actually found

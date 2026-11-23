@@ -109,9 +109,9 @@ export function hasAnythingToSimulate(): boolean {
  * `reconnectKernel()` had already written the reason to Output and Problems.
  * Both of those live in the bottom panel, which starts hidden -- so the caller
  * could only offer "see the Output panel for why", and the one sentence that
- * would have explained everything ("workspaceRoot points at a directory with
- * no pyproject.toml in it") stayed hidden. The reason now travels with the
- * failure.
+ * would have explained everything ("kernelPython is not set, so there is no
+ * Python environment to start the kernel from") stayed hidden. The reason now
+ * travels with the failure.
  */
 type KernelConnection = { ok: true } | { ok: false; reason: string };
 

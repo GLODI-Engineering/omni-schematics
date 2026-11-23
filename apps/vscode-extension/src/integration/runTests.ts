@@ -24,7 +24,13 @@ function makeWorkspace(): string {
     JSON.stringify(
       {
         "omniSchematics.autoStartKernel": false,
-        "omniSchematics.workspaceRoot": path.resolve(__dirname, "../../../.."),
+        // #141: the kernel starts from a named environment and nothing else, so
+        // the suite is handed one or skips the test that needs it. `GSIM_KERNEL_PYTHON`
+        // is what CI sets after running `scripts/make-kernel-venv.mjs`; locally,
+        // export it to point at the venv you already have.
+        ...(process.env.GSIM_KERNEL_PYTHON
+          ? { "omniSchematics.kernelPython": process.env.GSIM_KERNEL_PYTHON }
+          : {}),
         "window.restoreWindows": "none",
         "workbench.startupEditor": "none",
         "extensions.autoCheckUpdates": false,
@@ -60,6 +66,12 @@ async function main(): Promise<void> {
     extensionTestsEnv: {
       GSIM_INTEGRATION_TEST: "1",
       GSIM_TEST_WORKSPACE: workspace,
+      // Forwarded, not read, by the suite: the setting above is what the
+      // extension acts on, and this is how the suite knows whether to expect
+      // a kernel at all.
+      ...(process.env.GSIM_KERNEL_PYTHON
+        ? { GSIM_KERNEL_PYTHON: process.env.GSIM_KERNEL_PYTHON }
+        : {}),
     },
     launchArgs: [
       workspace,

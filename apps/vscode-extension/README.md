@@ -21,7 +21,7 @@ language tooling.
 
 ```
 VS Code extension host (Node)
-├── KernelSidecar          src/kernel.ts      spawns `uv run … -m kernel_sidecar --port 0`
+├── KernelSidecar          src/kernel.ts      spawns `<kernelPython> -m kernel_sidecar --port 0`
 │                                             and parses `KERNEL_READY port=… token=…`
 ├── GsimHost               src/host.ts        webview registry + cross-webview drag broker
 ├── LibraryViewProvider    src/libraryView.ts WebviewView in the Activity Bar
@@ -140,9 +140,13 @@ what catches a bundle that has quietly reintroduced the need for it.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `omniSchematics.workspaceRoot` | `""` | Path to the checkout containing `pyproject.toml`. Empty = auto-discover from open workspace folders. |
-| `omniSchematics.pythonRunner` | `uv` | `uv` uses `uv run --project <root> python -m kernel_sidecar`; anything else is treated as a bare interpreter. |
+| `omniSchematics.kernelPython` | `""` | **Required.** Virtualenv directory, or an interpreter inside one, that has the kernel packages installed. Empty means no kernel: the start fails naming this setting. Build one with `node scripts/make-kernel-venv.mjs`. |
 | `omniSchematics.autoStartKernel` | `true` | Start the sidecar on activation. |
+
+There is no discovery and no fallback (#141). The extension runs
+`<interpreter> -m kernel_sidecar --port 0 --token <hex> --connect-timeout 0` and
+nothing else, so a kernel that will not start is a question about that one
+environment rather than about the editor.
 
 `GENSIM_KERNEL_PORT` + `GENSIM_KERNEL_TOKEN` override auto-spawn entirely: set
 both and the extension attaches to a kernel you started yourself instead of

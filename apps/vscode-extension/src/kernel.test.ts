@@ -28,10 +28,10 @@ afterEach(() => {
 });
 
 describe("#130: a failed kernel start tells the webview", () => {
-  it("fires onDidChange(null) when there is no workspace to find a kernel in", async () => {
-    // No configured root and no open folder: `resolveWorkspaceRoot` returns
-    // null and `doStart` gives up at kernel.ts:117. This is the exact shape of
-    // a fresh .vsix install on a machine with no checkout of this repo.
+  it("fires onDidChange(null) when no environment has been named", async () => {
+    // A fresh .vsix install: nothing configured, nothing open. This is the
+    // commonest state the extension is ever in, and before #130 it was the one
+    // that returned without firing -- so the Run click waited forever.
     __setTestState({ config: {}, workspaceFolders: undefined });
 
     const log = createRecordingChannel();
@@ -47,11 +47,8 @@ describe("#130: a failed kernel start tells the webview", () => {
     kernel.dispose();
   });
 
-  it("fires onDidChange(null) when the configured workspaceRoot holds no pyproject.toml", async () => {
-    // The user set `workspaceRoot`, but to a directory that is not a checkout
-    // of this repo -- e.g. to the `general-simulator` repo, which is pure Rust
-    // and has no pyproject.toml. Reported in exactly this form.
-    __setTestState({ config: { workspaceRoot: "/nonexistent/not-a-checkout" } });
+  it("fires onDidChange(null) when the named environment is not there", async () => {
+    __setTestState({ config: { kernelPython: "/nonexistent/not-an-env" } });
 
     const log = createRecordingChannel();
     const kernel = new KernelSidecar(log);
@@ -70,14 +67,14 @@ describe("#130: a failed kernel start tells the webview", () => {
     // The Output channel is closed by default. The kernel's diagnosis is the
     // single most useful sentence a new user can be handed, so it has to reach
     // a notification too.
-    __setTestState({ config: { workspaceRoot: "/nonexistent/not-a-checkout" } });
+    __setTestState({ config: { kernelPython: "/nonexistent/not-an-env" } });
 
     const log = createRecordingChannel();
     const kernel = new KernelSidecar(log);
 
     await kernel.start();
 
-    expect(__shownErrors().join("\n")).toMatch(/pyproject\.toml|workspaceRoot/);
+    expect(__shownErrors().join("\n")).toMatch(/kernelPython/);
 
     kernel.dispose();
   });
@@ -91,18 +88,73 @@ describe("#130: a failed kernel start tells the webview", () => {
     await kernel.start();
 
     expect(kernel.lastFailure).toBeTruthy();
-    expect(kernel.lastFailure ?? "").toMatch(/pyproject\.toml|workspaceRoot|checkout/);
+    expect(kernel.lastFailure ?? "").toMatch(/kernelPython/);
 
     kernel.dispose();
   });
 });
 
-describe("#134: a prepared environment is used instead of a checkout", () => {
+describe("#141: there is no fallback to a checkout", () => {
+  // The point of the issue, as one assertion: with nothing configured, the
+  // extension must say what to set -- not go looking for a `pyproject.toml`
+  // and then complain about a checkout the user was never told to make.
+  //
+  // Both halves matter. Dropping the first would pass for an extension that
+  // says nothing at all; dropping the second would pass for the arrangement
+  // this change exists to delete.
+  it("asks for kernelPython instead of hunting for a pyproject.toml", async () => {
+    __setTestState({ config: {}, workspaceFolders: undefined });
+
+    const log = createRecordingChannel();
+    const kernel = new KernelSidecar(log);
+
+    await kernel.start();
+
+    const reason = kernel.lastFailure ?? "";
+    expect(reason).toContain("omniSchematics.kernelPython");
+    expect(reason).not.toMatch(/pyproject\.toml|workspaceRoot|checkout of/);
+
+    kernel.dispose();
+  });
+
+  it("does not consult a folder that is a checkout of this repo either", async () => {
+    // The strongest form of the test: the open folder *is* an omni-schematics
+    // checkout, so the deleted discovery walk would have found it and launched
+    // `uv`. Nothing may be read from it.
+    __setTestState({ config: {}, workspaceFolders: [{ uri: { fsPath: process.cwd() } }] });
+
+    const log = createRecordingChannel();
+    const kernel = new KernelSidecar(log);
+
+    await kernel.start();
+
+    expect(kernel.lastFailure ?? "").toContain("omniSchematics.kernelPython");
+    expect(log.lines.join("\n")).not.toContain("spawning");
+
+    kernel.dispose();
+  });
+
+  it("tells the user how to build an environment, not only that one is missing", async () => {
+    // "Set this setting" is useless advice to someone who does not have a venv
+    // to point it at. The message carries the command that makes one.
+    __setTestState({ config: {}, workspaceFolders: undefined });
+
+    const log = createRecordingChannel();
+    const kernel = new KernelSidecar(log);
+
+    await kernel.start();
+
+    expect(kernel.lastFailure ?? "").toContain("make-kernel-venv");
+
+    kernel.dispose();
+  });
+});
+
+describe("#134: the named environment is what gets started", () => {
   it("fails naming kernelPython, without falling through to the workspace search", async () => {
-    // The distinguishing assertion is the *absence* of the pyproject.toml
-    // message. If `kernelPython` were merely consulted and then ignored, the
-    // user would be told to fix `workspaceRoot` -- which is precisely the
-    // wrong advice for someone who has named an environment.
+    // The failure has to name the path that was tried. "No interpreter found"
+    // on its own leaves the user guessing whether the setting was even read --
+    // and a typo in a long path is the likeliest cause by far.
     __setTestState({ config: { kernelPython: "/envs/does-not-exist" } });
 
     const log = createRecordingChannel();
@@ -115,16 +167,15 @@ describe("#134: a prepared environment is used instead of a checkout", () => {
     expect(seen).toEqual([null]);
     expect(kernel.lastFailure ?? "").toContain("kernelPython");
     expect(kernel.lastFailure ?? "").toContain("/envs/does-not-exist");
-    expect(kernel.lastFailure ?? "").not.toContain("pyproject.toml");
 
     dispose();
     kernel.dispose();
   });
 
   it("does not require a workspace folder at all when kernelPython is set", async () => {
-    // No folder open, no workspaceRoot: under the old arrangement this could
-    // not even be attempted. The attempt failing on a bogus path is fine; what
-    // matters is which failure it is.
+    // No folder open: under the old arrangement this could not even be
+    // attempted. The attempt failing on a bogus path is fine; what matters is
+    // that it is the path that failed, not the absence of a workspace.
     __setTestState({
       config: { kernelPython: "/envs/does-not-exist" },
       workspaceFolders: undefined,

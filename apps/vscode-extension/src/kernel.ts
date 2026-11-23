@@ -17,14 +17,12 @@ import {
   KERNEL_PROTOCOL_VERSION,
   type KernelConfig,
   type SpawnPlan,
-  buildPreparedSpawnPlan,
   buildSpawnPlan,
   generateToken,
   isProtocolCompatible,
   kernelConfigFromEnv,
   parseKernelReady,
   resolveKernelPython,
-  resolveWorkspaceRoot,
 } from "./kernel-core";
 
 export type { KernelConfig };
@@ -143,81 +141,65 @@ export class KernelSidecar implements vscode.Disposable {
     }
 
     const settings = vscode.workspace.getConfiguration("omniSchematics");
-    const configuredRoot = (settings.get<string>("workspaceRoot") ?? "").trim();
-    const runner = (settings.get<string>("pythonRunner") ?? "uv").trim() || "uv";
 
-    // #134: a prepared environment, named rather than built. This comes first
-    // because when it is set there is nothing to discover -- the interpreter
-    // already has `kernel_sidecar` and its dependencies in it, so `uv`, the
-    // checkout and `workspaceRoot` are all irrelevant.
+    // One way in: an environment the user prepared and named (#134), and since
+    // #141 the only way. The editor does not build a Python environment, look
+    // for a checkout, or run `uv`.
     //
-    // Worth stating why this is the better shape rather than a shortcut: `uv
-    // sync` never produced a kernel that could simulate. `gsim-tools` is in a
+    // Worth stating why that is the better shape rather than a retreat. `uv
+    // sync` never produced a kernel that could simulate: `gsim-tools` is in a
     // private sibling repo and `gsim_py` is a maturin build, so both are
-    // hand-installed afterwards -- and a sync prunes them again. The
-    // environment was always the user's to assemble; this stops pretending
-    // otherwise.
+    // hand-installed afterwards -- and the next sync prunes them again. Worse,
+    // the fallback was the *default*, so a user whose workspace was their own
+    // converter project (no `pyproject.toml` anywhere) got a Run click that did
+    // nothing and a message about a checkout nobody had told them to make. The
+    // environment was always theirs to assemble; this stops pretending
+    // otherwise, and `scripts/make-kernel-venv.mjs` assembles one in a command.
     const configuredPython = (settings.get<string>("kernelPython") ?? "").trim();
-    if (configuredPython) {
-      const interpreter = resolveKernelPython(configuredPython);
-      if (!interpreter) {
-        return this.failStart(
-          `omniSchematics.kernelPython is set to "${configuredPython}", but there is no ` +
-            "interpreter there. Give either a virtualenv directory or a path to a Python " +
-            "executable.",
-        );
-      }
-      const workdir =
-        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(interpreter);
-      return this.launch(buildPreparedSpawnPlan(interpreter, generateToken(), workdir), settings, {
-        workspaceRoot: workdir,
-      });
-    }
-
-    const candidates = configuredRoot
-      ? [configuredRoot]
-      : (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
-
-    const workspaceRoot = resolveWorkspaceRoot(candidates);
-    if (!workspaceRoot) {
-      // The message used to say "general-simulator checkout", which sends the
-      // reader to the wrong repository: `general-simulator` is a pure Rust
-      // workspace with no pyproject.toml in it. The directory wanted here is a
-      // checkout of *this* repo, which is where the Python `kernel_sidecar`
-      // package lives. Reported by a user who had correctly set
-      // `generalSimulatorPath` and could not see why Run still did nothing.
-      const where = configuredRoot
-        ? `omniSchematics.workspaceRoot is set to "${configuredRoot}", which has no pyproject.toml in it or above it.`
-        : "No folder is open that contains a pyproject.toml.";
+    if (!configuredPython) {
       return this.failStart(
-        `${where} That file marks a checkout of omni-schematics itself, which is where the ` +
-          "kernel_sidecar Python package lives — not the general-simulator repository. " +
-          "Set omniSchematics.workspaceRoot to an omni-schematics checkout (and run `uv sync` in it).",
+        "omniSchematics.kernelPython is not set, so there is no Python environment to start " +
+          "the simulation kernel from. Build one with `node scripts/make-kernel-venv.mjs` in " +
+          "an omni-schematics checkout, or install the kernel wheels from a release into a " +
+          "virtualenv of your own, then set the setting to that virtualenv.",
       );
     }
 
-    return this.launch(buildSpawnPlan(workspaceRoot, generateToken(), runner), settings, {
-      workspaceRoot,
+    const interpreter = resolveKernelPython(configuredPython);
+    if (!interpreter) {
+      return this.failStart(
+        `omniSchematics.kernelPython is set to "${configuredPython}", but there is no ` +
+          "interpreter there. Give either a virtualenv directory or a path to a Python " +
+          "executable.",
+      );
+    }
+
+    // Relative `pythonPath` entries resolve against this, and results land
+    // under it. The open folder is the user's own project, which is what a
+    // relative path in their settings was always meant to mean -- it used to be
+    // whichever checkout the discovery walk happened to find.
+    const workdir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(interpreter);
+    return this.launch(buildSpawnPlan(interpreter, generateToken(), workdir), settings, {
+      workdir,
     });
   }
 
   /**
    * Spawn a plan and wait for its handshake.
    *
-   * Shared by both ways of getting a kernel: the `uv` workspace a developer
-   * works in, and the prepared environment a user names (#134). Everything
-   * from here down is identical between them -- which is the argument for the
-   * split being a spawn-plan decision and nothing more.
+   * There is one way to get a kernel (#141), so this is no longer shared: it
+   * is simply the second half of `doStart`, kept separate because spawning a
+   * child process and deciding what to spawn are different concerns and only
+   * the second one is testable without a process.
    */
   private async launch(
     plan: SpawnPlan,
     settings: { get<T>(key: string): T | undefined },
-    context: { workspaceRoot: string },
+    context: { workdir: string },
   ): Promise<KernelConfig | null> {
-    const workspaceRoot = context.workspaceRoot;
     const kernelEnv = buildKernelEnvironment({
       base: process.env,
-      workspaceRoot,
+      workspaceRoot: context.workdir,
       settings: {
         generalSimulatorPath: settings.get<string>("generalSimulatorPath"),
         octaveCliPath: settings.get<string>("octaveCliPath"),
@@ -248,7 +230,7 @@ export class KernelSidecar implements vscode.Disposable {
     } catch (error) {
       return this.failStart(
         `Could not launch "${plan.command}": ${String(error)}. ` +
-          "Install it, or set omniSchematics.pythonRunner to a runner that is on PATH.",
+          "Check that omniSchematics.kernelPython points at a working Python interpreter.",
       );
     }
     this.child = child;
@@ -258,8 +240,8 @@ export class KernelSidecar implements vscode.Disposable {
     });
     // `spawn` does not throw for a missing executable -- it emits `error`
     // asynchronously, so the try/catch above cannot see it. Without this, a
-    // machine with no `uv` took a path that logged and then waited for a
-    // KERNEL_READY that could never come (#130).
+    // path that does not resolve to a runnable interpreter logged once and then
+    // waited for a KERNEL_READY that could never come (#130).
     let spawnError: Error | null = null;
     // Read through an accessor: TypeScript's control-flow analysis does not
     // follow the assignment inside the callback below, so a direct read of
@@ -285,9 +267,11 @@ export class KernelSidecar implements vscode.Disposable {
       return this.failStart(
         failed
           ? `Could not launch "${plan.command}": ${failed.message}. ` +
-              "Install it, or set omniSchematics.pythonRunner to a runner that is on PATH."
-          : "The kernel started but never signalled KERNEL_READY. " +
-              `Check the General Simulator output channel, and that \`uv sync\` has been run in ${workspaceRoot}.`,
+              "Check that omniSchematics.kernelPython points at a working Python interpreter."
+          : "The kernel started but never signalled KERNEL_READY. Check the General Simulator " +
+              "output channel: the environment omniSchematics.kernelPython names probably has " +
+              "the interpreter but not the kernel packages. " +
+              "`python -m kernel_sidecar --port 0 --token t` in it shows the import that fails.",
       );
     }
     // #134: a prepared environment is version-independent of the editor, so a
