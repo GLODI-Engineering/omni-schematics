@@ -210,6 +210,36 @@ jobs:
       - name: engine catalogue drift
         run: GSIM_PYTHON=$(which python) node scripts/gen-engine-catalog.mjs --check
 
+  examples-still-work:
+    # An example is the one artefact whose whole purpose is to work the first time
+    # someone opens it, and it was the only one with no check holding it to that. When this
+    # job was written the repository's single example had five separate faults: a block type
+    # the engine no longer declares, two aliases the netlist emitter rejects, a document the
+    # loader could not even read, and content that no longer matched its own generator.
+    #
+    # `gsim_py` is built here rather than skipped, for the reason `engine-catalogue-drift`
+    # gives: a check that cannot fail is not one. Only `gsim_py` is needed -- deliberately
+    # not `gsim-tools`, which is private and would make this unrunnable in CI.
+    name: The examples still open, compile, and match their generators
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: build gsim_py from the engine core
+        run: |
+          git clone --depth 1 https://github.com/GLODI-Engineering/gsim-core.git /tmp/gsim-core
+          python -m pip install --upgrade maturin
+          maturin build --release --manifest-path /tmp/gsim-core/crates/gsim-py/Cargo.toml --out /tmp/wheels
+          python -m pip install /tmp/wheels/gsim_py-*.whl
+      - name: examples check
+        run: GSIM_PYTHON=$(which python) node scripts/check-examples.mjs --check
+
   keybinding-drift:
     # `package.json`'s keybindings and docs/keyboard-conflicts.md are generated from the
     # schematic's own keymap. This fails when a chord is added to the keymap and the

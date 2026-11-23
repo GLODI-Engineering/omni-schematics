@@ -1,0 +1,309 @@
+#!/usr/bin/env node
+/**
+ * Example-schematic staleness check.
+ *
+ * An example is the one artefact whose entire purpose is to work the first time
+ * someone opens it, and it was the only one with no test holding it to that.
+ * When this check was first written, `examples/buck_converter.gsim_sch` -- the
+ * sole example in the repository -- already used a block type the engine no
+ * longer declares, and nothing had noticed.
+ *
+ * Four things are checked per file in `examples/`:
+ *
+ *   1. it parses as a `.gsim_sch` document with blocks in it;
+ *   2. every block type resolves in the engine catalogue, by name or alias;
+ *   3. every resolved type is one the engine says it can compile;
+ *   4. the committed file matches what its generating script emits, when it has
+ *      one -- the same shape as gsim-core's `examples-still-emit-what-they-
+ *      emitted` job.
+ *
+ * Usage:
+ *   node scripts/check-examples.mjs --check     # exit 1 on any failure
+ *   node scripts/check-examples.mjs            # report, exit 0
+ */
+
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(__dirname, "..");
+const STRICT = process.argv.includes("--check");
+
+const EXAMPLES_DIR = join(REPO_ROOT, "examples");
+const CATALOG = join(REPO_ROOT, "apps", "frontend", "src", "library", "engine-catalog.json");
+
+/**
+ * The interpreter that has `gsim_tools` and `gsim_py` in it.
+ *
+ * `python3` on PATH is almost never the right one -- the engine bindings live
+ * in this workspace's venv, and `gsim_py` is a compiled extension that has to
+ * be built. Preference order mirrors `gen-engine-catalog.mjs`: an explicit
+ * `GSIM_PYTHON`, then the workspace venv, then PATH.
+ */
+function enginePython() {
+  if (process.env.GSIM_PYTHON) {
+    return process.env.GSIM_PYTHON;
+  }
+  for (const candidate of [
+    join(REPO_ROOT, ".venv", "bin", "python"),
+    join(REPO_ROOT, ".venv", "Scripts", "python.exe"),
+  ]) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return "python3";
+}
+
+const PYTHON = enginePython();
+
+/**
+ * Compile a document with the real compiler.
+ *
+ * This is the arm that matters, and the reason the others are not enough: a
+ * block type can be in the catalogue, be marked compilable, and still be
+ * spelled in a way the netlist emitter rejects. Only compiling finds that.
+ *
+ * Absent engine bindings are reported, not failed -- same contract as
+ * `gen-engine-catalog.mjs`, which exits cleanly without `gsim_py` so an
+ * ordinary checkout is usable. CI installs them, so there the arm is real.
+ */
+function compiles(documentPath) {
+  // `gsim_py` only -- deliberately not `gsim_tools`. gsim-tools is a private
+  // repository, so no CI checkout can install it, and a gate that only runs on
+  // one machine is not a gate. `gsim_py` is built from public gsim-core, which
+  // `engine-catalogue-drift` already does in this same workflow.
+  //
+  // Both calls return a JSON *string*, not an object -- `compile` puts the
+  // netlist under `netlist`. Reading the return value as text and counting its
+  // lines reports 1 for every document, which looks like a successful compile
+  // of an empty circuit.
+  const probe = [
+    "import json,pathlib,sys",
+    "import gsim_py",
+    "doc = pathlib.Path(sys.argv[1]).read_text()",
+    "loaded = json.loads(gsim_py.load_document(doc))",
+    "model = loaded['model'] if 'model' in loaded else loaded",
+    "result = json.loads(gsim_py.compile(json.dumps(model), 'general-simulator'))",
+    "net = result['netlist']",
+    "print(len([l for l in net.splitlines() if l.strip() and not l.startswith('*')]))",
+  ].join("\n");
+  try {
+    const out = execFileSync(PYTHON, ["-I", "-c", probe, documentPath], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const lines = Number.parseInt(out.trim(), 10);
+    if (!Number.isInteger(lines) || lines <= 0) {
+      return { ok: false, reason: `compiled to ${out.trim() || "nothing"}` };
+    }
+    return { ok: true, lines };
+  } catch (error) {
+    const text = `${error.stderr ?? ""}${error.stdout ?? ""}`;
+    if (/ModuleNotFoundError: No module named 'gsim_py'/.test(text)) {
+      return { ok: null, reason: "gsim_py not installed" };
+    }
+    const last = text.trim().split("\n").filter(Boolean).pop() ?? String(error.message);
+    return { ok: false, reason: last };
+  }
+}
+
+/**
+ * Every name the catalogue answers to, and whether the engine can compile it.
+ *
+ * Hyphens and underscores are both normalised away because the catalogue, the
+ * saved documents and the symbol registry do not agree on which to use --
+ * `physical-electrical.*` and `physical_electrical.*` are the same type, and a
+ * checker that treated them as different would reject correct examples.
+ */
+function loadCatalog() {
+  const entries = JSON.parse(readFileSync(CATALOG, "utf8"));
+  const canonical = new Map();
+  const aliases = new Map();
+  for (const entry of entries) {
+    const meta = entry.metadata ?? {};
+    if (typeof meta.name !== "string" || meta.name.length === 0) {
+      continue;
+    }
+    canonical.set(normalise(meta.name), { compilable: meta.compilable === true, name: meta.name });
+    for (const alias of meta.aliases ?? []) {
+      if (typeof alias === "string" && alias.length > 0 && !aliases.has(normalise(alias))) {
+        aliases.set(normalise(alias), meta.name);
+      }
+    }
+  }
+  return { canonical, aliases };
+}
+
+const normalise = (key) => key.replace(/-/g, "_");
+
+/** Block types used by a document, in first-seen order. */
+function blockTypes(doc) {
+  const blocks = doc?.model?.blocks ?? doc?.blocks ?? [];
+  const seen = [];
+  for (const block of blocks) {
+    if (typeof block?.type === "string" && !seen.includes(block.type)) {
+      seen.push(block.type);
+    }
+  }
+  return seen;
+}
+
+/**
+ * Re-run the generator and compare, when one exists.
+ *
+ * The generator is found by convention: `build_<name>.py` beside the document.
+ * Its interface is `build_<name>.py <output-path>` -- it writes the document to
+ * the path given and uses stdout for a human-readable log. Passing a flag
+ * instead of a path makes it write a file named after the flag and print that
+ * log, which the first version of this checker then compared against the
+ * document and reported as drift. The generator was right and the checker was
+ * wrong; writing the contract down here so the next reader does not repeat it.
+ */
+function regenerates(name, documentPath, failures) {
+  const script = join(EXAMPLES_DIR, `build_${name}.py`);
+  if (!existsSync(script)) {
+    return "no generator";
+  }
+  const committed = readFileSync(documentPath, "utf8");
+  const scratch = join(mkdtempSync(join(tmpdir(), "gsim-examples-")), `${name}.gsim_sch`);
+  try {
+    execFileSync(PYTHON, [script, scratch], {
+      cwd: EXAMPLES_DIR,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    // A generator that cannot run is not evidence the document is wrong, and
+    // saying so plainly beats failing the example for it.
+    return `generator did not run (${String(error.message ?? error).split("\n")[0]})`;
+  }
+  if (!existsSync(scratch)) {
+    return `generator wrote nothing to the path it was given`;
+  }
+  if (normaliseJson(readFileSync(scratch, "utf8")) !== normaliseJson(committed)) {
+    failures.push(`${name}: the committed document differs from what build_${name}.py emits`);
+    return "DRIFTED";
+  }
+  return "matches its generator";
+}
+
+/** Compare as data, so formatting and key order cannot fail an example. */
+function normaliseJson(text) {
+  try {
+    return JSON.stringify(sortKeys(JSON.parse(text)));
+  } catch {
+    return text;
+  }
+}
+
+function sortKeys(value) {
+  if (Array.isArray(value)) {
+    return value.map(sortKeys);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, sortKeys(value[key])]),
+    );
+  }
+  return value;
+}
+
+// ---------------------------------------------------------------------------
+
+const { canonical, aliases } = loadCatalog();
+const files = readdirSync(EXAMPLES_DIR)
+  .filter((name) => name.endsWith(".gsim_sch"))
+  .sort();
+
+if (files.length === 0) {
+  console.error("check-examples: no .gsim_sch files in examples/");
+  process.exit(STRICT ? 1 : 0);
+}
+
+const failures = [];
+
+for (const file of files) {
+  const name = file.replace(/\.gsim_sch$/, "");
+  const path = join(EXAMPLES_DIR, file);
+  console.log(`\n${file}`);
+
+  let doc;
+  try {
+    doc = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    failures.push(`${name}: not valid JSON — ${error.message}`);
+    console.log("  ✗ does not parse");
+    continue;
+  }
+
+  const types = blockTypes(doc);
+  if (types.length === 0) {
+    failures.push(`${name}: the document has no blocks`);
+    console.log("  ✗ no blocks");
+    continue;
+  }
+
+  for (const type of types) {
+    const hit = canonical.get(normalise(type));
+    if (hit) {
+      if (hit.compilable) {
+        console.log(`  ✓ ${type}`);
+      } else {
+        failures.push(`${name}: block type "${type}" is not compilable by the engine`);
+        console.log(`  ✗ ${type} — in the catalogue but not compilable`);
+      }
+      continue;
+    }
+
+    // An alias is not good enough, and this is the subtle one. Aliases resolve
+    // in the catalogue and in the symbol registry, so a sheet using one looks
+    // entirely correct in the palette -- and the netlist emitter rejects them:
+    //
+    //   unknown-type: block 'vin' has type
+    //   'physical-electrical.source.voltage_dc', which no netlist emitter knows
+    //
+    // The previous buck example used two such spellings and a catalogue-only
+    // check passed it. Examples use canonical names.
+    const canonicalName = aliases.get(normalise(type));
+    if (canonicalName) {
+      failures.push(
+        `${name}: block type "${type}" is an alias of "${canonicalName}"; the netlist ` +
+          `emitter only accepts the canonical name`,
+      );
+      console.log(`  ✗ ${type} — alias of ${canonicalName}, not accepted by the emitter`);
+    } else {
+      failures.push(`${name}: block type "${type}" is not in the engine catalogue`);
+      console.log(`  ✗ ${type} — not in the catalogue`);
+    }
+  }
+
+  const compiled = compiles(path);
+  if (compiled.ok === true) {
+    console.log(`  · compiles to ${compiled.lines} netlist lines`);
+  } else if (compiled.ok === null) {
+    console.log(`  · not compiled (${compiled.reason})`);
+  } else {
+    failures.push(`${name}: does not compile — ${compiled.reason}`);
+    console.log(`  ✗ does not compile — ${compiled.reason}`);
+  }
+
+  console.log(`  · ${regenerates(name, path, failures)}`);
+}
+
+console.log("");
+if (failures.length > 0) {
+  for (const failure of failures) {
+    console.error(`check-examples: ${failure}`);
+  }
+  console.error(`\ncheck-examples: ${failures.length} problem(s) in ${files.length} example(s).`);
+  process.exit(STRICT ? 1 : 0);
+}
+console.log(`check-examples: ${files.length} example(s) OK.`);
