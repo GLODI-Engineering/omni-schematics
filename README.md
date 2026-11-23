@@ -97,15 +97,28 @@ Preparing that environment once:
 
 ```sh
 python -m venv gsim-venv
-gsim-venv/bin/pip install numpy scipy matplotlib pandas sympy websockets h5py
-# the kernel packages themselves, from a checkout or from the release assets:
-gsim-venv/bin/pip install ./packages/kernel-core ./packages/schemas \
-    ./packages/components ./packages/synthesis ./packages/gsim-model \
-    ./packages/simulator ./apps/kernel-sidecar
-# and the two that cannot come from a public index:
-gsim-venv/bin/pip install <path-to>/gsim_py-*.whl      # maturin build of gsim-core/crates/gsim-py
+gsim-venv/bin/pip install <wheels>/*.whl   # the seven kernel packages
+```
+
+`numpy`, `scipy`, `matplotlib`, `pandas`, `sympy`, `websockets` and `h5py` are
+declared by those wheels, so pip resolves them — you do not list them yourself.
+Verified: a venv holding nothing but the seven wheels starts the kernel and
+prints its `KERNEL_READY` line.
+
+Build the wheels from a checkout with `uv build --all-packages --out-dir dist`,
+or take them from a release.
+
+That is enough for the editor to **open and edit** schematics. To **simulate**,
+the environment also needs the two packages that cannot come from a public
+index:
+
+```sh
+gsim-venv/bin/pip install <path-to>/gsim_py-*.whl    # maturin build of gsim-core/crates/gsim-py
 gsim-venv/bin/pip install -e <sibling-repos-root>/gsim-tools
 ```
+
+Without them the kernel starts and a run answers `SolverUnavailable` naming the
+missing build step, rather than failing obscurely.
 
 On Windows the interpreter is `gsim-venv\Scripts\python.exe`; either the
 directory or the executable is accepted.
