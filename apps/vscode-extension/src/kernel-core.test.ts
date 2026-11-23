@@ -5,15 +5,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   KERNEL_PROTOCOL_VERSION,
-  buildPreparedSpawnPlan,
   buildSpawnPlan,
-  findWorkspaceRoot,
   generateToken,
   isProtocolCompatible,
   kernelConfigFromEnv,
   parseKernelReady,
   resolveKernelPython,
-  resolveWorkspaceRoot,
 } from "./kernel-core";
 
 describe("kernel-core: KERNEL_READY handshake", () => {
@@ -41,62 +38,6 @@ describe("kernel-core: KERNEL_READY handshake", () => {
     expect(parseKernelReady("KERNEL_READY token=abc")).toBeNull();
     expect(parseKernelReady("KERNEL_READY port=0 token=abc")).toBeNull();
     expect(parseKernelReady("KERNEL_READY port=70000 token=abc")).toBeNull();
-  });
-});
-
-describe("kernel-core: spawn plan", () => {
-  it("matches the Tauri shell's uv invocation, plus --package kernel-sidecar", () => {
-    const plan = buildSpawnPlan("/repo", "tok");
-    expect(plan).toEqual({
-      command: "uv",
-      args: [
-        "run",
-        "--project",
-        "/repo",
-        "--package",
-        "kernel-sidecar",
-        "python",
-        "-m",
-        "kernel_sidecar",
-        "--port",
-        "0",
-        "--token",
-        "tok",
-        "--connect-timeout",
-        "0",
-      ],
-      cwd: "/repo",
-    });
-  });
-
-  it("falls back to a bare interpreter for a non-uv runner", () => {
-    const plan = buildSpawnPlan("/repo", "tok", "python3");
-    expect(plan.command).toBe("python3");
-    expect(plan.args.slice(0, 2)).toEqual(["-m", "kernel_sidecar"]);
-    expect(plan.args).toContain("--connect-timeout");
-    expect(plan.cwd).toBe("/repo");
-  });
-});
-
-describe("kernel-core: workspace discovery", () => {
-  const tree = new Set(["/a/b/pyproject.toml"]);
-  const exists = (candidate: string) => tree.has(candidate);
-
-  it("walks up to the directory holding pyproject.toml", () => {
-    expect(findWorkspaceRoot("/a/b/c/d", exists)).toBe("/a/b");
-  });
-
-  it("returns null when nothing matches", () => {
-    expect(findWorkspaceRoot("/x/y", exists)).toBeNull();
-  });
-
-  it("stops after 12 levels", () => {
-    const deep = `/${"deep/".repeat(20)}leaf`;
-    expect(findWorkspaceRoot(deep, exists)).toBeNull();
-  });
-
-  it("takes the first candidate that resolves", () => {
-    expect(resolveWorkspaceRoot(["/x/y", "/a/b/c"], exists)).toBe("/a/b");
   });
 });
 
@@ -138,7 +79,7 @@ describe("kernel-core: resolveKernelPython", () => {
   // kernel that could simulate anyway. `gsim-tools` is in a private sibling
   // repo and `gsim_py` is a maturin build, so both are hand-installed after a
   // sync -- and a sync prunes them again. Naming a finished environment states
-  // the dependency that was always there, and drops the clone, `uv` and
+  // the dependency that was always there, and #141 dropped the clone, `uv` and
   // `workspaceRoot` with it.
 
   it("accepts a venv directory and finds its interpreter (POSIX layout)", () => {
@@ -178,7 +119,7 @@ describe("kernel-core: resolveKernelPython", () => {
     );
   });
 
-  it("returns null for an empty setting, so the caller can fall back to uv", () => {
+  it("returns null for an empty setting, which the host reports as unset (#141)", () => {
     expect(resolveKernelPython("", () => true)).toBeNull();
     expect(resolveKernelPython("   ", () => true)).toBeNull();
   });
@@ -190,9 +131,9 @@ describe("kernel-core: resolveKernelPython", () => {
   });
 });
 
-describe("kernel-core: buildPreparedSpawnPlan", () => {
+describe("kernel-core: buildSpawnPlan", () => {
   it("runs the interpreter directly, with no uv and no --project", () => {
-    const plan = buildPreparedSpawnPlan("/envs/gsim/bin/python", "deadbeef", "/work");
+    const plan = buildSpawnPlan("/envs/gsim/bin/python", "deadbeef", "/work");
     expect(plan.command).toBe("/envs/gsim/bin/python");
     expect(plan.args).toEqual([
       "-m",

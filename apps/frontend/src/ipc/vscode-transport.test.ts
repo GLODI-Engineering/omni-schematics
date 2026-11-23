@@ -184,10 +184,9 @@ describe("reconnectKernel", () => {
     // used to exist only in an output channel that is closed by default.
     hostSays({
       type: "gsim/kernelStopped",
-      reason:
-        'omniSchematics.workspaceRoot is set to "/nope", which has no pyproject.toml in it or above it.',
+      reason: 'omniSchematics.kernelPython is set to "/nope", but there is no interpreter there.',
     });
 
-    await expect(pending).rejects.toThrow(/workspaceRoot is set to "\/nope"/);
+    await expect(pending).rejects.toThrow(/kernelPython is set to "\/nope"/);
   });
 });

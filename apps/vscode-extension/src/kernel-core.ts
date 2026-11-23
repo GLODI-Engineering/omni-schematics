@@ -1,13 +1,19 @@
 /**
  * Pure, VS Code-free half of the kernel-sidecar process manager.
  *
- * Faithful port of `apps/desktop/src-tauri/src/main.rs`:
- *   - locate the workspace root by walking up until `pyproject.toml`,
- *   - spawn `uv run --project <root> python -m kernel_sidecar
- *     --port 0 --token <hex> --connect-timeout 0`,
- *   - read the child's stdout until a `KERNEL_READY port=… token=…` line,
+ * What it does:
+ *   - build the command that starts the sidecar from an interpreter the user
+ *     named (`omniSchematics.kernelPython`),
+ *   - read the child's stdout until a `KERNEL_READY port=… token=… protocol=…`
+ *     line,
  *   - honour the `GENSIM_KERNEL_PORT` / `GENSIM_KERNEL_TOKEN` overrides used by
  *     CI and dev-without-auto-spawn.
+ *
+ * It used to do a fourth thing: walk up from the open folder looking for a
+ * `pyproject.toml` and launch the kernel with `uv run --project <root>`. #141
+ * deleted that. The editor names an environment and does not build one, so
+ * there is nothing here to discover -- which is why the file no longer touches
+ * the filesystem except to check that a configured path exists.
  *
  * Everything here is dependency-free so it can be unit tested without a
  * running VS Code instance.
@@ -33,7 +39,7 @@ export interface KernelConfig {
  *
  * Introduced with #134, which lets a user point the extension at a Python
  * environment they prepared themselves rather than one the extension builds.
- * That removes `uv`, the checkout and `workspaceRoot` -- and introduces one new
+ * That removes `uv` and the checkout -- and introduces one new
  * way to fail: an environment prepared for a different version of the editor.
  * Pinning the *protocol* rather than any package version is deliberate; package
  * versions drift for reasons that do not change the wire contract, and a check
@@ -56,9 +62,6 @@ export interface SpawnPlan {
   cwd: string;
 }
 
-/** Maximum number of parent directories walked when locating the workspace. */
-export const WORKSPACE_SEARCH_DEPTH = 12;
-
 /**
  * 32 hex chars, matching the Rust token shape. The Rust implementation derived
  * the value from the clock and pid; a CSPRNG is strictly better and the token
@@ -66,85 +69,6 @@ export const WORKSPACE_SEARCH_DEPTH = 12;
  */
 export function generateToken(): string {
   return randomBytes(16).toString("hex");
-}
-
-/**
- * Walk up from `startDir` looking for the directory containing `pyproject.toml`.
- * `exists` is injectable so tests do not need a real tree on disk.
- */
-export function findWorkspaceRoot(
-  startDir: string,
-  exists: (candidate: string) => boolean = fs.existsSync,
-): string | null {
-  let dir = path.resolve(startDir);
-  for (let i = 0; i < WORKSPACE_SEARCH_DEPTH; i += 1) {
-    if (exists(path.join(dir, "pyproject.toml"))) {
-      return dir;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      break;
-    }
-    dir = parent;
-  }
-  return null;
-}
-
-/** First workspace root discoverable from any of `startDirs`. */
-export function resolveWorkspaceRoot(
-  startDirs: readonly string[],
-  exists: (candidate: string) => boolean = fs.existsSync,
-): string | null {
-  for (const dir of startDirs) {
-    const found = findWorkspaceRoot(dir, exists);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
-}
-
-/**
- * Build the spawn plan. Mirrors `spawn_kernel()` in main.rs, including the
- * `--port 0` (let the OS pick) and `--connect-timeout 0` (never self-exit)
- * flags, and running with the workspace root as the working directory.
- *
- * One deliberate divergence: `--package kernel-sidecar` is added. The Rust
- * command (`uv run --project <root> python -m kernel_sidecar`) resolves the
- * root project's environment, which does not depend on the `kernel-sidecar`
- * uv workspace member — so it fails with `No module named kernel_sidecar`
- * (reproduced against this checkout). `--package` selects the member whose
- * environment actually contains it. The Tauri shell has the same bug.
- */
-export function buildSpawnPlan(workspaceRoot: string, token: string, runner = "uv"): SpawnPlan {
-  if (runner === "uv") {
-    return {
-      command: "uv",
-      args: [
-        "run",
-        "--project",
-        workspaceRoot,
-        "--package",
-        "kernel-sidecar",
-        "python",
-        "-m",
-        "kernel_sidecar",
-        "--port",
-        "0",
-        "--token",
-        token,
-        "--connect-timeout",
-        "0",
-      ],
-      cwd: workspaceRoot,
-    };
-  }
-  // Any other runner is treated as a bare Python interpreter.
-  return {
-    command: runner,
-    args: ["-m", "kernel_sidecar", "--port", "0", "--token", token, "--connect-timeout", "0"],
-    cwd: workspaceRoot,
-  };
 }
 
 /**
@@ -199,14 +123,19 @@ function interpreterInsideVenv(dir: string, exists: (candidate: string) => boole
 }
 
 /**
- * Spawn plan for an environment the user prepared (#134).
+ * The command that starts the sidecar from a prepared environment (#134, #141).
  *
- * No `uv`, no `--project`, no workspace root: the interpreter already has
- * `kernel_sidecar` and its dependencies installed, which is the entire point.
- * `cwd` is somewhere to resolve relative paths from, not a place anything is
- * looked up -- the sidecar's own `--workdir` governs where results land.
+ * There is nothing to resolve: the interpreter already has `kernel_sidecar` and
+ * its dependencies installed, which is the entire point. `--port 0` lets the OS
+ * pick and `--connect-timeout 0` means never self-exit, both inherited from the
+ * Tauri shell's `spawn_kernel()`. `cwd` is somewhere to resolve relative paths
+ * from, not a place anything is looked up -- the sidecar's own `--workdir`
+ * governs where results land.
+ *
+ * This was `buildPreparedSpawnPlan` while a second, `uv`-based plan existed
+ * beside it. It is the only plan now, so it carries the plain name.
  */
-export function buildPreparedSpawnPlan(interpreter: string, token: string, cwd: string): SpawnPlan {
+export function buildSpawnPlan(interpreter: string, token: string, cwd: string): SpawnPlan {
   return {
     command: interpreter,
     args: ["-m", "kernel_sidecar", "--port", "0", "--token", token, "--connect-timeout", "0"],

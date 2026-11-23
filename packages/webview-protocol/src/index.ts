@@ -132,10 +132,11 @@ export type WebviewBoundMessage =
    * Kernel sidecar went away, or never came up; the webview should fall back /
    * show a warning.
    *
-   * `reason` carries the host's own diagnosis when there is one (#130) -- "no
-   * pyproject.toml above the configured workspaceRoot", "uv is not on PATH".
-   * It is the only useful sentence a user can be given at that moment, and it
-   * used to exist only in an output channel that is closed by default.
+   * `reason` carries the host's own diagnosis when there is one (#130) --
+   * "kernelPython is not set", "there is no interpreter at that path", "the
+   * kernel started but never signalled KERNEL_READY". It is the only useful
+   * sentence a user can be given at that moment, and it used to exist only in
+   * an output channel that is closed by default.
    */
   | { type: "gsim/kernelStopped"; reason?: string }
   /** Replace the schematic document (initial load, revert, external file change). */

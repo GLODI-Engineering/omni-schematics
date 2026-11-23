@@ -394,11 +394,12 @@ suite("Omni Schematics — VS Code integration", () => {
   // -------------------------------------------------------------------------
   suite("kernel sidecar", () => {
     test("the extension host spawns kernel-sidecar and completes the handshake", async function () {
-      // Needs `uv` and a real checkout; skip rather than fail elsewhere.
-      const { execFileSync } = await import("node:child_process");
-      try {
-        execFileSync("uv", ["--version"], { stdio: "ignore" });
-      } catch {
+      // #141: there is one way to start a kernel -- from the environment
+      // `omniSchematics.kernelPython` names -- so this test needs one to exist.
+      // CI builds it with `scripts/make-kernel-venv.mjs` and exports the path;
+      // a developer without one gets a skip rather than a failure about
+      // something they did not break.
+      if (!process.env.GSIM_KERNEL_PYTHON) {
         this.skip();
         return;
       }
@@ -409,6 +410,9 @@ suite("Omni Schematics — VS Code integration", () => {
       assert.ok(config.port > 0 && config.port <= 65535, `bound a real port (${config.port})`);
       assert.match(config.token, /^[0-9a-f]{32}$/, "token round-tripped through KERNEL_READY");
       assert.deepEqual(api.kernelConfig(), config, "the host cached the config");
+      // Reaching here at all is the protocol assertion: the host refuses a
+      // handshake whose `protocol=` it does not share (#134), so a kernel built
+      // from this tree by `make-kernel-venv` has just satisfied that gate.
     });
   });
 

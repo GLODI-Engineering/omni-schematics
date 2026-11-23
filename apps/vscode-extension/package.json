@@ -121,20 +121,8 @@
         "omniSchematics.kernelPython": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Path to a Python environment that already has the simulation kernel installed — either a virtualenv directory or a Python executable inside one.\n\nWhen set, this is used directly and **nothing else is needed**: no `uv`, no checkout of this repo, and `#omniSchematics.workspaceRoot#` is ignored. Prepare the environment once, point here, and the editor does not care how you built it.\n\nThat environment needs the `kernel_sidecar`, `simulator`, `kernel-core`, `gsim-model`, `schemas`, `components` and `synthesis` packages, their scientific dependencies (`numpy`, `scipy`, `matplotlib`, `pandas`, `sympy`, `websockets`, `h5py`), a `gsim_py` wheel, and `gsim-tools`.\n\nLeave empty to fall back to launching the kernel from a checkout with `uv`, which is the arrangement for working on this repo itself.",
-          "description": "Path to a Python environment (virtualenv directory or interpreter) that already has the simulation kernel installed. When set, it is used directly and no uv, checkout or workspaceRoot is needed. Leave empty to fall back to launching the kernel from a checkout with uv."
-        },
-        "omniSchematics.workspaceRoot": {
-          "type": "string",
-          "default": "",
-          "description": "Absolute path to an omni-schematics checkout (the directory containing pyproject.toml), which is what the simulation kernel is started from. This is not the general-simulator repository -- that one is pure Rust and has no pyproject.toml; for the solver binary see omniSchematics.generalSimulatorPath. Run `uv sync` in this directory once before the kernel can start. Leave empty to auto-discover from the open workspace folders.",
-          "markdownDescription": "Absolute path to an **omni-schematics** checkout — the directory containing `pyproject.toml`. The simulation kernel is the Python `kernel_sidecar` package in that checkout, so without it **nothing can run**.\n\nThis is **not** the `general-simulator` repository: that one is pure Rust and contains no `pyproject.toml`. For the solver binary see `#omniSchematics.generalSimulatorPath#`.\n\nRun `uv sync` in this directory once before the kernel can start. Leave empty to auto-discover from the open workspace folders."
-        },
-        "omniSchematics.pythonRunner": {
-          "type": "string",
-          "default": "uv",
-          "description": "Command used to run the kernel sidecar. With the default 'uv', the sidecar is launched as `uv run --project <root> python -m kernel_sidecar`.",
-          "markdownDescription": "Command used to start the Python simulation kernel — `uv` by default. Set to `python` or an absolute interpreter path if you manage the environment yourself."
+          "markdownDescription": "Path to the Python environment that runs the simulation kernel — either a virtualenv directory or a Python executable inside one.\n\n**This is required.** Nothing simulates until it is set: the editor starts the kernel from the environment you name and never builds, syncs or discovers one.\n\nThat environment needs the `kernel_sidecar`, `simulator`, `kernel-core`, `gsim-model`, `schemas`, `components` and `synthesis` packages and their scientific dependencies (`numpy`, `scipy`, `matplotlib`, `pandas`, `sympy`, `websockets`, `h5py`), plus a `gsim_py` wheel to compile a schematic and `gsim-tools` for script-authored documents.\n\nTwo ways to get one:\n\n- in a checkout of this repository, `node scripts/make-kernel-venv.mjs`, which builds it and prints the path to paste here;\n- or `pip install` the wheels attached to a release into a virtualenv of your own.\n\nThe editor does not care which; it only runs what is there.",
+          "description": "Required. Path to the Python environment (virtualenv directory or interpreter) that runs the simulation kernel. Nothing simulates until this is set. Build one with `node scripts/make-kernel-venv.mjs`, or pip install a release's wheels into a virtualenv."
         },
         "omniSchematics.autoStartKernel": {
           "type": "boolean",
@@ -145,7 +133,7 @@
         "omniSchematics.generalSimulatorPath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Absolute path to the `general-simulator` binary — the engine that does the numerical work.\n\nThis is handed to the simulation kernel **after** the kernel has started, so it cannot start one by itself: if `#omniSchematics.workspaceRoot#` does not point at an omni-schematics checkout, nothing here is ever read. Set that one first.\n\nLeave empty to search, in order: this setting, `GENSIM_GENERAL_SIMULATOR_PATH`, then `PATH`, then a sibling `general-simulator` checkout beside the workspace. Build it with `cargo build --release -p general-simulator-cli` and point here at `target/release/general-simulator`.",
+          "markdownDescription": "Absolute path to the `general-simulator` binary — the engine that does the numerical work.\n\nThis is handed to the simulation kernel **after** the kernel has started, so it cannot start one by itself: if `#omniSchematics.kernelPython#` is unset, the kernel never starts and nothing here is ever read. Set that one first.\n\nLeave empty to search, in order: this setting, `GENSIM_GENERAL_SIMULATOR_PATH`, then `PATH`, then a sibling `general-simulator` checkout beside the workspace. Build it with `cargo build --release -p general-simulator-cli` and point here at `target/release/general-simulator`.",
           "scope": "machine-overridable"
         },
         "omniSchematics.octaveCliPath": {
