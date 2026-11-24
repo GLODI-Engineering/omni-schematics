@@ -21,8 +21,9 @@ a resistor, capacitor, inductor or ground failed to compile with
 `floating-port` naming a port that was wired perfectly well.
 
 What let it live was not subtlety. `scripts/check-examples.mjs` compiles with
-`gsim_py` directly — deliberately, because `gsim-tools` is private and a gate
-needing it would run on one machine — so the gate and the product reached the
+`gsim_py` directly — on the belief that `gsim-tools` was private and a gate
+needing it would run on one machine, which was never true (#147) — so the gate
+and the product reached the
 compiler by two different routes, and a transform on only one route is invisible
 by construction. This module is the thing that looks.
 """

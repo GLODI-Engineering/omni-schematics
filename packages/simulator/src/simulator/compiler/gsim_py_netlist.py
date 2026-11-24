@@ -25,8 +25,9 @@ uv pip install --python <path-to-this-repo's>/.venv/bin/python3.12 \\
 ```
 
 `gsim-tools` (pure Python) needs no build step, but it is **not** a declared dependency either:
-it lives in a private sibling repository, so no CI checkout can resolve a path source to it, and
-an optional extra does not help because uv locks every extra. Install it the same way, once:
+it is published to no index -- a public repository, but 404 on PyPI -- so there is no version to
+depend on, and an optional extra does not help because uv locks every extra. Install it the same
+way, once:
 
 ```bash
 uv pip install -e <sibling-repos-root>/gsim-tools
@@ -85,8 +86,9 @@ def _ensure_document_shape(gsim_doc: dict[str, Any]) -> dict[str, Any]:
 #: does.
 #:
 #: The lesson worth keeping is about where it hid rather than about port names:
-#: `scripts/check-examples.mjs` compiles with `gsim_py` directly (gsim-tools is
-#: private, so a gate needing it would run on one machine), which means the gate
+#: `scripts/check-examples.mjs` compiles with `gsim_py` directly (on the belief
+#: that gsim-tools was private, so a gate needing it would run on one machine --
+#: it is not, and never was: #147), which means the gate
 #: and the product reached the compiler by two different routes. A transform on
 #: only one of those routes is invisible to the gate by construction. Hence
 #: `simulator.compiler.compile_input`, which holds both the preparation step and

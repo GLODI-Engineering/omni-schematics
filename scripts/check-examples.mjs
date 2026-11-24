@@ -23,9 +23,12 @@
  *      emitted` job.
  *
  * Arm 4 exists because arms 1-3 and the compile below all reach the compiler by
- * a route the product does not take. `gsim_py` is called directly here, on
- * purpose -- `gsim-tools` is private, so a gate needing it would run on one
- * machine -- while the product goes through
+ * a route the product does not take. `gsim_py` is called directly here, on the
+ * belief that `gsim-tools` was private so a gate needing it would run on one
+ * machine. That belief was false (#147): gsim-tools is public, MIT and pure
+ * Python, and CI can install it like anything else -- so the split this arm
+ * compensates for is one this script no longer has to live with. Meanwhile the
+ * product goes through
  * `simulator.compiler.gsim_py_netlist`. A transform living only on the
  * product's route is invisible to this script by construction, and #143 was
  * exactly that: a port respelling that turned every example into
@@ -91,10 +94,13 @@ const PYTHON = enginePython();
  * ordinary checkout is usable. CI installs them, so there the arm is real.
  */
 function compiles(documentPath) {
-  // `gsim_py` only -- deliberately not `gsim_tools`. gsim-tools is a private
-  // repository, so no CI checkout can install it, and a gate that only runs on
-  // one machine is not a gate. `gsim_py` is built from public gsim-core, which
-  // `engine-catalogue-drift` already does in this same workflow.
+  // `gsim_py` only, not `gsim_tools` -- for now. The stated reason was that
+  // gsim-tools is a private repository no CI checkout can install, and a gate
+  // that only runs on one machine is not a gate. It is not private (#147), so
+  // the reason is gone and this arm should compile the way the product does;
+  // changing it is a behaviour change and belongs in its own commit.
+  // `gsim_py` is built from public gsim-core, which `engine-catalogue-drift`
+  // already does in this same workflow.
   //
   // Both calls return a JSON *string*, not an object -- `compile` puts the
   // netlist under `netlist`. Reading the return value as text and counting its
@@ -137,7 +143,7 @@ function compiles(documentPath) {
  * The question is asked of `simulator.compiler.compile_input`, the product's own
  * function, imported from a module that deliberately imports nothing -- so this
  * gate runs with `gsim_py` alone, where `gsim_py_netlist` could not even be
- * imported (it needs the private `gsim-tools`).
+ * imported (it needs `gsim-tools`, which nothing here installs yet).
  *
  * Reported rather than failed when the packages are absent, same contract as
  * `compiles` below: a developer's bare checkout stays usable, and CI installs

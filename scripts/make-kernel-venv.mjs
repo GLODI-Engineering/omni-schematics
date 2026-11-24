@@ -16,7 +16,8 @@
  *   - their scientific dependencies, resolved by pip from PyPI;
  *   - a `gsim_py` wheel, if one is given or found (the compiler; a maturin
  *     build belonging to gsim-core);
- *   - `gsim-tools`, if a checkout is given or found beside this one (private).
+ *   - `gsim-tools`, if a checkout is given or found beside this one. Public,
+ *     but published to no index, so a checkout or a release wheel it is.
  *
  * The last two are optional on purpose: the kernel starts without them, and
  * then a run answers `SolverUnavailable` naming what is missing instead of the

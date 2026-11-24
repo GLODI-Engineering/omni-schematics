@@ -2,8 +2,8 @@
 
 The one thing that belongs here: a single place that answers "can this checkout
 actually run a `general-simulator` solve?". Two pieces of that path are installed
-by hand rather than locked — `gsim_tools` (private sibling repository) and
-`gsim_py` (a compiled PyO3 extension) — see the note in the root
+by hand rather than locked — `gsim_tools` (public, but published to no index)
+and `gsim_py` (a compiled PyO3 extension) — see the note in the root
 `pyproject.toml` under `[tool.uv.sources]`. A checkout without them is a
 perfectly good checkout; it just cannot take the default solve path.
 
