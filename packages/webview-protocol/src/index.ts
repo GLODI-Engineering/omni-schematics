@@ -94,6 +94,18 @@ export type HostBoundMessage =
   /** Open the waveform panel. */
   | { type: "gsim/showWaveforms" }
   | { type: "gsim/log"; level: "info" | "warn" | "error"; message: string }
+  /**
+   * The webview was handed a document it could not read.
+   *
+   * Distinct from `gsim/log` because the two have different audiences. `gsim/log`
+   * is appended to the kernel's lifecycle channel, which is closed by default and
+   * right for diagnostics nobody needs unless they go looking. A file the user
+   * just opened and which did not load is not that: it is the one thing they are
+   * waiting to be told. Routed through `gsim/log` alone, the editor showed an
+   * empty canvas and a toast saying the schematic was empty -- true of the store,
+   * and the opposite of helpful (#146).
+   */
+  | { type: "gsim/documentUnreadable"; reason: string }
   /** Integration-harness only: reply to a `gsim/test/exec`. */
   | { type: "gsim/test/report"; requestId: string; ok: boolean; result: unknown };
 

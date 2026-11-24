@@ -14,7 +14,6 @@ import { replayForwardedChord } from "./forwarded-chord";
 
 import App from "../App";
 import { installCrossWebviewDnd } from "../canvas/dnd";
-import { deserialize } from "../file/deserializer";
 import { serialize } from "../file/serializer";
 import { initKernelFromVsCode } from "../ipc/transport";
 import { getWebviewInit, onHostMessage, postToHost } from "../ipc/vscode-host";
@@ -24,29 +23,25 @@ import { insertCatalogBlock } from "../library/insert";
 import { ErrorBoundary } from "../shell/ErrorBoundary";
 import { useGraphStore, useIpcStore, useLibraryStore } from "../store";
 import { mergeUserSymbols } from "../symbol-editor/save";
+import {
+  currentDocumentText,
+  lastSynced,
+  loadDocumentTextOrReport,
+  noteSynced,
+  unreadableDocument,
+} from "./document-load";
 import { installTestHooks } from "./test-hooks";
-
-/** Tracks the text last synced with the host so we do not echo host writes back. */
-let lastSyncedText: string | null = null;
-
-function loadDocumentText(text: string): void {
-  const parsed = deserialize(text);
-  useGraphStore.getState().loadDocument(parsed);
-  useGraphStore.getState().clearHistory();
-  lastSyncedText = text;
-}
-
-function currentDocumentText(): string {
-  return serialize(useGraphStore.getState().document);
-}
 
 function installDocumentBridge(): () => void {
   const unsubscribeHost = onHostMessage((message) => {
     if (message.type === "gsim/setDocument") {
-      loadDocumentText(message.text);
+      // Via the reporting wrapper: this path had no try/catch at all, so a host
+      // write of an unparseable document threw inside the message handler and
+      // took the rest of it with it.
+      loadDocumentTextOrReport(message.text);
     } else if (message.type === "gsim/requestDocument") {
       const text = currentDocumentText();
-      lastSyncedText = text;
+      noteSynced(text);
       postToHost({ type: "gsim/documentContent", requestId: message.requestId, text });
     } else if (message.type === "gsim/forwardedChord") {
       // Replayed as a real keydown so it meets the same context and focus rules a typed
@@ -66,11 +61,20 @@ function installDocumentBridge(): () => void {
     if (state.document === previous.document) {
       return;
     }
-    const text = serialize(state.document);
-    if (text === lastSyncedText) {
+    // The data-loss path, and the reason the guard is not only about saving. If the
+    // file could not be read, the store holds the empty default model; a block
+    // dropped on that canvas would reach the host here as the whole document and
+    // mark the editor dirty with it. The user was even invited to do it, by a toast
+    // reading "Nothing to simulate -- the schematic is empty. Add a component
+    // first" (#146). Nothing leaves the webview while a document is unreadable.
+    if (unreadableDocument() !== null) {
       return;
     }
-    lastSyncedText = text;
+    const text = serialize(state.document);
+    if (text === lastSynced()) {
+      return;
+    }
+    noteSynced(text);
     postToHost({
       type: "gsim/documentChanged",
       text,
@@ -115,15 +119,7 @@ function boot(): void {
 
   const init = getWebviewInit();
   if (typeof init?.documentText === "string" && init.documentText.trim().length > 0) {
-    try {
-      loadDocumentText(init.documentText);
-    } catch (error) {
-      postToHost({
-        type: "gsim/log",
-        level: "error",
-        message: `failed to parse schematic: ${String(error)}`,
-      });
-    }
+    loadDocumentTextOrReport(init.documentText);
   }
 
   installTestHooks();
