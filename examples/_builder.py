@@ -145,12 +145,52 @@ def placement_for(type_name: str) -> dict[str, str]:
     return placement
 
 
-def add(sheet, type_name: str, block_id: str, **overrides: Any):
+#: Horizontal and vertical pitch of the layout grid these examples place on.
+#:
+#: Chosen so that two blocks in different cells *cannot* overlap, rather than
+#: happening not to. The largest symbol in the catalogue these sheets draw from is
+#: 60x60 symbol units (`ideal.switch`), and `SYMBOL_SCALE` is 2, so no block
+#: occupies more than 120x120 document units. A pitch of 160x140 leaves 40 units
+#: of horizontal gutter for a refdes and 20 vertical, and makes the no-overlap
+#: property a consequence of the grid instead of something to re-check by eye.
+#:
+#: `auto_arrange()` used a 40-unit grid, a third of a symbol's width, which is the
+#: whole of #145's first fault.
+CELL = (160, 140)
+
+
+def cell(col: int, row: int) -> tuple[int, int]:
+    """The document coordinate of layout cell `(col, row)`.
+
+    Coordinates are the symbol's top-left corner, which is what `Block.position`
+    means to the renderer -- see `getBlockBoundingBox`.
+    """
+    return (col * CELL[0], row * CELL[1])
+
+
+def add(
+    sheet,
+    type_name: str,
+    block_id: str,
+    *,
+    at: tuple[int, int] | None = None,
+    rotation: int = 0,
+    **overrides: Any,
+):
     """Add a block with the engine's declared defaults, overridden as given.
 
     Unknown parameter names are rejected here rather than silently ignored: a
     typo in an example's value would otherwise produce a circuit that compiles
     and simulates the wrong thing, which is worse than one that does not build.
+
+    `at` and `rotation` are keyword-only and separate from the parameters, so a
+    coordinate can never be mistaken for a component value by either side. They
+    exist because `auto_arrange()` is the wrong tool for these sheets: it lays
+    out on a 40-unit grid while a symbol is 60x40 symbol units and `SYMBOL_SCALE`
+    is 2, so every block occupied 120x80 and sat on top of its neighbours. The
+    committed buck had 18 overlapping pairs, the PSFB 87 (#145). An example is
+    the one artefact whose job is to be legible the first time it is opened, so
+    its layout belongs in its generator where a person chose it.
     """
     params = defaults_for(type_name)
     unknown = set(overrides) - set(params)
@@ -159,4 +199,56 @@ def add(sheet, type_name: str, block_id: str, **overrides: Any):
             f"{type_name} has no parameter(s) {sorted(unknown)}; it declares {sorted(params)}"
         )
     params.update(overrides)
-    return sheet.add(type_name, id=block_id, params=params, **placement_for(type_name))
+    placement = placement_for(type_name)
+    if at is not None:
+        placement["at"] = at  # type: ignore[assignment]
+    if rotation:
+        placement["rotation"] = rotation  # type: ignore[assignment]
+    return sheet.add(type_name, id=block_id, params=params, **placement)
+
+
+def write_document(
+    sheet,
+    path: Any,
+    *,
+    t_end: float,
+    t_step: float,
+    t_start: float = 0.0,
+    analysis_id: str = "tran",
+) -> str:
+    """Save `sheet` to `path` with a TRAN analysis written into the document.
+
+    The analysis has to be injected into the saved JSON because `gsim_tools` has
+    no way to express a simulation directive -- `Schematic` models blocks, wires
+    and params, and the `simulation` object is not among them. Worth an upstream
+    issue; until then this is the one place that knows how to add it, rather than
+    five copies of the same dictionary.
+
+    Why it matters that it is there at all: with `"simulation": {}` the editor's
+    `buildAnalysisPayload` finds no analyses, falls back to the v1 sim-settings
+    store and runs *its* default of `t_end = 10 s`. On a converter switching at
+    100 kHz that is a million switching periods sampled a few thousand times. The
+    run completes and the waveform contains nothing a person can read (#145).
+
+    `t_end` and `t_step` are per-example on purpose. Every one of these sheets
+    switches at 100 kHz, but their settling times differ by more than an order of
+    magnitude -- an output RC of 1.1 ms on the buck against 40 ms on the PFC
+    stage -- so one window copied across all five would be wrong for four of them.
+    """
+    document = json.loads(sheet.save())
+    model = document.get("model", document)
+    model["simulation"] = {
+        "default_analysis": analysis_id,
+        "analyses": [
+            {
+                "id": analysis_id,
+                "type": "TRAN",
+                "t_start": t_start,
+                "t_end": t_end,
+                "t_step": t_step,
+            }
+        ],
+    }
+    text = json.dumps(document, indent=2) + "\n"
+    pathlib.Path(path).write_text(text)
+    return text
