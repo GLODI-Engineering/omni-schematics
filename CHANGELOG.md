@@ -1,5 +1,117 @@
 # Changelog
 
+## 2026-11-24 — Omni Schematics (0.8.0)
+
+**0.7.0 could not open any example, and could not simulate on any machine.** Both
+are fixed. If you installed 0.7.0, replace it.
+
+A minor bump rather than a patch, because one change is genuinely breaking: see
+*Ports are spelled the way the engine spells them* below.
+
+### Install it
+
+Nine downloads now, not seven. The two that were missing are the reason a 0.7.0
+install started the kernel and then failed every run.
+
+* `omni-schematics-0.8.0.vsix` — the editor. **Extensions → … → Install from VSIX**.
+* seven `.whl` files on this release — the kernel packages.
+* [`gsim_tools-0.1.0-py3-none-any.whl`](https://github.com/GLODI-Engineering/gsim-tools/releases/tag/v0.1.0)
+  — pure Python, works on any platform and any CPython from 3.11.
+* a [`gsim_py`](https://github.com/GLODI-Engineering/gsim-core/releases/tag/v0.5.0)
+  wheel matching your platform *and* your Python version — it is a compiled
+  extension, so `cp312` and `cp313` are different files.
+
+```sh
+python -m venv gsim-venv
+gsim-venv/bin/pip install <all nine wheels, in one command>
+```
+
+One command on purpose: two of these packages are named `components` and
+`schemas`, which belong to other people on PyPI. Installed one at a time, pip
+resolves a sibling's requirement from the index and quietly fetches a stranger's
+package instead of the file sitting next to it.
+
+Then in settings:
+
+```jsonc
+"omniSchematics.kernelPython": "/path/to/gsim-venv",
+"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"
+```
+
+**Use CPython 3.12 or 3.13.** `gsim_py` has wheels for 3.11–3.15 and `h5py` for
+3.10–3.14; 3.12 and 3.13 are where every piece has one. If `pip` ever goes looking
+for `hdf5.dll`, that is the symptom of a Python outside h5py's wheel range, a
+32-bit interpreter, or a pip too old to read the tags — HDF5 itself never needs
+installing, because h5py's Windows wheels carry it.
+
+The 0.7.0 notes said `gsim_py` and `gsim-tools` "cannot come from a public index".
+That was wrong about `gsim-tools`, which is a public MIT repository, and it is no
+longer true of either: both now publish wheels on their own releases.
+
+### Fixed — no example could be opened
+
+Every committed example failed the editor's own validator, two ways at once:
+
+```
+/model/blocks/8/paradigm: must be equal to constant
+/model/wires/0: must have required property 'net'
+```
+
+The paradigm, because the generator copied it from the engine catalogue, which
+calls `routing.ground` `physical-network` while the schema requires `^routing\.`
+to say `routing`. The missing `net`, because the engine's serialiser skipped the
+field whenever a wire had no net name, and the schema requires it as
+`string | null`.
+
+### Fixed — a file the editor could not read was at risk of being overwritten
+
+The parse failure went to a log channel that is closed by default, so the editor
+opened on an empty canvas and offered *"Nothing to simulate — the schematic is
+empty. Add a component first."* Following that advice would have marked the editor
+dirty with the empty model and replaced your schematic on save.
+
+Now: an unreadable document is handed back to the host byte for byte, so a save
+cannot destroy it; nothing is sent while it is in that state; a notification says
+what happened; and a banner in the editor names the fault and says the file has
+not been changed.
+
+### Ports are spelled the way the engine spells them — **breaking**
+
+A compatibility layer renamed `p`/`n` to `p1`/`p2` on resistors, inductors and
+capacitors, and `gnd` to `p` on grounds, for an engine version that no longer
+exists. Against the current engine every schematic failed with
+`floating-port: port 'l1.p' needs a node but no physical-network wire reaches it`.
+
+The layer is gone. **A sheet saved with the old `p1`/`p2`/`p` spelling will no
+longer compile** — rewire those endpoints to `p`, `n` and `gnd`, which is what the
+palette and the catalogue have called them for some time.
+
+### Fixed — the examples were unreadable and ran for ten seconds
+
+`auto_arrange()` placed blocks on a 40-unit grid while a symbol occupies 120×80,
+so sheets overlapped themselves: 18 colliding pairs on the buck, 87 on the
+phase-shifted full bridge. Each generator now places its own blocks.
+
+And each example carried an empty `simulation` block, so a run fell back to a
+default of `t_end = 10 s` — on converters switching at 100 kHz. Every example now
+carries a window sized to itself, from 5 ms on the buck to 40 ms (two line cycles)
+on the PFC stage.
+
+### The gates that should have caught all of this
+
+Each of the above was invisible to CI, and in the same way: the check and the
+product reached the same code by different routes.
+
+* The release gate asserted the kernel reached `KERNEL_READY` — which happens with
+  no compiler installed at all, because the compiler is imported on the first run.
+  It now compiles every example through the call the run handler itself makes, and
+  fails on 0.7.0's own wheels.
+* `check-examples` read documents with `JSON.parse` and compiled them with the
+  engine. The engine accepts documents the editor rejects. It now runs the editor's
+  own validator, and reports every error rather than the first.
+* Nothing measured layout. A test now asserts no two blocks overlap, using the
+  renderer's own geometry function rather than its own arithmetic.
+
 ## 2026-11-23 — Omni Schematics (0.7.0)
 
 ### Install it
