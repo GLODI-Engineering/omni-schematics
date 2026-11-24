@@ -233,8 +233,11 @@ jobs:
     # loader could not even read, and content that no longer matched its own generator.
     #
     # `gsim_py` is built here rather than skipped, for the reason `engine-catalogue-drift`
-    # gives: a check that cannot fail is not one. Only `gsim_py` is needed -- deliberately
-    # not `gsim-tools`, which is private and would make this unrunnable in CI.
+    # gives: a check that cannot fail is not one. Only `gsim_py` is installed -- not
+    # `gsim-tools`, on the stated ground that it is private and would make this job
+    # unrunnable in CI. It is not private (#147), so that ground is gone and the arms
+    # below can compile the way the product does; making them is a behaviour change and
+    # belongs in its own commit, not in the one correcting the comment.
     #
     # The repo's own Python packages go in too (#143). The port arm runs the product's
     # real preparation step, `simulator.compiler.compile_input.prepare_document`, rather

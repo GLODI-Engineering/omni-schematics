@@ -236,7 +236,7 @@ def test_the_compile_bridge_leaves_ports_alone(declared: dict[str, set[str]]) ->
     about would miss a transform added later, and a transform nobody was looking
     at is exactly how #143 shipped.
     """
-    pytest.importorskip("gsim_tools", reason="gsim-tools is a private sibling repository")
+    pytest.importorskip("gsim_tools", reason="gsim-tools is not installed here")
     from gsim_tools import schematic as gsim_tools_schematic
 
     from simulator.compiler.gsim_py_netlist import compile_gsim_document_full
@@ -266,7 +266,7 @@ def test_the_compile_bridge_leaves_ports_alone(declared: dict[str, set[str]]) ->
 
 def test_a_catalogue_spelled_document_compiles(declared: dict[str, set[str]]) -> None:
     """And it reaches a netlist, which is what the user actually wanted."""
-    pytest.importorskip("gsim_tools", reason="gsim-tools is a private sibling repository")
+    pytest.importorskip("gsim_tools", reason="gsim-tools is not installed here")
     from simulator.compiler.gsim_py_netlist import compile_gsim_document_full
 
     document = json.loads((EXAMPLES / "buck_converter.gsim_sch").read_text())

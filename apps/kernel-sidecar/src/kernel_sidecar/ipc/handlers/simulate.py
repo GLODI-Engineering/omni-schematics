@@ -28,6 +28,44 @@ from simulator.postprocess.event_log import EventLog
 
 logger = logging.getLogger(__name__)
 
+# Where a reader can get the two packages that are not on PyPI. Named here rather
+# than inline so there is one copy to correct when they are published.
+_GSIM_TOOLS_RELEASES = "https://github.com/GLODI-Engineering/gsim-tools/releases"
+_GSIM_CORE_RELEASES = "https://github.com/GLODI-Engineering/gsim-core/releases"
+
+
+def _missing_compiler_message(reason: str) -> str:
+    """What to tell someone whose kernel cannot import its own compiler.
+
+    The constraint that shapes this: the reader may have no checkout. They may have
+    installed the extension from the Marketplace, built a virtualenv from the wheels
+    on a release, and pointed `omniSchematics.kernelPython` at it -- which is the
+    documented way to do it, and which leaves them with seven of the nine packages
+    the kernel needs. Advice phrased as "see the root pyproject.toml" or
+    "uv pip install -e <sibling-repos-root>/gsim-tools" is unfollowable for them,
+    and that was the whole content of this message before #147.
+
+    `sys.executable` is the one path that is always right: it is the interpreter
+    that just failed the import, so it is by definition where the package has to
+    end up. Quoting it makes the first line something the reader can paste.
+    """
+    import sys
+
+    missing = "gsim_tools" if "gsim_tools" in reason else "a package"
+    where = _GSIM_TOOLS_RELEASES if "gsim_tools" in reason else _GSIM_CORE_RELEASES
+    return (
+        f"The general-simulator compile path is unavailable: {reason}.\n\n"
+        f"The simulation kernel needs {missing} to turn a schematic into a netlist, "
+        "and it is not installed in the environment the kernel is running in:\n\n"
+        f"    {sys.executable}\n\n"
+        "Download the wheel and install it there:\n\n"
+        f"    {where}\n"
+        f'    "{sys.executable}" -m pip install <the wheel you downloaded>\n\n'
+        "In a checkout of omni-schematics, `uv pip install -e ../gsim-tools` does the "
+        "same thing. Either way a later `uv sync` prunes it again, because neither "
+        "package is locked -- see the root pyproject.toml under [tool.uv.sources]."
+    )
+
 
 async def handle_simulate(ws: Any, msg: Message, ctx: Any) -> None:
     """Register cancel token and spawn the simulation as a background task."""
@@ -97,23 +135,27 @@ async def _do_simulate(ws: Any, msg: Message, ctx: Any, cancel_token: Any) -> No
                 compile_gsim_document_full,
             )
         except ImportError as exc:
-            # `gsim_tools` is hand-installed, not locked (it lives in a private
-            # sibling repository — see the root pyproject.toml's note), so on a
-            # checkout without it this import fails rather than the lazy
-            # `import gsim_py` inside it. Without this branch the failure left the
-            # handler by the `finally` below and the dispatcher answered on the
-            # `execute_error` channel, which nothing awaiting a `simulate_result`
-            # ever reads: pressing Run hung forever instead of saying why.
+            # `gsim_tools` is hand-installed rather than locked (see the root
+            # pyproject.toml's note), so on an environment without it this import
+            # fails rather than the lazy `import gsim_py` inside it. Without this
+            # branch the failure left the handler by the `finally` below and the
+            # dispatcher answered on the `execute_error` channel, which nothing
+            # awaiting a `simulate_result` ever reads: pressing Run hung forever
+            # instead of saying why.
+            #
+            # The advice used to be `uv pip install -e <sibling-repos-root>/gsim-tools`
+            # and a pointer to "the repository's root pyproject.toml". Both name
+            # things that only exist in a checkout, and the person most likely to
+            # see this message installed the extension from a release and has
+            # neither (#147). So the instruction is built from `sys.executable`,
+            # which is always the interpreter that just failed to import, and is
+            # therefore the one place the package has to end up. A reader with a
+            # checkout still gets their shorter route, named second.
             await _emit_error(
                 ws,
                 request_id,
                 "SolverUnavailable",
-                "The general-simulator compile path is unavailable: "
-                f"{exc}.\n\n"
-                "gsim-tools is installed by hand rather than locked — see the note "
-                "in the repository's root pyproject.toml under [tool.uv.sources] "
-                "for the one-time step:\n\n"
-                "    uv pip install -e <sibling-repos-root>/gsim-tools",
+                _missing_compiler_message(str(exc)),
             )
             return
         from simulator.postprocess import result_writer

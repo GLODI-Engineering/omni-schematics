@@ -107,10 +107,15 @@ jobs:
       # every member of the uv workspace, which is exactly that set; naming them individually
       # would be a second list to keep in step with `pyproject.toml`.
       #
-      # Deliberately *not* built here: `gsim_py` (a maturin build belonging to gsim-core) and
-      # `gsim-tools` (a private repository). Those two are what a user installs by hand, and
-      # the kernel starts without them -- a run then answers `SolverUnavailable` naming the
-      # build step. Shipping an editor that opens schematics is worth doing on its own.
+      # Deliberately *not* built here: `gsim_py` (a maturin build belonging to gsim-core,
+      # one wheel per platform and interpreter) and `gsim-tools` (another repository's
+      # package). Those two are what a user installs alongside, and the kernel starts
+      # without them -- a run then answers `SolverUnavailable` naming where to get them.
+      #
+      # This comment used to call gsim-tools "a private repository". It is public, MIT and
+      # pure Python, and that mistake is why the gate below only ever shook hands with the
+      # kernel instead of asking it to compile something: a check needing gsim-tools was
+      # believed impossible in CI. It is not, and the gate now does it (#147).
       - name: Build the wheels
         run: uv build --all-packages --out-dir dist
 
@@ -131,7 +136,7 @@ jobs:
 
       # Proves the set is installable and the kernel starts from it, before anyone is told to
       # install it. A wheel that builds and cannot be installed together with its siblings is
-      # the failure this is here to catch, and it costs one venv.
+      # one failure this is here to catch, and it costs one venv.
       - name: A venv of nothing but these wheels starts the kernel
         run: |
           python3 -m venv /tmp/kernel-venv
@@ -151,6 +156,58 @@ jobs:
             echo "::error::KERNEL_READY carried no protocol= field"
             exit 1
           fi
+
+      # And the step that was missing. `KERNEL_READY` is reached with no compiler at all,
+      # because `gsim_py_netlist` is imported on the first `simulate` rather than at startup
+      # -- so the check above passed for 0.7.0, whose wheels cannot compile anything, and the
+      # release shipped. A user who did everything right got a green kernel and a dead Run
+      # button (#147).
+      #
+      # The compile path needs the two packages this job does not build, so it fetches them:
+      # `gsim-tools` from its repository (public, pure Python), and a `gsim_py` wheel matching
+      # this runner from gsim-core's own release assets. If either is unobtainable, that is
+      # itself worth failing a release for -- it is exactly the position the user is left in.
+      - uses: actions/setup-python@v5
+        with:
+          # Pinned because the `gsim_py` wheel is interpreter-specific and this step has to
+          # ask for one by tag. 3.12 is the version every piece has a wheel for.
+          python-version: "3.12"
+      - name: The kernel can compile a schematic, not just start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3.12 -m venv /tmp/compile-venv
+          /tmp/compile-venv/bin/pip install --quiet --upgrade pip
+          # One pip install for the local set: two of these packages are named `components`
+          # and `schemas`, which belong to other people on PyPI. Installed one at a time, a
+          # sibling's requirement resolves from the index and pulls down a stranger.
+          /tmp/compile-venv/bin/pip install --quiet dist/*.whl
+          /tmp/compile-venv/bin/pip install --quiet \
+            "git+https://github.com/GLODI-Engineering/gsim-tools@master"
+
+          gh release download --repo GLODI-Engineering/gsim-core \
+            --pattern 'gsim_py-*-cp312-cp312-manylinux*x86_64.whl' --dir /tmp/gsim-py --clobber
+          ls -la /tmp/gsim-py
+          /tmp/compile-venv/bin/pip install --quiet /tmp/gsim-py/gsim_py-*.whl
+
+          # The product's own compiler, on the documents the release ships, by the call the
+          # `simulate` handler makes. Not a reimplementation of it: the point of this gate is
+          # that the route under test is the route the user takes.
+          /tmp/compile-venv/bin/python - <<'PY'
+          import glob, json, pathlib, sys
+          from simulator.compiler.gsim_py_netlist import compile_gsim_document_full
+
+          docs = sorted(glob.glob("examples/*.gsim_sch"))
+          if not docs:
+              sys.exit("::error::no examples to compile")
+          for path in docs:
+              netlist, notes = compile_gsim_document_full(pathlib.Path(path).read_text())
+              lines = [ln for ln in netlist.splitlines() if ln.strip()]
+              if not lines:
+                  sys.exit(f"::error::{path} compiled to an empty netlist")
+              print(f"ok: {path} -> {len(lines)} netlist lines, {len(notes)} notes")
+          print(f"{len(docs)} documents compiled through the product's own path")
+          PY
 
       - uses: actions/upload-artifact@v4
         with:

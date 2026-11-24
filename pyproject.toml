@@ -26,10 +26,21 @@ synthesis = { workspace = true }
 #
 # `gsim_py` because it is a compiled PyO3 extension (gsim-core/crates/gsim-py):
 # a path source would pin one platform and interpreter's wheel into the lockfile.
-# `gsim-tools` because it lives in a *private* sibling repository: no CI checkout
-# can resolve a path to it, and making it an optional extra does not help, since
-# uv locks every extra and the path then has to exist at lock time anyway (both
-# behaviours verified against uv 0.13, not assumed).
+# `gsim-tools` because it is published to no index: it is a public repository
+# (MIT, pure Python, zero runtime dependencies) but 404 on PyPI, so there is no
+# version to depend on. A path source pins a directory layout CI does not have,
+# and making it an optional extra does not help, since uv locks every extra and
+# the path then has to exist at lock time anyway (both behaviours verified
+# against uv 0.13, not assumed).
+#
+# This comment used to say gsim-tools was *private*. It is not, and has not been
+# for as long as this repository has existed -- docs/journal/2026-11.md recorded
+# the correction under "Visibility" and nothing acted on it. The belief was
+# load-bearing: it is the stated reason `scripts/check-examples.mjs` compiles
+# through `gsim_py` instead of the product's own compiler, which is how #143
+# stayed invisible, and the reason the release shipped seven of the nine packages
+# the kernel needs (#147). Now that it is known to be installable anywhere, a
+# gate may use it.
 #
 # One-time install into this workspace's venv, after `uv sync --all-packages`
 # (which prunes anything it does not lock, so both need redoing after a sync):
@@ -151,7 +162,7 @@ module = ["h5py.*", "scipy.*", "matplotlib.*", "sympy.*", "networkx.*", "yaml", 
 ignore_missing_imports = true
 
 # `gsim_tools` ships no stubs, and is hand-installed rather than locked (see the
-# note in `[tool.uv.sources]`), so on a checkout without the private sibling repo
+# note in `[tool.uv.sources]`), so on an environment where nobody installed it
 # it is missing outright. Either way mypy must not treat that as an error.
 [[tool.mypy.overrides]]
 module = ["gsim_tools.*", "gsim_py", "gsim_py.*"]
