@@ -14,9 +14,9 @@
         "fidelity": "ideal",
         "position": [
           0,
-          0
+          140
         ],
-        "rotation": 0,
+        "rotation": 90,
         "mirror": "none",
         "params": {
           "V": 400.0
@@ -30,14 +30,14 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          80,
+          160,
           0
         ],
         "rotation": 0,
         "mirror": "none",
         "params": {
           "body_g_breakdown": 0,
-          "body_g_off": 1e-9,
+          "body_g_off": 1e-09,
           "body_g_on": 5,
           "body_v_breakdown": -100,
           "body_v_f": 0.6,
@@ -53,14 +53,14 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          120,
-          0
+          160,
+          280
         ],
         "rotation": 0,
         "mirror": "none",
         "params": {
           "body_g_breakdown": 0,
-          "body_g_off": 1e-9,
+          "body_g_off": 1e-09,
           "body_g_on": 5,
           "body_v_breakdown": -100,
           "body_v_f": 0.6,
@@ -77,16 +77,16 @@
         "fidelity": "ideal",
         "position": [
           0,
-          40
+          420
         ],
         "rotation": 0,
         "mirror": "none",
         "params": {
-          "per": 0.00001,
-          "pw": 5e-6,
+          "per": 1e-05,
+          "pw": 5e-06,
           "td": 0,
-          "tf": 1.0000000000000001e-7,
-          "tr": 1.0000000000000001e-7,
+          "tf": 1.0000000000000001e-07,
+          "tr": 1.0000000000000001e-07,
           "v1": 0.0,
           "v2": 5.0
         },
@@ -100,16 +100,16 @@
         "fidelity": "ideal",
         "position": [
           0,
-          80
+          560
         ],
         "rotation": 0,
         "mirror": "none",
         "params": {
-          "per": 0.00001,
-          "pw": 5e-6,
-          "td": 5e-6,
-          "tf": 1.0000000000000001e-7,
-          "tr": 1.0000000000000001e-7,
+          "per": 1e-05,
+          "pw": 5e-06,
+          "td": 5e-06,
+          "tf": 1.0000000000000001e-07,
+          "tr": 1.0000000000000001e-07,
           "v1": 0.0,
           "v2": 5.0
         },
@@ -122,8 +122,8 @@
         "domain": "mixed",
         "fidelity": "ideal",
         "position": [
-          40,
-          0
+          160,
+          420
         ],
         "rotation": 0,
         "mirror": "none",
@@ -139,8 +139,8 @@
         "domain": "mixed",
         "fidelity": "ideal",
         "position": [
-          40,
-          40
+          160,
+          560
         ],
         "rotation": 0,
         "mirror": "none",
@@ -156,14 +156,14 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          120,
-          40
+          320,
+          140
         ],
         "rotation": 0,
         "mirror": "none",
         "params": {
           "IC": 0,
-          "L": 0.000028
+          "L": 2.8e-05
         },
         "ic": {}
       },
@@ -174,13 +174,13 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          160,
-          0
+          480,
+          140
         ],
         "rotation": 0,
         "mirror": "none",
         "params": {
-          "C": 1e-7,
+          "C": 1e-07,
           "IC": 0
         },
         "ic": {}
@@ -192,10 +192,10 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          0,
-          120
+          640,
+          140
         ],
-        "rotation": 0,
+        "rotation": 90,
         "mirror": "none",
         "params": {
           "IC": 0,
@@ -210,8 +210,8 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          200,
-          0
+          800,
+          140
         ],
         "rotation": 0,
         "mirror": "none",
@@ -227,35 +227,14 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          240,
+          960,
           0
         ],
         "rotation": 0,
         "mirror": "none",
         "params": {
           "g_breakdown": 0,
-          "g_off": 1e-9,
-          "g_on": 5,
-          "v_breakdown": -100,
-          "v_f": 0.6
-        },
-        "ic": {}
-      },
-      {
-        "id": "ds2",
-        "type": "ideal.diode",
-        "paradigm": "physical-network",
-        "domain": "physical-electrical",
-        "fidelity": "ideal",
-        "position": [
-          240,
-          40
-        ],
-        "rotation": 0,
-        "mirror": "none",
-        "params": {
-          "g_breakdown": 0,
-          "g_off": 1e-9,
+          "g_off": 1e-09,
           "g_on": 5,
           "v_breakdown": -100,
           "v_f": 0.6
@@ -269,14 +248,35 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          240,
-          80
+          1120,
+          0
         ],
         "rotation": 0,
         "mirror": "none",
         "params": {
           "g_breakdown": 0,
-          "g_off": 1e-9,
+          "g_off": 1e-09,
+          "g_on": 5,
+          "v_breakdown": -100,
+          "v_f": 0.6
+        },
+        "ic": {}
+      },
+      {
+        "id": "ds2",
+        "type": "ideal.diode",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          960,
+          280
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {
+          "g_breakdown": 0,
+          "g_off": 1e-09,
           "g_on": 5,
           "v_breakdown": -100,
           "v_f": 0.6
@@ -290,14 +290,14 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          240,
-          120
+          1120,
+          280
         ],
         "rotation": 0,
         "mirror": "none",
         "params": {
           "g_breakdown": 0,
-          "g_off": 1e-9,
+          "g_off": 1e-09,
           "g_on": 5,
           "v_breakdown": -100,
           "v_f": 0.6
@@ -311,10 +311,10 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          280,
-          0
+          1280,
+          140
         ],
-        "rotation": 0,
+        "rotation": 90,
         "mirror": "none",
         "params": {
           "C": 0.00047,
@@ -329,10 +329,10 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          320,
-          0
+          1440,
+          140
         ],
-        "rotation": 0,
+        "rotation": 90,
         "mirror": "none",
         "params": {
           "R": 5.0
@@ -346,8 +346,8 @@
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
-          360,
-          0
+          480,
+          420
         ],
         "rotation": 0,
         "mirror": "none",
@@ -735,7 +735,18 @@
     "subckt_defs": [],
     "lines": [],
     "nets": [],
-    "simulation": {},
+    "simulation": {
+      "default_analysis": "tran",
+      "analyses": [
+        {
+          "id": "tran",
+          "type": "TRAN",
+          "t_start": 0.0,
+          "t_end": 0.01,
+          "t_step": 1e-07
+        }
+      ]
+    },
     "metadata": {}
   }
 }
