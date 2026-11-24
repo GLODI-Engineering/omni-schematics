@@ -82,7 +82,7 @@
         },
         "to": {
           "block": "r1",
-          "port": "p1"
+          "port": "p"
         },
         "kind": "physical-electrical",
         "waypoints": [],
@@ -92,11 +92,11 @@
         "id": "wire2",
         "from": {
           "block": "r1",
-          "port": "p2"
+          "port": "n"
         },
         "to": {
           "block": "c1",
-          "port": "p1"
+          "port": "p"
         },
         "kind": "physical-electrical",
         "waypoints": [],
@@ -107,11 +107,11 @@
         "id": "wire3",
         "from": {
           "block": "c1",
-          "port": "p2"
+          "port": "n"
         },
         "to": {
           "block": "gnd",
-          "port": "p"
+          "port": "gnd"
         },
         "kind": "physical-electrical",
         "waypoints": [],
@@ -125,7 +125,7 @@
         },
         "to": {
           "block": "gnd",
-          "port": "p"
+          "port": "gnd"
         },
         "kind": "physical-electrical",
         "waypoints": [],

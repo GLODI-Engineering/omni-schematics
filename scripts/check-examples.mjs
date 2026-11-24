@@ -8,14 +8,33 @@
  * sole example in the repository -- already used a block type the engine no
  * longer declares, and nothing had noticed.
  *
- * Four things are checked per file in `examples/`:
+ * Five things are checked per file in `examples/`:
  *
  *   1. it parses as a `.gsim_sch` document with blocks in it;
  *   2. every block type resolves in the engine catalogue, by name or alias;
  *   3. every resolved type is one the engine says it can compile;
- *   4. the committed file matches what its generating script emits, when it has
+ *   4. every wire endpoint names a port the engine declares for that block's
+ *      type -- asked not of the committed file but of what
+ *      `simulator.compiler.compile_input.prepare_document` returns, which is
+ *      the product's own preparation step and therefore what the compiler is
+ *      actually handed at Run time (#143);
+ *   5. the committed file matches what its generating script emits, when it has
  *      one -- the same shape as gsim-core's `examples-still-emit-what-they-
  *      emitted` job.
+ *
+ * Arm 4 exists because arms 1-3 and the compile below all reach the compiler by
+ * a route the product does not take. `gsim_py` is called directly here, on
+ * purpose -- `gsim-tools` is private, so a gate needing it would run on one
+ * machine -- while the product goes through
+ * `simulator.compiler.gsim_py_netlist`. A transform living only on the
+ * product's route is invisible to this script by construction, and #143 was
+ * exactly that: a port respelling that turned every example into
+ * `floating-port` at Run time while this script reported five examples OK.
+ *
+ * Which is why the preparation step moved into `compile_input`, a module that
+ * imports nothing: the only part of the product's route this script now cannot
+ * run is gsim-tools' own compile call. Anything added to the way in has to be
+ * put there too, or this arm stops meaning what it says.
  *
  * Usage:
  *   node scripts/check-examples.mjs --check     # exit 1 on any failure
@@ -109,6 +128,53 @@ function compiles(documentPath) {
     }
     const last = text.trim().split("\n").filter(Boolean).pop() ?? String(error.message);
     return { ok: false, reason: last };
+  }
+}
+
+/**
+ * Do the document's wires name ports the engine actually declares?
+ *
+ * The question is asked of `simulator.compiler.compile_input`, the product's own
+ * function, imported from a module that deliberately imports nothing -- so this
+ * gate runs with `gsim_py` alone, where `gsim_py_netlist` could not even be
+ * imported (it needs the private `gsim-tools`).
+ *
+ * Reported rather than failed when the packages are absent, same contract as
+ * `compiles` below: a developer's bare checkout stays usable, and CI installs
+ * them so the arm is real there.
+ */
+function portsAreDeclared(documentPath) {
+  const probe = [
+    "import json,pathlib,sys",
+    "import gsim_py",
+    "from simulator.compiler.compile_input import (",
+    "    assert_ports_are_declared, declared_ports_from_catalog, prepare_document)",
+    "declared = declared_ports_from_catalog(json.loads(gsim_py.catalog()))",
+    // `prepare_document` is the product's own step, not a copy of it: whatever
+    // the compiler is handed at Run time is what gets checked here.
+    "prepared = prepare_document(json.loads(pathlib.Path(sys.argv[1]).read_text()))",
+    "assert_ports_are_declared(prepared['model'], declared)",
+    "print(sum(1 for _ in prepared['model'].get('wires', [])))",
+  ].join("\n");
+  try {
+    const out = execFileSync(PYTHON, ["-I", "-c", probe, documentPath], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return { ok: true, wires: Number.parseInt(out.trim(), 10) };
+  } catch (error) {
+    const text = `${error.stderr ?? ""}${error.stdout ?? ""}`;
+    // Matches a submodule too (`simulator.compiler.compile_input`), which is what
+    // a venv holding an older build of the package reports -- the same thing as
+    // "not installed" for this arm's purposes, and worth naming so the reader
+    // knows to reinstall rather than hunt for a wiring fault.
+    const absent = text.match(/No module named '((?:gsim_py|simulator|numpy|scipy)[^']*)'/);
+    if (absent) {
+      return { ok: null, reason: `${absent[1]} is not installed in ${PYTHON}` };
+    }
+    const last = text.trim().split("\n").filter(Boolean).pop() ?? String(error.message);
+    return { ok: false, reason: last.replace(/^ValueError: /, "") };
   }
 }
 
@@ -283,6 +349,16 @@ for (const file of files) {
       failures.push(`${name}: block type "${type}" is not in the engine catalogue`);
       console.log(`  ✗ ${type} — not in the catalogue`);
     }
+  }
+
+  const ports = portsAreDeclared(path);
+  if (ports.ok === true) {
+    console.log(`  · all ${ports.wires} wires land on declared ports`);
+  } else if (ports.ok === null) {
+    console.log(`  · ports not checked (${ports.reason})`);
+  } else {
+    failures.push(`${name}: a wire names a port the engine does not declare — ${ports.reason}`);
+    console.log(`  ✗ ${ports.reason}`);
   }
 
   const compiled = compiles(path);
