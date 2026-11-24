@@ -252,7 +252,7 @@
       {
         "id": "gnd",
         "type": "routing.ground",
-        "paradigm": "physical-network",
+        "paradigm": "routing",
         "domain": "physical-electrical",
         "fidelity": "ideal",
         "position": [
@@ -278,7 +278,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire2",
@@ -292,7 +293,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire3",
@@ -306,7 +308,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire4",
@@ -320,7 +323,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire5",
@@ -334,7 +338,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire6",
@@ -348,7 +353,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire7",
@@ -362,7 +368,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire8",
@@ -376,7 +383,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire9",
@@ -390,7 +398,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire10",
@@ -404,7 +413,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire11",
@@ -418,7 +428,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire12",
@@ -432,7 +443,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire13",
@@ -446,7 +458,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire14",
@@ -460,7 +473,8 @@
         },
         "kind": "signal",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire15",
@@ -474,7 +488,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire16",
@@ -488,7 +503,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       },
       {
         "id": "wire17",
@@ -502,7 +518,8 @@
         },
         "kind": "physical-electrical",
         "waypoints": [],
-        "pinned": false
+        "pinned": false,
+        "net": null
       }
     ],
     "subckt_defs": [],

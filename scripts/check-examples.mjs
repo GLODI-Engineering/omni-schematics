@@ -50,6 +50,18 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The editor's own generated validator, loaded dynamically rather than with a
+// static `import` so that a checkout which has not run codegen yet gets a named
+// reason from the arm below instead of this whole script failing to load.
+let validateDocument = null;
+try {
+  ({ validateGsimSchDocument: validateDocument } = await import(
+    "../apps/frontend/src/generated/validators/gsim-sch.js"
+  ));
+} catch {
+  validateDocument = null;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
 const STRICT = process.argv.includes("--check");
@@ -93,6 +105,60 @@ const PYTHON = enginePython();
  * `gen-engine-catalog.mjs`, which exits cleanly without `gsim_py` so an
  * ordinary checkout is usable. CI installs them, so there the arm is real.
  */
+/**
+ * Does the editor's own loader accept this document?
+ *
+ * This is the arm whose absence let every example ship unopenable. Arms 1-3 read
+ * the document with `JSON.parse` and ask the catalogue about its blocks; the
+ * compile arm asks the engine. Neither is the code the editor runs when a user
+ * opens a file, and the editor is stricter than both -- it validates against
+ * `packages/schemas/definitions/model/gsim_sch.schema.json`, which requires
+ * fields the engine is content to omit and pins a block's paradigm to its type
+ * prefix.
+ *
+ * All five examples failed it two ways at once while this script reported
+ * "5 example(s) OK":
+ *
+ *   /model/blocks/8/paradigm: must be equal to constant
+ *   /model/wires/0: must have required property 'net'
+ *
+ * The validator used here is the generated one the webview itself loads -- not a
+ * reimplementation, and not `ajv.compile()` at runtime, which the webview's CSP
+ * forbids. It is plain JavaScript with no dependencies, so unlike the compile arm
+ * this one needs nothing installed and only degrades to `ok: null` if codegen has
+ * never been run. There was never a reason for it not to run (#146).
+ */
+function loadsInTheEditor(documentPath) {
+  if (validateDocument === null) {
+    return {
+      ok: null,
+      reason: "the generated validator is missing; run `pnpm --filter ./apps/frontend codegen`",
+    };
+  }
+  let document;
+  try {
+    document = JSON.parse(readFileSync(documentPath, "utf8"));
+  } catch (error) {
+    return { ok: false, reason: `is not JSON — ${error.message}` };
+  }
+  if (validateDocument(document)) {
+    return { ok: true };
+  }
+  // Every distinct error, not just the first. `validateModelDocument` throws on
+  // the first one, which is right for a user opening a file and wrong for a gate:
+  // fixing the paradigm only to be told about `net` on the next run is two cycles
+  // where one would do, and that is exactly how this went by hand.
+  const seen = new Set(
+    (validateDocument.errors ?? []).map(
+      (error) => `${error.instancePath || "/"}: ${error.message}`,
+    ),
+  );
+  return {
+    ok: false,
+    reason: [...seen].join("; ") || "failed schema validation with no message",
+  };
+}
+
 function compiles(documentPath) {
   // `gsim_py` only, not `gsim_tools` -- for now. The stated reason was that
   // gsim-tools is a private repository no CI checkout can install, and a gate
@@ -355,6 +421,16 @@ for (const file of files) {
       failures.push(`${name}: block type "${type}" is not in the engine catalogue`);
       console.log(`  ✗ ${type} — not in the catalogue`);
     }
+  }
+
+  const loads = loadsInTheEditor(path);
+  if (loads.ok === true) {
+    console.log("  · opens in the editor (passes the document schema)");
+  } else if (loads.ok === null) {
+    console.log(`  · not validated (${loads.reason})`);
+  } else {
+    failures.push(`${name}: the editor cannot open it — ${loads.reason}`);
+    console.log(`  ✗ the editor cannot open it — ${loads.reason}`);
   }
 
   const ports = portsAreDeclared(path);

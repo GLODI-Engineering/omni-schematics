@@ -319,6 +319,27 @@ export class GsimHost implements vscode.Disposable {
         this.log.appendLine(`[webview:${message.level}] ${message.message}`);
         return true;
 
+      // #146. Also written to the log, because that is where someone debugging
+      // looks -- but the notification is the point. The previous behaviour routed
+      // this through `gsim/log` alone, so a schematic that failed to load left no
+      // trace the user would ever see, and the editor's own "the schematic is
+      // empty, add a component first" toast actively misled them: adding a block
+      // and saving would have replaced their file with the empty one.
+      case "gsim/documentUnreadable":
+        this.log.appendLine(`[webview:error] document unreadable: ${message.reason}`);
+        void vscode.window
+          .showErrorMessage(
+            "This schematic could not be read, so the editor is showing an empty canvas. " +
+              `Your file has not been changed. ${message.reason}`,
+            "Show Log",
+          )
+          .then((choice) => {
+            if (choice === "Show Log") {
+              this.log.show(true);
+            }
+          });
+        return true;
+
       // #139. A separate channel from `this.log`: that one is the kernel
       // process's own diary -- what was spawned, its stderr, the handshake --
       // and a run's output is what the user asked for. Mixing a solver's
