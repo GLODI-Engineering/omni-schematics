@@ -14,6 +14,7 @@ import {
   StopIcon,
   attachHorizontalWheelScroll,
 } from "./ToolbarControls";
+import { ToolbarOverflow } from "./ToolbarOverflow";
 import { triggerCancel, triggerRun } from "./run";
 
 // ── Time formatting ───────────────────────────────────────────────────────────
@@ -109,6 +110,8 @@ export function MainToolbar({ onAction }: MainToolbarProps) {
       <Btn
         title={busy ? "Stop simulation  F5" : "Run simulation  F5"}
         label={busy ? "Stop" : "Run"}
+        showLabel
+        pin
         active={busy}
         danger={busy}
         onClick={() => (busy ? triggerCancel() : void triggerRun())}
@@ -140,7 +143,11 @@ export function MainToolbar({ onAction }: MainToolbarProps) {
       )}
 
       {simDialogOpen ? (
-        <div className="sim-settings-backdrop" onMouseDown={() => setSimDialogOpen(false)}>
+        <div
+          className="sim-settings-backdrop"
+          data-toolbar-ignore=""
+          onMouseDown={() => setSimDialogOpen(false)}
+        >
           <div className="sim-settings-dialog" onMouseDown={(event) => event.stopPropagation()}>
             <AnalysisPanel onClose={() => setSimDialogOpen(false)} />
           </div>
@@ -148,6 +155,10 @@ export function MainToolbar({ onAction }: MainToolbarProps) {
       ) : null}
 
       <ActiveTabToolbar onAction={onAction} />
+
+      {/* Last child on purpose: `ToolbarOverflow` measures every sibling before
+          it and hides the ones past the fold, so it has to be the fold. */}
+      <ToolbarOverflow rowRef={toolbarRef} />
     </div>
   );
 }

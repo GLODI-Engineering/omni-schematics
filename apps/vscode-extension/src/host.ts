@@ -31,6 +31,7 @@ import * as vscode from "vscode";
 
 import {
   type HostBoundMessage,
+  type OpenBlockSourceResult,
   type RunRequest,
   type RunResult,
   type SamplesReadRequest,
@@ -51,6 +52,64 @@ import {
   saveSymbol,
   symbolWorkspace,
 } from "./symbolLibrary";
+import { isIntegrationTest } from "./test-mode";
+
+// ---------------------------------------------------------------------------
+// Resolving a path a *document* supplied (#212)
+// ---------------------------------------------------------------------------
+
+/** The folder holding a document, from its URI string. */
+function folderOf(documentUri?: string): vscode.Uri | undefined {
+  if (!documentUri) return undefined;
+  try {
+    return vscode.Uri.joinPath(vscode.Uri.parse(documentUri), "..");
+  } catch {
+    return undefined;
+  }
+}
+
+function isAbsolute(requested: string): boolean {
+  return requested.startsWith("/") || /^[A-Za-z]:[\\/]/.test(requested);
+}
+
+/**
+ * What a block parameter names, as a URI — absolute as written, otherwise
+ * relative to the sheet it was written on.
+ *
+ * Says nothing about whether the path is allowed; `inWorkspace` and
+ * `resolveWithin` do that.
+ */
+function resolveSource(requested: string, base: vscode.Uri): vscode.Uri {
+  return isAbsolute(requested)
+    ? vscode.Uri.file(requested)
+    : vscode.Uri.joinPath(base, ...requested.split("/"));
+}
+
+/** True when the URI is inside one of this window's open folders. */
+function inWorkspace(uri: vscode.Uri): boolean {
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    const root = folder.uri.fsPath.endsWith(path.sep)
+      ? folder.uri.fsPath
+      : `${folder.uri.fsPath}${path.sep}`;
+    if (uri.fsPath === folder.uri.fsPath || uri.fsPath.startsWith(root)) return true;
+  }
+  return false;
+}
+
+/** The resolved URI, or undefined when it would leave the workspace. */
+function resolveWithin(requested: string, base: vscode.Uri): vscode.Uri | undefined {
+  const uri = resolveSource(requested, base);
+  return inWorkspace(uri) ? uri : undefined;
+}
+
+async function fileExists(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface RegisteredWebview {
   role: WebviewRole;
@@ -204,7 +263,11 @@ export class GsimHost implements vscode.Disposable {
    * out of the project with `../../..`. Resolution is done by the host
    * rather than trusted from the message.
    */
-  private async readSource(requestId: string, requested: string): Promise<void> {
+  private async readSource(
+    requestId: string,
+    requested: string,
+    relativeTo?: string,
+  ): Promise<void> {
     const reply = (payload: { text?: string; error?: string }) =>
       this.broadcast({ type: "gsim/sourceContent", requestId, ...payload });
 
@@ -214,22 +277,154 @@ export class GsimHost implements vscode.Disposable {
       return;
     }
 
-    const target = vscode.Uri.joinPath(workspace, requested);
-    const root = workspace.fsPath.endsWith(path.sep)
-      ? workspace.fsPath
-      : `${workspace.fsPath}${path.sep}`;
-    if (!target.fsPath.startsWith(root)) {
-      this.log.appendLine(`[source] refused to read outside the workspace: ${requested}`);
-      reply({ error: "That path is outside the workspace folder." });
+    // Beside the schematic first, which is what a block parameter means, then
+    // the workspace root, which is where this resolved before #212 and is what
+    // any document written against the old behaviour relies on.
+    const bases = [folderOf(relativeTo), workspace].filter(
+      (base): base is vscode.Uri => base !== undefined,
+    );
+    let lastError = "";
+    for (const base of bases) {
+      const target = resolveWithin(requested, base);
+      if (!target) {
+        lastError = "That path is outside the workspace folder.";
+        this.log.appendLine(`[source] refused to read outside the workspace: ${requested}`);
+        continue;
+      }
+      try {
+        const bytes = await vscode.workspace.fs.readFile(target);
+        reply({ text: new TextDecoder().decode(bytes) });
+        return;
+      } catch (error) {
+        lastError = `Could not read ${requested}: ${String(error)}`;
+      }
+    }
+    reply({ error: lastError || `Could not read ${requested}.` });
+  }
+
+  /**
+   * Open a scripted block's source in a text editor, creating it on request.
+   *
+   * The whole of #212 arrives here, and the division is the one every other
+   * path in this file follows: the webview knows which file a block means and
+   * what an empty one should say; the host is what may read a disk, write to
+   * it, and decide whether a path a *document* supplied is allowed at all.
+   *
+   * Confined to the workspace. A `.gsim_sch` may have been opened from
+   * anywhere and its parameters are untrusted text, so a path outside the
+   * open folders is opened only after the user says so, and is never written
+   * to — creating a file anywhere on disk because a document asked is not a
+   * thing this extension does.
+   */
+  private async openBlockSource(
+    requestId: string,
+    request: {
+      blockId: string;
+      candidates: string[];
+      create: string;
+      stub: string;
+      relativeTo?: string;
+    },
+  ): Promise<void> {
+    const reply = (result: OpenBlockSourceResult) =>
+      this.broadcast({ type: "gsim/blockSourceOpened", requestId, result });
+
+    const workspace = symbolWorkspace();
+    if (!workspace) {
+      reply({
+        ok: false,
+        reason: "No folder is open, so there is nowhere to look for the block's source.",
+      });
+      return;
+    }
+    const base = folderOf(request.relativeTo) ?? workspace;
+
+    const show = async (uri: vscode.Uri, created: boolean) => {
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, {
+        // Keeps the schematic in view: reading the sheet while editing the
+        // block is the point of opening it here rather than anywhere else.
+        viewColumn: vscode.ViewColumn.Beside,
+        preview: false,
+      });
+      this.log.appendLine(`[source] opened ${uri.fsPath} for ${request.blockId}`);
+      reply({ ok: true, path: uri.fsPath, created });
+    };
+
+    // Inside the workspace first, in the order the webview gave.
+    const outside: vscode.Uri[] = [];
+    for (const candidate of request.candidates) {
+      const uri = resolveSource(candidate, base);
+      if (!(await fileExists(uri))) continue;
+      if (inWorkspace(uri)) {
+        await show(uri, false);
+        return;
+      }
+      outside.push(uri);
+    }
+
+    // Something exists, but not in this project. Ask rather than refuse: an
+    // absolute path to a shared library of blocks is a legitimate thing to
+    // write, and it is also exactly what a hostile document would write.
+    const strayUri = outside[0];
+    if (strayUri) {
+      // Under the integration harness there is nobody to answer a modal, and a
+      // harness that answered "Open" would be a test asserting that a document
+      // can make the extension open `/etc/passwd`. It declines, so the suite
+      // exercises the refusal; the "yes" branch is a human's to take.
+      const answer = isIntegrationTest()
+        ? undefined
+        : await vscode.window.showWarningMessage(
+            `"${strayUri.fsPath}" is outside this workspace. Open it anyway?`,
+            { modal: true },
+            "Open",
+          );
+      if (answer !== "Open") {
+        this.log.appendLine(`[source] not opening outside the workspace: ${strayUri.fsPath}`);
+        reply({ ok: false, reason: "Left it closed: the file is outside the workspace." });
+        return;
+      }
+      await show(strayUri, false);
+      return;
+    }
+
+    // Nothing exists. Offer to write the stub — never silently, and never
+    // outside the workspace.
+    const target = resolveWithin(request.create, base);
+    if (!target) {
+      this.log.appendLine(`[source] refused to create outside the workspace: ${request.create}`);
+      reply({
+        ok: false,
+        reason: `"${request.create}" is outside the workspace, so it was not created.`,
+      });
+      return;
+    }
+
+    // The one seam: a modal cannot be answered by the integration harness, and
+    // leaving it unanswered would mean the whole resolve-confine-write-open
+    // path — everything this method actually does — is covered by nothing.
+    // Creation is confined to the workspace above, so auto-confirming it here
+    // cannot reach anywhere a test is not entitled to write.
+    const answer = isIntegrationTest()
+      ? "Create file"
+      : await vscode.window.showInformationMessage(
+          `"${request.create}" does not exist yet. Create it?`,
+          { modal: true, detail: "A starting file with this block's own ports already filled in." },
+          "Create file",
+        );
+    if (answer !== "Create file") {
+      reply({ ok: false, reason: "No file was created." });
       return;
     }
 
     try {
-      const bytes = await vscode.workspace.fs.readFile(target);
-      reply({ text: new TextDecoder().decode(bytes) });
+      await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(target, ".."));
+      await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(request.stub));
     } catch (error) {
-      reply({ error: `Could not read ${requested}: ${String(error)}` });
+      reply({ ok: false, reason: `Could not create ${request.create}: ${String(error)}` });
+      return;
     }
+    await show(target, true);
   }
 
   private async persistSymbol(name: string, metadata: unknown): Promise<void> {
@@ -484,7 +679,11 @@ export class GsimHost implements vscode.Disposable {
         return true;
 
       case "gsim/readSource":
-        void this.readSource(message.requestId, message.path);
+        void this.readSource(message.requestId, message.path, message.relativeTo);
+        return true;
+
+      case "gsim/openBlockSource":
+        void this.openBlockSource(message.requestId, message);
         return true;
 
       case "gsim/readSamples":

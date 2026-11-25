@@ -10,8 +10,14 @@
  * the same fan-out the product uses.
  */
 import { getActiveDragBlock, setActiveDragBlock } from "../canvas/dnd";
+import { openBlockSource } from "../canvas/open-block-source";
 import { serialize } from "../file/serializer";
-import { getWebviewInit, postToHost, requestSource } from "../ipc/vscode-host";
+import {
+  getWebviewInit,
+  postToHost,
+  requestOpenBlockSource,
+  requestSource,
+} from "../ipc/vscode-host";
 import {
   containerBytesFetched,
   containerLastWindowBytes,
@@ -359,6 +365,79 @@ const PROBES: Record<string, Probe> = {
   dispatchCanvasDrop,
   dispatchToolbarDrag,
   readSource: readSourceProbe,
+
+  /**
+   * Put a scripted block on the sheet, so the double-click below has one.
+   *
+   * The catalogue's own metadata is used where it has an entry, so the node
+   * renders the way it would for a user; the parameters come from the test
+   * because they are what the block's source resolution reads.
+   */
+  insertScriptedBlock: (args) => {
+    const type = String(args.type ?? "extensibility.cscript");
+    const id = String(args.id ?? "cs1");
+    const params = (args.params ?? {}) as Record<string, unknown>;
+    const graph = useGraphStore.getState();
+    graph.transact("insert scripted block", () => {
+      graph.addBlock({
+        id,
+        type,
+        label: id,
+        position: [120, 120],
+        rotation: 0,
+        mirror: "none",
+        fidelity: "ideal",
+        params,
+      } as never);
+    });
+    return { id, blocks: useGraphStore.getState().document.model.blocks.length };
+  },
+
+  /**
+   * Double-click the block's real node in the real canvas.
+   *
+   * The gesture, not the handler: a `dblclick` dispatched on the React Flow
+   * node element, which is what a hand produces and the only way to assert
+   * that the handler is wired to the node at all.
+   */
+  doubleClickBlock: (args) => {
+    const id = String(args.blockId ?? "");
+    const node =
+      document.querySelector(`[data-testid="rf__node-${id}"]`) ??
+      document.querySelector(`.react-flow__node[data-id="${id}"]`);
+    if (!node) throw new Error(`no canvas node for block ${id}`);
+    useToastStore.setState({ toasts: [] });
+    node.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    return { dispatched: id };
+  },
+
+  /** What the editor said about it, which is how a refusal reaches the user. */
+  toasts: () => useToastStore.getState().toasts.map((toast) => toast.message),
+
+  /** Drive `openBlockSource` for a block already on the sheet. */
+  openBlockSource: async (args) => {
+    const id = String(args.blockId ?? "");
+    const block = useGraphStore.getState().document.model.blocks.find((b) => b.id === id);
+    if (!block) throw new Error(`no block ${id}`);
+    useToastStore.setState({ toasts: [] });
+    await openBlockSource(block as never);
+    return { toasts: useToastStore.getState().toasts.map((toast) => toast.message) };
+  },
+
+  /**
+   * Ask the host to open an arbitrary path, so its confinement can be tested
+   * without a block that could never legitimately carry one.
+   */
+  requestOpenSource: async (args) => {
+    const candidates = Array.isArray(args.candidates) ? (args.candidates as string[]) : [];
+    const result = await requestOpenBlockSource({
+      blockId: String(args.blockId ?? "probe"),
+      candidates,
+      create: String(args.create ?? candidates[0] ?? ""),
+      stub: String(args.stub ?? "/* probe */\n"),
+    });
+    return result;
+  },
 
   /**
    * Click a real MainToolbar button by its accessible name, so the whole

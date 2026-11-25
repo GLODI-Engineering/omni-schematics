@@ -10,6 +10,7 @@
 
 export type {
   HostBoundMessage,
+  OpenBlockSourceResult,
   WebviewBoundMessage,
   WebviewInit,
   WebviewRole,

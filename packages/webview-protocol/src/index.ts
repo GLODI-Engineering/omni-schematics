@@ -104,8 +104,49 @@ export type HostBoundMessage =
   /**
    * Read a scripted block's source, so the editor can show what ports it
    * looks like it expects. The host confines the path to the workspace.
+   *
+   * `relativeTo` is the schematic the path was written in — a block parameter
+   * is relative to the sheet, not to the workspace root, and the two are only
+   * the same directory by accident. Absent, or not found there, the host falls
+   * back to the workspace root, which is where this resolved before #212.
    */
-  | { type: "gsim/readSource"; requestId: string; path: string }
+  | { type: "gsim/readSource"; requestId: string; path: string; relativeTo?: string }
+  /**
+   * Open a scripted block's source in a VS Code text editor (#212).
+   *
+   * The reason the editor is in VS Code at all: a `pyfunc` is a Python file,
+   * and the user wants Python tooling on it rather than a text box of our own.
+   * So this asks for nothing clever — `openTextDocument` plus
+   * `showTextDocument`, and the language extensions attach by file extension.
+   *
+   * `candidates` is a list because a `cscript` block's parameter is `lib`, a
+   * compiled `.so`, and the source beside it is a convention rather than a
+   * fact (see `apps/frontend/src/netlist/code-source.ts`). The host opens the
+   * first that exists. `create` is the one it offers to write, with `stub` as
+   * the contents — composed in the webview, which is where the knowledge of
+   * what each language's entry point must look like already lives
+   * (`netlist/code-ports.ts`).
+   *
+   * **The host decides whether the path is acceptable, not the webview.** A
+   * `.gsim_sch` may have been opened from anywhere and its parameters are
+   * untrusted strings; a document must not be able to make the extension open
+   * or create an arbitrary file. The host confines both to the workspace, and
+   * asks before opening anything outside it.
+   */
+  | {
+      type: "gsim/openBlockSource";
+      requestId: string;
+      /** Only for the host's log, so a refusal names the block. */
+      blockId: string;
+      /** Relative to `relativeTo`, or absolute. Best first. */
+      candidates: string[];
+      /** Which of `candidates` to offer to create. */
+      create: string;
+      /** What to write when creating it. */
+      stub: string;
+      /** URI of the schematic the paths are relative to. */
+      relativeTo?: string;
+    }
   /**
    * Byte ranges of a `.gsim_samples` container (#157).
    *
@@ -165,6 +206,17 @@ export interface RunOutputLine {
   severity: RunOutputSeverity;
   text: string;
 }
+
+/** What became of a `gsim/openBlockSource`. */
+export type OpenBlockSourceResult =
+  | {
+      ok: true;
+      /** The path that was opened, as the host resolved it. */
+      path: string;
+      /** True when the file did not exist and the user agreed to create it. */
+      created: boolean;
+    }
+  | { ok: false; reason: string };
 
 // ---------------------------------------------------------------------------
 // Running a simulation in the extension host (#159)
@@ -358,6 +410,14 @@ export type WebviewBoundMessage =
   | { type: "gsim/symbolSaved"; name: string; path: string }
   /** Answer to `gsim/readSource`: the file's text, or why it could not be read. */
   | { type: "gsim/sourceContent"; requestId: string; text?: string; error?: string }
+  /**
+   * Answer to `gsim/openBlockSource`, which always arrives.
+   *
+   * An outcome rather than a resolve-or-reject, for the reason `gsim/runResult`
+   * gives: a double-click that produces nothing at all is indistinguishable
+   * from a double-click the editor did not notice, and the user repeats it.
+   */
+  | { type: "gsim/blockSourceOpened"; requestId: string; result: OpenBlockSourceResult }
   /**
    * Answer to a `gsim/readSamples` (#157), which always arrives.
    *

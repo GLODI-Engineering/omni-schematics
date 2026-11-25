@@ -63,6 +63,85 @@ describe("FE-144: MainToolbar horizontal wheel scroll", () => {
   });
 });
 
+describe("#210: the real toolbar at a narrow width", () => {
+  let resizeCallbacks: (() => void)[] = [];
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    resizeCallbacks = [];
+    globalThis.ResizeObserver = class {
+      constructor(callback: () => void) {
+        resizeCallbacks.push(callback);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
+  /** jsdom computes no layout, so the row and its controls are given one. */
+  function layout(container: HTMLElement, rowWidth: number, childWidth = 60) {
+    const row = container.querySelector(".main-toolbar") as HTMLElement;
+    Object.defineProperty(row, "clientWidth", { value: rowWidth, configurable: true });
+    for (const child of [...row.children] as HTMLElement[]) {
+      Object.defineProperty(child, "offsetWidth", {
+        value: child.classList.contains("gs-toolbar__sep") ? 9 : childWidth,
+        configurable: true,
+      });
+    }
+    act(() => {
+      for (const callback of resizeCallbacks) callback();
+    });
+    return row;
+  }
+
+  it("moves what does not fit into the menu rather than truncating it", () => {
+    const { container } = render(<MainToolbar onAction={() => {}} />);
+    const row = layout(container, 180);
+
+    expect(screen.getByRole("button", { name: "More tools" })).toBeTruthy();
+    expect(row.querySelectorAll("[data-overflowed]").length).toBeGreaterThan(0);
+  });
+
+  it("never moves Run, which is the one control a new user is looking for", () => {
+    // Narrower than a single control: everything that *can* move, does.
+    const { container } = render(<MainToolbar onAction={() => {}} />);
+    layout(container, 40);
+
+    const run = screen.getByRole("button", { name: "Run" });
+    expect(run.hasAttribute("data-overflowed")).toBe(false);
+    expect(run.closest("[data-overflowed]")).toBeNull();
+  });
+
+  it("leaves every hidden control reachable, one menu entry each", () => {
+    const { container } = render(<MainToolbar onAction={() => {}} />);
+    const row = layout(container, 180);
+
+    const hiddenControls = [...row.querySelectorAll("[data-overflowed]")].flatMap((child) =>
+      child.tagName === "BUTTON" ? [child] : [...child.querySelectorAll("button")],
+    );
+    expect(hiddenControls.length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "More tools" }));
+    expect(screen.getAllByRole("menuitem")).toHaveLength(hiddenControls.length);
+  });
+
+  it("clicking a menu entry runs the real action", () => {
+    const actions: string[] = [];
+    const { container } = render(<MainToolbar onAction={(id) => actions.push(id)} />);
+    layout(container, 180);
+
+    fireEvent.click(screen.getByRole("button", { name: "More tools" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Symbol" }));
+
+    expect(actions).toEqual(["symbol.new"]);
+  });
+});
+
 describe("FE-155: MainToolbar simulation time display", () => {
   it("does not show the old static 'Starting simulation' label while busy", () => {
     useIpcStore.setState({ status: "busy", simProgress: 0, simMessage: "Starting simulation…" });

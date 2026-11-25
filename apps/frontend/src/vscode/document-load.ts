@@ -8,6 +8,7 @@
  */
 
 import { deserialize } from "../file/deserializer";
+import { createEmptyDocument } from "../file/file-ops";
 import { serialize } from "../file/serializer";
 import { postToHost } from "../ipc/vscode-host";
 import { useGraphStore } from "../store";
@@ -30,7 +31,24 @@ let lastSyncedText: string | null = null;
 let unreadable: { text: string; reason: string } | null = null;
 
 export function loadDocumentText(text: string): void {
-  const parsed = deserialize(text);
+  /**
+   * An empty file is an empty schematic, not an unreadable one.
+   *
+   * The *open* path has always known this: `schematic-main.tsx` checks
+   * `documentText.trim().length > 0` before loading anything. The *revert* path
+   * did not — `schematicEditor.revertCustomDocument` posts the file's bytes as
+   * `gsim/setDocument` and they arrive here, where `JSON.parse("")` throws, the
+   * document is recorded as unreadable and `currentDocumentText()` starts
+   * handing the host back the original bytes. Every save after that is a silent
+   * no-op.
+   *
+   * So: create a schematic, press File ▸ Revert, and the editor stops saving
+   * without saying so. "New Schematic" writing a real document rather than a
+   * zero-byte file removes the common cause (#211); this covers the file a user
+   * made with `touch`, which is exactly what they were doing before that
+   * command was reachable.
+   */
+  const parsed = text.trim() === "" ? createEmptyDocument() : deserialize(text);
   useGraphStore.getState().loadDocument(parsed);
   useGraphStore.getState().clearHistory();
   lastSyncedText = text;

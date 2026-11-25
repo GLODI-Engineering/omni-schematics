@@ -746,4 +746,235 @@ suite("Omni Schematics — VS Code integration", () => {
       );
     });
   });
+
+  // -------------------------------------------------------------------------
+  /**
+   * #211 — "New Schematic" has to be reachable, and what it writes has to be a
+   * document.
+   *
+   * These run last and close every editor first: the host hands a probe to the
+   * *first* registered webview of a role, so a second schematic opened while
+   * the sample's panel is alive would be probed through the wrong one.
+   */
+  suite("new schematic", () => {
+    const created = () => vscode.Uri.file(path.join(workspaceDir(), "created.gsim_sch"));
+
+    suiteSetup(async () => {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      fs.rmSync(created().fsPath, { force: true });
+      await sleep(300);
+    });
+
+    test("is contributed everywhere a person would look for it", () => {
+      const extension = vscode.extensions.getExtension(EXTENSION_ID);
+      assert.ok(extension);
+      const menus = extension.packageJSON.contributes.menus as Record<
+        string,
+        { command: string; when?: string }[]
+      >;
+      const commandsIn = (menu: string) => (menus[menu] ?? []).map((entry) => entry.command);
+
+      // File ▸ New File…
+      assert.ok(
+        commandsIn("file/newFile").includes("omniSchematics.newSchematic"),
+        "file/newFile offers a schematic",
+      );
+      // The + on the Block Library's title bar, which is the surface the
+      // report was about: "when you click on the extension, there's no way to
+      // create a new file".
+      const viewTitle = (menus["view/title"] ?? []).find(
+        (entry) => entry.command === "omniSchematics.newSchematic",
+      );
+      assert.ok(viewTitle, "view/title offers a schematic");
+      assert.equal(viewTitle?.when, "view == omniSchematics.library");
+      // And the command needs an icon, or the title bar entry renders as
+      // nothing at all.
+      const command = (
+        extension.packageJSON.contributes.commands as { command: string; icon?: string }[]
+      ).find((entry) => entry.command === "omniSchematics.newSchematic");
+      assert.ok(command?.icon, "the command has an icon for the title bar");
+    });
+
+    test("writes a document the editor can read, not a zero-byte file", async () => {
+      await vscode.commands.executeCommand("omniSchematics.newSchematic", created());
+
+      const text = fs.readFileSync(created().fsPath, "utf8");
+      assert.ok(text.length > 0, "the file has contents");
+      const document = JSON.parse(text) as { schema_version: number; model: { blocks: unknown[] } };
+      assert.equal(document.schema_version, 2);
+      assert.deepEqual(document.model.blocks, [], "a new sheet, with nothing on it");
+    });
+
+    test("opens what it created in the schematic editor", async () => {
+      await api.waitForWebview("schematic");
+      const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+      const input = tab?.input as { viewType?: string; uri?: vscode.Uri } | undefined;
+      assert.equal(input?.viewType, SCHEMATIC_VIEW_TYPE);
+      assert.equal(input?.uri?.fsPath, created().fsPath);
+    });
+
+    test("does not replace a schematic that is already there", async () => {
+      fs.writeFileSync(created().fsPath, fs.readFileSync(created().fsPath, "utf8"));
+      const before = fs.readFileSync(created().fsPath, "utf8");
+      await vscode.commands.executeCommand("omniSchematics.newSchematic", created());
+      assert.equal(fs.readFileSync(created().fsPath, "utf8"), before, "the file was left alone");
+    });
+
+    /**
+     * The data-loss bug the zero-byte file caused, and the reason this test is
+     * about Revert rather than about Open.
+     *
+     * Opening an empty file was always fine — `schematic-main.tsx` checks for
+     * empty text first. Revert posts the bytes straight to
+     * `loadDocumentTextOrReport`, where `JSON.parse("")` threw, the document
+     * was recorded unreadable, and from then on `currentDocumentText()`
+     * returned the original bytes: every save a silent no-op. So the editor
+     * stopped saving, and said nothing.
+     */
+    test("survives a revert and still saves afterwards", async () => {
+      await api.waitForWebview("schematic");
+
+      // Dirty first. VS Code calls `revertCustomDocument` only on a dirty
+      // document, so a revert of a clean tab posts nothing and this test would
+      // pass against the very bug it is here for.
+      const dirtied = api.nextMessage("schematic", "gsim/documentChanged");
+      await api.probe("schematic", "renameModel", { name: "BeforeTheRevert" });
+      await dirtied;
+      for (let i = 0; i < 40 && !vscode.window.tabGroups.activeTabGroup.activeTab?.isDirty; i++) {
+        await sleep(100);
+      }
+      assert.equal(
+        vscode.window.tabGroups.activeTabGroup.activeTab?.isDirty,
+        true,
+        "the tab is dirty, so Revert has something to do",
+      );
+
+      await vscode.commands.executeCommand("workbench.action.files.revert");
+      await sleep(800);
+
+      const changed = api.nextMessage("schematic", "gsim/documentChanged");
+      await api.probe("schematic", "renameModel", { name: "SurvivedTheRevert" });
+      await changed;
+
+      for (let i = 0; i < 40 && !vscode.window.tabGroups.activeTabGroup.activeTab?.isDirty; i++) {
+        await sleep(100);
+      }
+      await vscode.commands.executeCommand("workbench.action.files.save");
+      for (let i = 0; i < 40 && vscode.window.tabGroups.activeTabGroup.activeTab?.isDirty; i++) {
+        await sleep(100);
+      }
+
+      const onDisk = fs.readFileSync(created().fsPath, "utf8");
+      assert.ok(
+        onDisk.includes("SurvivedTheRevert"),
+        "an edit made after Revert reached the file — before #211 every save after a " +
+          "revert of a new schematic was a silent no-op",
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  /**
+   * #212 — double-clicking a scripted block opens its source in VS Code.
+   *
+   * In the real editor, because that is the whole of the feature: a webview
+   * cannot open a text document, and what a user came to VS Code for is the
+   * language services that attach to one.
+   */
+  suite("a scripted block's source", () => {
+    const sourcePath = () => path.join(workspaceDir(), "blocks", "ctrl.c");
+
+    suiteSetup(async () => {
+      fs.mkdirSync(path.join(workspaceDir(), "blocks"), { recursive: true });
+      await api.waitForWebview("schematic");
+    });
+
+    teardown(async () => {
+      await vscode.commands.executeCommand("workbench.action.closeOtherEditors").then(
+        () => undefined,
+        () => undefined,
+      );
+    });
+
+    test("a double-click on the block opens the .c file beside the schematic", async () => {
+      fs.writeFileSync(
+        sourcePath(),
+        "int cscript_arity(int *in_len, int *out_len) { *in_len = 2; *out_len = 1; return 0; }\n",
+        "utf8",
+      );
+
+      await api.probe("schematic", "insertScriptedBlock", {
+        id: "cs1",
+        type: "extensibility.cscript",
+        params: { lib: "build/ctrl.so", input_names: ["u1", "u2"], output_names: ["y1"] },
+      });
+      await sleep(400);
+      await api.probe("schematic", "doubleClickBlock", { blockId: "cs1" });
+
+      let opened: vscode.TextEditor | undefined;
+      for (let i = 0; i < 60; i += 1) {
+        opened = vscode.window.visibleTextEditors.find(
+          (editor) => editor.document.uri.fsPath === sourcePath(),
+        );
+        if (opened) break;
+        await sleep(100);
+      }
+      assert.ok(opened, "the block's .c file is open in a text editor");
+      assert.equal(opened?.document.languageId, "c", "and VS Code knows it is C");
+    });
+
+    test("offers to create one when there is none, from a stub the parser agrees with", async () => {
+      fs.rmSync(sourcePath(), { force: true });
+      fs.rmSync(path.join(workspaceDir(), "blocks", "other.c"), { force: true });
+
+      await api.probe("schematic", "insertScriptedBlock", {
+        id: "cs2",
+        type: "extensibility.cscript",
+        params: { lib: "build/other.so", input_names: ["a", "b", "c"], output_names: ["y"] },
+      });
+      await sleep(400);
+      const result = await api.probe<{ toasts: string[] }>("schematic", "openBlockSource", {
+        blockId: "cs2",
+      });
+      void result;
+
+      const stubPath = path.join(workspaceDir(), "blocks", "other.c");
+      for (let i = 0; i < 60 && !fs.existsSync(stubPath); i += 1) await sleep(100);
+      assert.ok(fs.existsSync(stubPath), "the stub was written where the webview asked");
+
+      const stub = fs.readFileSync(stubPath, "utf8");
+      assert.match(stub, /cscript_arity/, "it declares the arity the engine checks");
+      assert.match(stub, /\*in_len = 3;/, "with this block's own three inputs");
+      assert.match(stub, /\*out_len = 1;/);
+    });
+
+    /**
+     * A `.gsim_sch` may have been opened from anywhere and its parameters are
+     * untrusted text. The host is the only side that can see the workspace, so
+     * it is the side that decides.
+     */
+    test("refuses a path that leaves the workspace", async () => {
+      const result = await api.probe<{ ok: boolean; reason?: string }>(
+        "schematic",
+        "requestOpenSource",
+        {
+          blockId: "evil",
+          candidates: ["../../../../etc/passwd"],
+          create: "../../../../etc/evil.c",
+        },
+      );
+      assert.equal(result.ok, false, "a traversal is refused rather than opened");
+      assert.ok(
+        !vscode.window.visibleTextEditors.some((editor) =>
+          editor.document.uri.fsPath.endsWith("/etc/passwd"),
+        ),
+        "and nothing outside the workspace was opened",
+      );
+      assert.equal(
+        fs.existsSync("/etc/evil.c"),
+        false,
+        "and nothing outside the workspace was created",
+      );
+    });
+  });
 });

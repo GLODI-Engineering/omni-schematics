@@ -1,12 +1,16 @@
 import { useState } from "react";
 
+import { openBlockSource } from "../canvas/open-block-source";
 import { requestSource } from "../ipc/vscode-host";
 import { type DerivedPorts, derivePortsFor } from "../netlist/code-ports";
+import type { ScriptedBlock, ScriptedSource } from "../netlist/code-source";
 
 interface SourcePortsProps {
   blockType: string;
-  /** The block's `path` parameter — where its source lives. */
-  sourcePath: string;
+  /** The block itself, so "Open file" can ask the host to open or create it. */
+  block: ScriptedBlock;
+  /** Where its source may live, best first — see `netlist/code-source.ts`. */
+  source: ScriptedSource;
   /** Its `function` parameter, where the language has one. */
   functionName?: string;
   currentInputs: string[];
@@ -28,7 +32,8 @@ const equal = (a: string[], b: string[]) => a.length === b.length && a.every((v,
  */
 export function SourcePorts({
   blockType,
-  sourcePath,
+  block,
+  source,
   functionName,
   currentInputs,
   currentOutputs,
@@ -39,13 +44,16 @@ export function SourcePorts({
 
   async function read() {
     setState("reading");
-    const text = await requestSource(sourcePath);
-    if (text === null) {
-      setState("unavailable");
+    // In order, because a `cscript` block's parameter names a compiled library
+    // and the source beside it is a convention with more than one spelling.
+    for (const candidate of source.candidates) {
+      const text = await requestSource(candidate);
+      if (text === null) continue;
+      setFound(derivePortsFor(blockType, text, functionName));
+      setState("done");
       return;
     }
-    setFound(derivePortsFor(blockType, text, functionName));
-    setState("done");
+    setState("unavailable");
   }
 
   const inputsDiffer =
@@ -59,13 +67,32 @@ export function SourcePorts({
 
   return (
     <div className="source-ports">
-      <button type="button" className="source-ports__read" onClick={() => void read()}>
-        {state === "reading" ? "Reading…" : "Read ports from source"}
-      </button>
+      <div className="source-ports__actions">
+        {/* Double-click on the block does this too; a button because a
+            double-click is not something anyone discovers on their own. */}
+        <button
+          type="button"
+          className="source-ports__open"
+          title={`Open ${source.create} in a VS Code editor, beside the schematic`}
+          onClick={() => void openBlockSource(block)}
+        >
+          Open file
+        </button>
+        <button type="button" className="source-ports__read" onClick={() => void read()}>
+          {state === "reading" ? "Reading…" : "Read ports from source"}
+        </button>
+      </div>
+
+      {source.inferred && (
+        <p className="source-ports__note">
+          This block's parameter names a compiled library, so its source is looked for by
+          convention: {source.candidates.slice(0, 2).join(", ")}, …
+        </p>
+      )}
 
       {state === "unavailable" && (
         <p className="source-ports__note">
-          The source can only be read inside the editor, where there is a workspace to read from.
+          No source was found to read. "Open file" will offer to create {source.create}.
         </p>
       )}
 

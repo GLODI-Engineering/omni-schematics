@@ -240,10 +240,10 @@ export function SchematicToolbar({ onAction }: SchematicToolbarProps) {
   return (
     <>
       {/* ── Zoom ── */}
-      <Btn title="Zoom In  +" onClick={() => onAction("view.zoom-in")}>
+      <Btn title="Zoom In  +" label="Zoom In" onClick={() => onAction("view.zoom-in")}>
         <ZoomInIcon />
       </Btn>
-      <Btn title="Zoom Out  -" onClick={() => onAction("view.zoom-out")}>
+      <Btn title="Zoom Out  -" label="Zoom Out" onClick={() => onAction("view.zoom-out")}>
         <ZoomOutIcon />
       </Btn>
       <Btn title="Fit diagram to window" label="Fit" onClick={() => onAction("view.fit-diagram")}>
@@ -253,13 +253,17 @@ export function SchematicToolbar({ onAction }: SchematicToolbarProps) {
       <Sep />
 
       {/* ── Edit ── */}
-      <Btn title="Copy  Ctrl+C" onClick={() => onAction("clipboard.copy")}>
+      <Btn title="Copy  Ctrl+C" label="Copy" onClick={() => onAction("clipboard.copy")}>
         <CopyIcon />
       </Btn>
-      <Btn title="Paste  Ctrl+V" onClick={() => onAction("clipboard.paste")}>
+      <Btn title="Paste  Ctrl+V" label="Paste" onClick={() => onAction("clipboard.paste")}>
         <ClipboardIcon />
       </Btn>
-      <Btn title="Delete selection  Del" onClick={() => onAction("selection.delete")}>
+      <Btn
+        title="Delete selection  Del"
+        label="Delete selection"
+        onClick={() => onAction("selection.delete")}
+      >
         <TrashIcon />
       </Btn>
 
@@ -273,8 +277,12 @@ export function SchematicToolbar({ onAction }: SchematicToolbarProps) {
       <Sep />
 
       {/* ── Canvas workbench / Transform ── */}
+      {/* `data-toolbar-group`: when the row runs out of width this whole div
+          moves behind the ⋯ button, and the menu lists its five tools one by
+          one rather than offering a single entry named after the container. */}
       <div
         className="editor-workbench schematic-toolbar__workbench"
+        data-toolbar-group="Canvas tools"
         aria-label="Canvas workbench toolbar"
       >
         <button
@@ -383,7 +391,9 @@ export function SchematicToolbar({ onAction }: SchematicToolbarProps) {
       >
         <PaletteIcon />
       </Btn>
-      {wireColorsOpen ? <WireColorsDialog onClose={() => setWireColorsOpen(false)} /> : null}
+      <div data-toolbar-ignore="">
+        {wireColorsOpen ? <WireColorsDialog onClose={() => setWireColorsOpen(false)} /> : null}
+      </div>
     </>
   );
 }
