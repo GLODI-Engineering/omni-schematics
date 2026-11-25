@@ -2,11 +2,15 @@ import type { ReactNode, SVGProps } from "react";
 import type { ParamValue } from "../../model/types";
 import { WIRE_STROKE } from "../edges/WireEdge";
 import { SYMBOL_SCALE } from "./port-hit-test";
+import { FILL as DRAWING_FILL, STROKE as DRAWING_STROKE } from "./symbol-drawing";
 import { findDrawing } from "./symbols/registry";
 import PmosSvg from "./symbols/spice-primitive-P-MOS.drawio.svg?react";
 
-const STROKE = "#0f172a";
-const FILL = "#ffffff";
+// One definition of the two colours, in symbol-drawing.tsx. These were a
+// second copy of the same literals, which is how the library panel ended up
+// with half its artwork themed and half of it not (#213).
+const STROKE = DRAWING_STROKE;
+const FILL = DRAWING_FILL;
 // Every schematic symbol here is drawn pre-scale, inside BlockSymbol's own
 // scale(SYMBOL_SCALE) transform, so a stroke drawn at this width renders at
 // SW * SYMBOL_SCALE on screen. Deriving it from WIRE_STROKE (rather than a
