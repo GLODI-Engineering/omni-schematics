@@ -1,3 +1,6 @@
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 /**
  * Every component in the Block Library, clicked, in a real VS Code window.
  *
@@ -7,9 +10,6 @@
  * that renders — not that a function was called.
  */
 import { launchVSCode } from "./vscode.mjs";
-import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const S = process.env.S ?? "/tmp/gsim-ui";
@@ -67,7 +67,7 @@ for (let pass = 0; pass < 12; pass++) {
     const shut = [...document.querySelectorAll(".library-tree__toggle")].filter((b) =>
       (b.textContent || "").includes("▸"),
     );
-    shut.forEach((b) => b.click());
+    for (const b of shut) b.click();
     return shut.length;
   });
   if (!opened) break;
@@ -109,14 +109,19 @@ for (const { i, label } of labels) {
     ...(ok ? {} : { why: newErrors[0] ?? `canvas went ${before} -> ${after}, expected +1` }),
   });
   if (!ok) {
-    await win.screenshot({ path: join(OUT, "shots", `fail-${String(i).padStart(2, "0")}.png`) }).catch(() => {});
+    await win
+      .screenshot({ path: join(OUT, "shots", `fail-${String(i).padStart(2, "0")}.png`) })
+      .catch(() => {});
   }
 }
 
 await win.screenshot({ path: join(OUT, "shots", "zz-final.png") });
 const passed = results.filter((r) => r.ok).length;
 const failed = results.filter((r) => !r.ok);
-writeFileSync(join(OUT, "sweep.json"), JSON.stringify({ total: results.length, passed, results }, null, 2));
+writeFileSync(
+  join(OUT, "sweep.json"),
+  JSON.stringify({ total: results.length, passed, results }, null, 2),
+);
 console.log(`PASS ${passed}/${results.length}`);
 for (const f of failed.slice(0, 25)) console.log(`  FAIL  ${f.label}  --  ${f.why}`);
 await app.close().catch(() => {});

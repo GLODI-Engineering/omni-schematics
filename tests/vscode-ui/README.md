@@ -12,10 +12,16 @@ invisible there.
 ## Running them
 
 ```bash
-Xvfb :99 -screen 0 1600x1000x24 &          # any virtual display will do
+pnpm build && pnpm bundle:webviews        # the extension is loaded from source
+Xvfb :99 -screen 0 1600x1000x24 &         # any virtual display will do
 S=/tmp/gsim-ui REPO="$PWD" node tests/vscode-ui/sweep.mjs
 S=/tmp/gsim-ui REPO="$PWD" node tests/vscode-ui/journey.mjs
 ```
+
+`REPO` must point at a **built** checkout: VS Code loads the extension from
+`$REPO/apps/vscode-extension`, so `out/extension.js` and `media/frontend/` have to
+exist. Against a source-only tree every test fails with "the canvas never rendered",
+which says nothing about the editor.
 
 Both exit non-zero on failure, write a JSON report to `$OUT` (default `$S/<name>`),
 and screenshot anything that fails. `journey.mjs` also records video of the whole run.
