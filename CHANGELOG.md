@@ -2,6 +2,78 @@
 
 ## Unreleased
 
+### Running a simulation needs no Python — **breaking**
+
+The extension runs `general-simulator` itself. Pressing Run compiles the sheet
+in the webview, posts the netlist text to the extension host, and the host
+resolves the binary, spawns it with `--format samples --events`, streams its
+stdout and stderr to VS Code's Output panel as they arrive, reads the rule
+events it reported, and writes a `.gsim_sim_result` beside the `.gsim_samples`
+container the solver produced (#159).
+
+**What changes for an install.** `omniSchematics.generalSimulatorPath` is the
+only setting a run reads. `omniSchematics.kernelPython` is no longer required
+for anything in a simulation — a machine with no Python at all now opens an
+example and runs it. The kernel is still started when that setting is set, for
+the status indicator and to read a signal out of a run it already holds; #162
+deletes the sidecar entirely.
+
+The `generalSimulatorPath` setting also stops apologising for itself. Its
+description used to say the path "is handed to the simulation kernel **after**
+the kernel has started, so it cannot start one by itself: if
+`omniSchematics.kernelPython` is unset, the kernel never starts and nothing
+here is ever read." There is no kernel to start first, so it is read on the
+first Run of a session and means what it says.
+
+**What changes while you work.**
+
+- A Run that cannot find the binary names every place it looked and the `cargo`
+  line that builds one, in the Output panel, which is revealed rather than left
+  closed.
+- The solver's stdout and stderr arrive as two labelled streams instead of one
+  merged blob — #139 step 3, free once the spawn is local.
+- The exact command line is printed before the run, so a failure can be
+  reproduced by pasting it into a terminal.
+- What the run *found* — a rating exceeded, a dead time too short — reaches the
+  Problems panel, and the worst severity among those events, not the exit
+  status, decides whether you are told "finished" or "finished with errors". A
+  run can exit 0 having found an error. Nothing read that file before #182, and
+  before #159 nothing even asked the solver to write it, so every finding of
+  every run was discarded into a temporary directory (#68).
+- Stop signals the solver process. It used to close the kernel socket and leave
+  the solver running as the sidecar's child.
+- Each run writes `.gsim/runs/<run id>/` beside the schematic: the netlist, the
+  container, the event log and the result document. Nothing removes an old one
+  yet (#186).
+
+**Two narrowings, named rather than glossed.**
+
+- **A completed run does not plot itself.** The samples are in the container and
+  teaching the waveform store to read one is #163. The run says where it wrote
+  the result, and that file is complete and self-describing.
+- **Only transient analyses run.** `general-simulator --mode` takes `dc` or
+  `transient`; the editor's dropdown also offers AC, DC sweep and OP, which the
+  sidecar used to hand to ngspice or Xyce. A non-transient analysis is now
+  refused by name rather than run as something else (#184).
+
+Also fixed here because the run path walks straight into it: pressing Run used
+to open the bottom panel onto `core.output`, an id **nothing registered**, so
+the panel rendered empty — tab strip included, leaving no way to click across to
+Problems (#170). There is a real Output tab again.
+
+`omniSchematics.solverTimeoutSeconds` is new: abandon a run still going after
+that long, `0` to wait indefinitely.
+
+One correction found while wiring CI to a real binary: every instruction in
+this repository for getting a solver — the setting's description, the README,
+and the message a failed Run prints — said "clone
+GLODI-Engineering/general-simulator and `cargo build`". That does not work. Its
+workspace depends on three sibling repositories by path
+(`gs-waveform-measurements`, `general-mna`, `spice-lsp`), so cargo stops at
+`failed to load manifest for dependency` before compiling anything. All three
+places now point at a release build first and name the siblings with the
+source build.
+
 ### The editor compiles its own schematic — **breaking**
 
 Pressing Run used to send the whole document to the Python kernel, which

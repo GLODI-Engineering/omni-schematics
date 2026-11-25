@@ -1,58 +1,43 @@
+/**
+ * The Run button, end to end.
+ *
+ * ## Where a run happens now (#159)
+ *
+ * The editor compiles, the extension host runs the solver. Both halves are
+ * local: `../engine/engine.ts` is `gsim-core` built to WebAssembly, and
+ * `run-host.ts` posts the netlist to a host that resolves the
+ * `general-simulator` binary, spawns it and writes the result document beside
+ * the container it produced. Nothing in the path is a Python process, which is
+ * the whole of the milestone this belongs to.
+ *
+ * What used to be here: a WebSocket to a kernel sidecar whose job was to find
+ * that same binary, spawn it, read what it printed and time it out — 794 lines
+ * of Python around a process the extension host was already placed to start.
+ * `apps/kernel-sidecar/` and the socket client are still in the tree; deleting
+ * them is #162, and the waveform store still reaches for the socket to fetch a
+ * signal's samples until #163 teaches it to read the container.
+ *
+ * ## Why a click must always answer
+ *
+ * Run used to begin by connecting to the kernel and returning bare if that
+ * failed, with the reason going to the Output panel — which starts hidden, so
+ * from the outside clicking Run did nothing at all (#130). An empty schematic
+ * was not checked anywhere, so that click did nothing either, for a different
+ * reason the user could not tell apart. Every path through this file ends in a
+ * toast, and the host answers every request it is sent, including with "I
+ * cannot find the solver, and here is everywhere I looked".
+ */
 import { compileSchematic, initEngine } from "../engine/engine";
-import { translateError } from "../ipc/error-map";
-import { getIpcClient, reconnectKernel } from "../ipc/transport";
-import type { ExecuteResult, SignalDetail, SimulateRequest } from "../ipc/types";
+import { getWebviewInit } from "../ipc/vscode-host";
 import { detectAnalysisTypeFromNetlist } from "../netlist/generate";
 import { publishCompilerNotes } from "../problems/compiler-notes";
-import { toAnalysisPayload } from "../simulation/SimSettings";
+import { publishRunEvents } from "../problems/run-events";
 import { useGraphStore, useIpcStore, useUiStore } from "../store";
-import { analysisToPayload } from "../store/model";
 import { useSimSettingsStore } from "../store/sim-settings";
 import { useToastStore } from "../store/toast";
-import { useWaveformStore } from "../store/waveform";
+import type { RunRequest, RunResult } from "./run-host";
+import { cancelRun, requestRun } from "./run-host";
 import { type RunOutputSource, reportRunLine, reportRunOutput } from "./run-output";
-
-// If the backend never answers a simulate request at all — hung solver
-// process, a crash that doesn't reach the point of sending simulate_result,
-// a netlist card the solver can't handle and just stalls on — the request
-// promise never settles, and without this the Run button stays on "Stop"
-// forever with zero feedback (reported live against an imported netlist
-// using an obsolete BSIM2 level=5 .model card). This bounds that: after
-// EXECUTE_TIMEOUT_MS with no response, cancel and surface a real error
-// instead of hanging indefinitely. Generous on purpose — a legitimate
-// large TRAN sweep can genuinely take a while — but "stuck forever" is
-// strictly worse than "gives up after 2 minutes with an explanation."
-const EXECUTE_TIMEOUT_MS = 120_000;
-
-function executeWithTimeout(payload: SimulateRequest): Promise<ExecuteResult> {
-  return new Promise<ExecuteResult>((resolve, reject) => {
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      getIpcClient().cancel();
-      reject(
-        new Error(
-          `No response from the backend after ${Math.round(EXECUTE_TIMEOUT_MS / 1000)}s — the solver may have hung or crashed without reporting an error (e.g. an unsupported .model card). Cancelled automatically.`,
-        ),
-      );
-    }, EXECUTE_TIMEOUT_MS);
-    getIpcClient()
-      .execute(payload)
-      .then((result) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(result);
-      })
-      .catch((error: unknown) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        reject(error);
-      });
-  });
-}
 
 /**
  * Turn the sheet into netlist text, here, with the engine.
@@ -67,13 +52,13 @@ function executeWithTimeout(payload: SimulateRequest): Promise<ExecuteResult> {
  *
  * Three consequences worth stating, because each was a reported failure:
  *
- *   - a document that does not compile says so **before** a kernel is
+ *   - a document that does not compile says so **before** the host is
  *     involved, with the engine's own message (`floating-port`,
  *     `unknown-type`), instead of arriving as a `CompileError` from a process
  *     that may not even have the compiler installed (#147);
  *   - the compiler's notes — the DC references it adds for nodes nothing else
- *     ties down — are in hand at compile time rather than riding back on
- *     `simulate_result`, so they are shown whether or not the solve succeeds;
+ *     ties down — are in hand at compile time rather than riding back on a
+ *     result, so they are shown whether or not the solve succeeds;
  *   - the netlist is in the Output panel for every run, not only for an
  *     imported one.
  *
@@ -90,7 +75,7 @@ async function netlistForRun(): Promise<string | null> {
   } catch (error) {
     // A webview whose CSP forbids WebAssembly, or a .vsix packaged without the
     // module. Named as its own failure because the fix is nothing to do with
-    // the document or the kernel.
+    // the document or the solver.
     reportRunFailure(
       "The schematic compiler did not load",
       error instanceof Error ? error.message : String(error),
@@ -130,6 +115,17 @@ async function netlistForRun(): Promise<string | null> {
   }
 }
 
+/**
+ * The document this webview is editing, for the result to name.
+ *
+ * The URI, not the model's display name: `run.source` in a `.gsim_sim_result`
+ * is specified as the workspace-relative path of the `.gsim_sch` it came from,
+ * and the host is the only side that knows where the workspace root is.
+ */
+function documentUri(): string | undefined {
+  return getWebviewInit()?.documentUri;
+}
+
 function directNetlistFromMetadata(): string | null {
   const metadata = useGraphStore.getState().document.model.metadata as Record<string, unknown>;
   const netlist = metadata?.spice_netlist;
@@ -141,38 +137,6 @@ function hasValidationErrors(): boolean {
   return document.model.wires.some((wire) => wire.from.block === wire.to.block);
 }
 
-/**
- * Build the analysis portion of the simulate payload.
- *
- * Priority:
- *   1. If `analysisId` is given, look up that analysis in model.simulation.analyses.
- *   2. If model.simulation has analyses, use default_analysis (or first).
- *   3. Fall back to the legacy sim-settings store (v1 compatibility).
- */
-function buildAnalysisPayload(analysisId?: string): Record<string, unknown> {
-  const simulation = useGraphStore.getState().document.model.simulation;
-  const analyses = simulation?.analyses ?? [];
-
-  if (analyses.length > 0) {
-    const targetId = analysisId ?? simulation?.default_analysis ?? analyses[0]?.id;
-    const analysis = analyses.find((a) => a.id === targetId) ?? analyses[0];
-    if (analysis) {
-      // analysis is typed with an index signature so fields are ParamValue-wide
-      return analysisToPayload(analysis);
-    }
-  }
-
-  // v1 fallback
-  return toAnalysisPayload(useSimSettingsStore.getState().settings);
-}
-
-/**
- * FE-154: called at the start of every Run action. If the kernel isn't
- * connected, tells the user what's happening and actually attempts to
- * bring the backend up (or back up) instead of letting the click either
- * hang or fail with a stale/confusing error. Returns false if the caller
- * should bail (reconnectKernel() already reported the specific failure).
- */
 /** True when the sheet holds at least one block for a netlist to describe. */
 export function hasAnythingToSimulate(): boolean {
   const model = useGraphStore.getState().document.model;
@@ -180,52 +144,33 @@ export function hasAnythingToSimulate(): boolean {
 }
 
 /**
- * Connect if needed, and on failure hand back the reason rather than a bare
- * false.
+ * The analysis the editor is asking for, and whether this solver can run it.
  *
- * #130: this used to `catch {}` and return false, on the grounds that
- * `reconnectKernel()` had already written the reason to Output and Problems.
- * Both of those live in the bottom panel, which starts hidden -- so the caller
- * could only offer "see the Output panel for why", and the one sentence that
- * would have explained everything ("kernelPython is not set, so there is no
- * Python environment to start the kernel from") stayed hidden. The reason now
- * travels with the failure.
+ * `general-simulator --mode` takes `dc` or `transient` and that is the whole
+ * of its analysis surface: there is no AC sweep, no DC sweep over a source,
+ * and `solver-run.ts` builds a transient command line. The editor's analysis
+ * dropdown still offers AC, DC and OP, because the sidecar used to hand those
+ * to ngspice or Xyce.
+ *
+ * So a non-transient analysis is refused here, by name, rather than being sent
+ * as a transient run that would answer a question nobody asked. That is a
+ * narrowing against the sidecar and it is #184.
  */
-type KernelConnection = { ok: true } | { ok: false; reason: string };
-
-async function ensureKernelConnected(): Promise<KernelConnection> {
-  const status = useIpcStore.getState().status;
-  if (status === "idle" || status === "busy" || status === "connecting") {
-    // "connecting" is already handled transparently by getIpcClient()'s
-    // proxy — execute() will wait for it, no need to kick off another one.
+function transientOrRefuse(analysisType: string): { ok: true } | { ok: false; reason: string } {
+  const normalised = analysisType.toUpperCase();
+  if (normalised === "TRAN" || normalised === "TRANSIENT") {
     return { ok: true };
   }
-
-  useIpcStore.getState().appendOutput("Kernel is disconnected — connecting to the kernel sidecar…");
-  try {
-    await reconnectKernel();
-    return { ok: true };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    useIpcStore.getState().appendOutput(`Kernel did not start: ${reason}`);
-    return { ok: false, reason };
-  }
+  return {
+    ok: false,
+    reason:
+      `This analysis is ${normalised}, and the general-simulator binary the editor runs ` +
+      "takes --mode dc or --mode transient only — it has no AC sweep, no DC sweep over a " +
+      "source, and no operating-point output. Set the analysis to transient, or run the " +
+      "deck yourself with a solver that has one.",
+  };
 }
 
-/**
- * Trigger a simulation run using the default analysis (or fall back to v1 settings).
- */
-/**
- * Why a click must always answer.
- *
- * Run used to begin by connecting to the kernel and returning bare if that
- * failed. The reason went to the Output panel, which is not necessarily
- * open — so from the outside, clicking Run did nothing at all. An empty
- * schematic was not checked anywhere, so that click did nothing either,
- * and for a different reason the user had no way to tell apart.
- *
- * Both now say so where the click happened.
- */
 /**
  * Tell the user a run failed, somewhere they will actually see it.
  *
@@ -251,7 +196,7 @@ function reportRunFailure(
   reportRunLine(source, "error", full);
   useIpcStore.getState().setProblems([{ id: "solver-1", severity: "error", message: full }]);
   useUiStore.getState().focusBottomTab("core.problems");
-  // First line only: a SolverUnavailable answer is a whole paragraph of build instructions,
+  // First line only: a SolverNotFound answer is a whole paragraph of build instructions,
   // and the toast's job is to say that the run failed and roughly why, not to carry all of it.
   const firstLine = full.split("\n")[0] ?? full;
   useToastStore
@@ -262,10 +207,68 @@ function reportRunFailure(
     );
 }
 
+/**
+ * Send one request to the host and report whatever comes back.
+ *
+ * The only place a run's outcome is turned into words, so `triggerRun` and
+ * `triggerRunAnalysis` cannot drift apart in what they tell the user — which
+ * they had, one of them reporting a failed run as an empty plot.
+ */
+async function runOnHost(request: RunRequest): Promise<void> {
+  const ipc = useIpcStore.getState();
+  ipc.appendOutput("── Running the solver… ────────────────────────────");
+  ipc.setSimProgress(0, "Starting simulation…");
+  // The webview's own Output tab, which exists again (#170) and is the only
+  // one a browser-hosted shell has.
+  useUiStore.getState().focusBottomTab("core.output");
+
+  const result: RunResult = await requestRun(request);
+  useIpcStore.getState().setSimProgress(null);
+
+  if (!result.ok) {
+    reportRunFailure(result.summary, result.detail);
+    return;
+  }
+
+  // Findings before the verdict: a run can exit 0 having found a rating
+  // exceeded, and `worstSeverity` — not the exit status — is what decides
+  // which of the two sentences below the user gets.
+  publishRunEvents(result.events, { total: result.eventsTotal });
+
+  const store = useIpcStore.getState();
+  for (const text of [
+    `── Simulation complete (${result.signals.length} signals, ${result.rows} samples each) ──`,
+    `Result: ${result.resultPath}`,
+    `Samples: ${result.samplesPath} (${result.samplesBytes} bytes)`,
+  ]) {
+    store.appendOutput(text);
+  }
+  reportRunLine("solver", "info", `result written to ${result.resultPath}`);
+
+  const bad = result.worstSeverity === "error" || result.worstSeverity === "fatal";
+  const findings =
+    result.eventsTotal === 0 ? "" : ` — ${result.eventsTotal} finding(s), see Problems`;
+  useToastStore
+    .getState()
+    .pushToast(
+      bad
+        ? `Simulation finished with errors${findings}`
+        : `Simulation finished: ${result.signals.length} signals, ${result.rows} samples${findings}`,
+      bad ? 8000 : 5000,
+    );
+  if (bad) {
+    useUiStore.getState().focusBottomTab("core.problems");
+  }
+}
+
+/**
+ * Trigger a simulation run using the default analysis (or fall back to v1
+ * settings).
+ */
 export async function triggerRun(): Promise<void> {
   const importedNetlist = useIpcStore.getState().importedNetlist;
 
-  // Checked before connecting: there is no point starting a kernel to
+  // Checked before anything is started: there is no point spawning a solver to
   // simulate nothing, and "the schematic is empty" is a better answer than
   // whatever a solver says about a netlist with no components in it.
   if (!importedNetlist && !hasAnythingToSimulate()) {
@@ -285,24 +288,25 @@ export async function triggerRun(): Promise<void> {
   }
 
   const settings = useSimSettingsStore.getState().settings;
-
   const ipc = useIpcStore.getState();
+  let netlist: string;
+  let analysis: string;
 
-  let payload: SimulateRequest;
-
-  // Compiled before the kernel is touched, and this ordering is the point of
+  // Compiled before the solver is touched, and this ordering is the point of
   // #158. The compiler is in the editor now, so a document that cannot
   // compile is answered by the editor — instantly, with the engine's own
-  // message — rather than by starting a Python process, sending the document
-  // to it and waiting to be told that the process has no compiler installed
-  // (#147's failure, and the longest route to the shortest answer).
+  // message — rather than by starting a process, sending the document to it
+  // and waiting to be told that the process has no compiler installed (#147's
+  // failure, and the longest route to the shortest answer).
   if (importedNetlist) {
-    // File > Import SPICE netlist… — send the file verbatim. Its own
-    // .TRAN/.AC/.DC/.control cards govern execution; analysis_type/t_end/
-    // t_step below are bookkeeping only (see NgspiceSolver/XyceSolver.solve,
-    // which run the netlist text as-is and never rewrite its analysis card).
-    // A genuinely different, still-legitimate use case (the user explicitly
-    // imported someone else's SPICE deck) — unaffected by the bypass below.
+    // File > Import SPICE netlist… — send the file verbatim.
+    //
+    // One thing changed here with #159 and it is worth being plain about: the
+    // sidecar ran an imported deck through ngspice or Xyce, which honour the
+    // deck's own .TRAN/.AC/.DC cards. `general-simulator` takes its analysis
+    // from the command line, so those cards are *not* read and the editor's
+    // t_end/t_step govern the run. A deck whose language this engine does not
+    // speak is answered by the engine's own parse error.
     ipc.appendOutput("── SPICE Netlist ──────────────────────────────────");
     ipc.appendOutput(`(imported netlist, ${importedNetlist.split("\n").length} lines)`);
     for (const line of importedNetlist.split("\n")) {
@@ -310,95 +314,36 @@ export async function triggerRun(): Promise<void> {
     }
     ipc.appendOutput("");
     ipc.setLastNetlist(importedNetlist);
-
-    payload = {
-      type: "simulate",
-      netlist: importedNetlist,
-      // For an imported netlist, the UI's analysis-type dropdown reflects
-      // whatever it was last set to, not what the netlist's own .tran/.ac/
-      // .dc/.noise card actually runs — and the backend tags every signal's
-      // manifest metadata (axis labels, Bode-mode detection, units) using
-      // this field. Detect it from the netlist itself so an imported AC/DC/
-      // NOISE circuit doesn't get mislabeled as a transient result.
-      analysis_type: detectAnalysisTypeFromNetlist(importedNetlist),
-      t_end: settings.tEnd,
-      t_step: settings.tStep,
-    };
+    netlist = importedNetlist;
+    analysis = detectAnalysisTypeFromNetlist(importedNetlist);
   } else {
     // The ordinary case: compile here, with the engine, and send the netlist.
     // Not this file's own older `generateNetlist()` — a separate, ngspice-only
     // writer that predates the general-simulator catalogue and reports every
     // general-simulator block type as "UNSUPPORTED" — but `gsim-core` itself,
     // compiled to WebAssembly (#158).
-    const netlist = await netlistForRun();
-    if (netlist === null) {
+    const compiled = await netlistForRun();
+    if (compiled === null) {
       return;
     }
-    payload = {
-      type: "simulate",
-      netlist,
-      analysis_type: settings.analysisType as SimulateRequest["analysis_type"],
-      t_end: settings.tEnd,
-      t_step: settings.tStep,
-    };
+    netlist = compiled;
+    analysis = settings.analysisType;
   }
 
-  const connection = await ensureKernelConnected();
-  if (!connection.ok) {
-    // The host's own diagnosis, in the toast, where the click happened.
-    reportRunFailure("Could not start the simulation kernel", connection.reason, "kernel");
+  const supported = transientOrRefuse(analysis);
+  if (!supported.ok) {
+    reportRunFailure("This solver cannot run that analysis", supported.reason);
     return;
   }
 
-  useUiStore.getState().focusBottomTab("core.output");
-
-  try {
-    ipc.appendOutput("── Sending to backend… ────────────────────────────");
-    useIpcStore.getState().setSimProgress(0, "Starting simulation…");
-
-    const result = await executeWithTimeout(payload);
-
-    useIpcStore.getState().setSimProgress(null);
-
-    if (result.status === "error") {
-      reportRunFailure(result.chunks?.[0] ?? "Simulation failed");
-      return;
-    }
-
-    useIpcStore.getState().setLastManifest(result.manifest);
-    useIpcStore.getState().setDcOpTable(result.dc_op_table ?? null);
-
-    for (const chunk of result.chunks ?? []) {
-      useIpcStore.getState().appendOutput(chunk);
-    }
-    // Labelled `solver` for now, and plainly incomplete. Telling a compiler
-    // diagnostic apart from a solver message needs the kernel to say which it
-    // is -- `chunks` is `string[]` on the wire and carries nothing to
-    // distinguish them (#139 steps 2 and 3). Guessing from the text would be
-    // worse than saying "solver" and being visibly unfinished.
-    reportRunOutput(
-      (result.chunks ?? []).map((chunk) => ({
-        source: "solver" as const,
-        severity: "info" as const,
-        text: chunk,
-      })),
-    );
-
-    useIpcStore
-      .getState()
-      .appendOutput(`── Simulation complete (${result.manifest.signals.length} signals) ──`);
-
-    _populateWaveformViewer(result.manifest);
-    useIpcStore.getState().setActiveEditorTab("core.waveform");
-  } catch (error) {
-    useIpcStore.getState().setSimProgress(null);
-    // translated.summary is a short, generic category (a connection failure and a numerical
-    // convergence failure fall through to the same "Solver error" summary), so the details are
-    // always carried too — otherwise an unreachable kernel is indistinguishable from a solver
-    // crash.
-    const translated = translateError(error instanceof Error ? error.message : String(error));
-    reportRunFailure(translated.summary, translated.details);
-  }
+  await runOnHost({
+    mode: "transient",
+    netlist,
+    tEnd: settings.tEnd,
+    tStep: settings.tStep,
+    analysis: "TRAN",
+    source: documentUri(),
+  });
 }
 
 /**
@@ -422,228 +367,70 @@ export async function triggerRunAnalysis(analysisId: string): Promise<void> {
     return;
   }
 
-  // Compiled before the kernel, same as `triggerRun` and for the same reason.
+  // Compiled before the solver, same as `triggerRun` and for the same reason.
   // `metadata.spice_netlist` still wins when it is there: a document carrying
-  // one is an imported deck whose own analysis cards govern the run, and there
-  // is nothing for the engine to compile.
+  // one is an imported deck, and there is nothing for the engine to compile.
   const directNetlist = directNetlistFromMetadata();
   const netlist = directNetlist ?? (await netlistForRun());
   if (netlist === null) {
     return;
   }
 
-  const connection = await ensureKernelConnected();
-  if (!connection.ok) {
-    // The host's own diagnosis, in the toast, where the click happened.
-    reportRunFailure("Could not start the simulation kernel", connection.reason, "kernel");
+  const analysis = namedAnalysis(analysisId);
+  const supported = transientOrRefuse(analysis.type);
+  if (!supported.ok) {
+    reportRunFailure("This solver cannot run that analysis", supported.reason);
     return;
   }
 
-  try {
-    const payload: SimulateRequest = {
-      type: "simulate",
-      netlist,
-      ...buildAnalysisPayload(analysisId),
-    };
-
-    useIpcStore.getState().setSimProgress(0, "Starting simulation…");
-
-    const result = await executeWithTimeout(payload);
-
-    useIpcStore.getState().setSimProgress(null);
-
-    // This path had no error check at all: a failed run set the empty manifest the client
-    // resolves errors with and switched to the waveform tab, so the user was shown an empty
-    // plot instead of the reason.
-    if (result.status === "error") {
-      reportRunFailure(result.chunks?.[0] ?? "Simulation failed");
-      return;
-    }
-
-    useIpcStore.getState().setLastManifest(result.manifest);
-    useIpcStore.getState().setDcOpTable(result.dc_op_table ?? null);
-    useIpcStore.getState().setActiveEditorTab("core.waveform");
-    for (const chunk of result.chunks ?? []) {
-      useIpcStore.getState().appendOutput(chunk);
-    }
-    // Labelled `solver` for now, and plainly incomplete. Telling a compiler
-    // diagnostic apart from a solver message needs the kernel to say which it
-    // is -- `chunks` is `string[]` on the wire and carries nothing to
-    // distinguish them (#139 steps 2 and 3). Guessing from the text would be
-    // worse than saying "solver" and being visibly unfinished.
-    reportRunOutput(
-      (result.chunks ?? []).map((chunk) => ({
-        source: "solver" as const,
-        severity: "info" as const,
-        text: chunk,
-      })),
-    );
-    _populateWaveformViewer(result.manifest);
-  } catch (error) {
-    useIpcStore.getState().setSimProgress(null);
-    const translated = translateError(error instanceof Error ? error.message : String(error));
-    reportRunFailure(translated.summary, translated.details);
-  }
+  await runOnHost({
+    mode: "transient",
+    netlist,
+    tEnd: analysis.tEnd,
+    tStep: analysis.tStep,
+    analysis: "TRAN",
+    source: documentUri(),
+  });
 }
 
+/**
+ * The analysis to run, by id, falling back the way the payload builder did.
+ *
+ * Priority, unchanged: the named analysis, then the document's default (or its
+ * first), then the legacy sim-settings store that a v1 document has instead of
+ * a `simulation` block.
+ */
+function namedAnalysis(analysisId?: string): { type: string; tEnd: number; tStep: number } {
+  const simulation = useGraphStore.getState().document.model.simulation;
+  const analyses = simulation?.analyses ?? [];
+  const settings = useSimSettingsStore.getState().settings;
+
+  if (analyses.length > 0) {
+    const targetId = analysisId ?? simulation?.default_analysis ?? analyses[0]?.id;
+    const analysis = analyses.find((entry) => entry.id === targetId) ?? analyses[0];
+    if (analysis) {
+      return {
+        type: String(analysis.type ?? "TRAN"),
+        // A transient analysis carries both; anything else is refused before
+        // these are read, so the fallbacks are for a malformed document rather
+        // than for another analysis type.
+        tEnd: typeof analysis.t_end === "number" ? analysis.t_end : settings.tEnd,
+        tStep: typeof analysis.t_step === "number" ? analysis.t_step : settings.tStep,
+      };
+    }
+  }
+  return { type: settings.analysisType, tEnd: settings.tEnd, tStep: settings.tStep };
+}
+
+/**
+ * Stop the run in flight.
+ *
+ * The host signals the solver process. This used to close the kernel socket,
+ * which left the solver running as the sidecar's own child.
+ */
 export function triggerCancel(): void {
-  getIpcClient().cancel();
+  cancelRun();
 }
 
 export const run = triggerRun;
 export const cancel = triggerCancel;
-
-// FE-158: cap how many signals share one axes. Dumping every signal from a
-// many-signal run onto a single axes (the pre-FE-158 behavior) put up to
-// 24 signals — each up to 300k+ points in a real run — on one uPlot
-// instance, which combined with the render path fixed in FE-159 was the
-// root cause of the reported freeze/crash when the user later viewed that
-// figure.
-const MAX_SIGNALS_PER_AXES = 8;
-
-/**
- * Best-effort SPICE-convention quantity guess from a signal's name alone
- * (v(...) / i(...) / p(...)), used only to decide which axes a signal
- * lands on. The *authoritative* quantity comes from each signal's own
- * metadata, resolved asynchronously per-signal by fetchSignal() — too late
- * to drive this synchronous layout decision without pre-fetching every
- * signal's data before laying out axes at all, which is a larger change
- * than this fix warrants (see FE-158 in progress.frontend.yaml).
- */
-function _quantityHeuristic(signalName: string): string {
-  const lower = signalName.toLowerCase();
-  if (lower.startsWith("v(")) return "voltage";
-  if (lower.startsWith("i(")) return "current";
-  if (lower.startsWith("p(")) return "power";
-  return "signal";
-}
-
-/** Group signal names by heuristic quantity, then chunk each group to MAX_SIGNALS_PER_AXES. */
-function _groupSignalsIntoAxes(signalNames: string[]): string[][] {
-  const groups = new Map<string, string[]>();
-  for (const name of signalNames) {
-    const quantity = _quantityHeuristic(name);
-    const bucket = groups.get(quantity);
-    if (bucket) {
-      bucket.push(name);
-    } else {
-      groups.set(quantity, [name]);
-    }
-  }
-
-  const axesGroups: string[][] = [];
-  for (const names of groups.values()) {
-    for (let i = 0; i < names.length; i += MAX_SIGNALS_PER_AXES) {
-      axesGroups.push(names.slice(i, i + MAX_SIGNALS_PER_AXES));
-    }
-  }
-  return axesGroups;
-}
-
-/**
- * After a successful simulation, ensure the P22 waveform viewer has a figure
- * ready, then distribute the returned signals across a grid of axes within
- * it — grouped by heuristic quantity and capped at MAX_SIGNALS_PER_AXES per
- * axes (FE-158) — instead of piling every signal onto a single axes.
- *
- * Strategy:
- *   - Use the first existing figure; create one named after the sim if none exists.
- *   - Group signal names (_groupSignalsIntoAxes) and grow/shrink the figure's
- *     grid (row-major) to fit the resulting axes groups.
- *   - Reuse an existing axes already at a given (row, col) when one is still
- *     needed there (keeps axes identity — and any user zoom/coupling state
- *     on it — stable across re-runs with the same layout); create new axes
- *     for grid positions that need one; delete leftover axes from a larger
- *     previous layout that the new one no longer uses.
- *   - Fire-and-forget HTTP fetches for each signal; Axes re-renders when data lands.
- *
- * Runs for *every* completed simulation, including one whose manifest
- * reports zero signals (e.g. an imported netlist with no nodes the backend
- * recognizes as probe-worthy) — skipping the reset in that case used to
- * leave whatever the previous run's axes were still displaying on screen,
- * with nothing indicating those traces were stale instead of belonging to
- * the run that had just completed (FE-146). Only bails out early when there
- * is no existing figure AND nothing to plot — no point creating an empty one.
- */
-function _populateWaveformViewer(
-  manifest: { sim_id: string; signals: string[]; details?: SignalDetail[] } | null | undefined,
-): void {
-  if (!manifest) return;
-
-  const store = useWaveformStore.getState();
-  const simId = manifest.sim_id;
-
-  // What the run says about its own signals, before anything is drawn. A
-  // signal that streamed live is in the cache already, carrying the
-  // placeholder metadata a chunk frame could supply; this is the only moment
-  // the real analysis, unit and producing block are in hand.
-  if (manifest.details && manifest.details.length > 0) {
-    store.applySignalMetadata(simId, manifest.details);
-  }
-
-  // Move the outgoing run into the history before its axes are repopulated.
-  // Its samples stay in the cache under their own sim id, so an axes set to
-  // show past runs can draw it behind the new one.
-  store.beginRun(simId);
-
-  if (store.figures.size === 0 && manifest.signals.length === 0) return;
-
-  // Resolve or create the target figure.
-  let figureId: string;
-  if (store.figures.size === 0) {
-    figureId = store.createFigure("Simulation", 1, 1);
-  } else {
-    figureId = store.figures.keys().next().value as string;
-  }
-
-  const axesGroups = _groupSignalsIntoAxes(manifest.signals);
-  // A zero-signal run still needs one (empty) axes so FE-146's stale-trace
-  // clearing keeps working — resetAxesSignals([]) below empties it.
-  if (axesGroups.length === 0) axesGroups.push([]);
-
-  const cols = Math.max(1, Math.ceil(Math.sqrt(axesGroups.length)));
-  const rows = Math.max(1, Math.ceil(axesGroups.length / cols));
-
-  // Snapshot which axes already occupy which (row, col) in this figure
-  // before resizing/repopulating, so positions that are still needed in the
-  // new layout can reuse their existing axes id instead of being recreated.
-  const figureBefore = useWaveformStore.getState().figures.get(figureId);
-  const existingByPos = new Map<string, string>();
-  if (figureBefore) {
-    for (const axesId of figureBefore.axesIds) {
-      const ax = useWaveformStore.getState().axes.get(axesId);
-      if (ax) existingByPos.set(`${ax.row},${ax.col}`, axesId);
-    }
-  }
-
-  // Grow/shrink the grid — drops any axes that fall outside the new bounds.
-  useWaveformStore.getState().resizeFigure(figureId, rows, cols);
-
-  const usedPositions = new Set<string>();
-  axesGroups.forEach((signalNames, idx) => {
-    const row = Math.floor(idx / cols);
-    const col = idx % cols;
-    const posKey = `${row},${col}`;
-    usedPositions.add(posKey);
-
-    const reusableId = existingByPos.get(posKey);
-    const axesId =
-      reusableId && useWaveformStore.getState().axes.has(reusableId)
-        ? reusableId
-        : useWaveformStore.getState().createAxes(figureId, row, col);
-
-    useWaveformStore.getState().resetAxesSignals(
-      axesId,
-      signalNames.map((signalName) => ({ simId, signalName })),
-    );
-  });
-
-  // Clean up leftover axes from a previous, larger layout at positions the
-  // new layout no longer uses (still within the resized bounds, so
-  // resizeFigure didn't already drop them).
-  for (const [posKey, axesId] of existingByPos) {
-    if (!usedPositions.has(posKey) && useWaveformStore.getState().axes.has(axesId)) {
-      useWaveformStore.getState().deleteAxes(axesId);
-    }
-  }
-}

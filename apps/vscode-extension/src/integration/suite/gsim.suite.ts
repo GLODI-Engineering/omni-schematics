@@ -482,4 +482,118 @@ suite("Omni Schematics — VS Code integration", () => {
       ]);
     });
   });
+
+  // -------------------------------------------------------------------------
+  suite("Run goes all the way to a result, with no Python (#159)", () => {
+    /**
+     * The claim this suite exists to check, end to end, in one go:
+     *
+     *   the webview compiles -> posts the netlist -> the extension host
+     *   resolves `general-simulator`, spawns it, streams its two streams to
+     *   the Output channel, reads its event log, writes the result document
+     *   -> the webview is told where it landed.
+     *
+     * Nothing in that sentence is a Python process, and nothing here starts
+     * one: `omniSchematics.autoStartKernel` is false in this workspace and the
+     * kernel is never touched.
+     *
+     * Skipped, loudly, without a binary. `GSIM_GENERAL_SIMULATOR_PATH` names
+     * one, and the launcher puts it in the workspace's own
+     * `omniSchematics.generalSimulatorPath` -- the rung a user actually sets.
+     */
+    const solver = process.env.GSIM_GENERAL_SIMULATOR_PATH;
+    const example = path.join(workspaceDir(), "buck_converter.gsim_sch");
+
+    suiteSetup(async function suiteSetup(this: Mocha.Context) {
+      if (!solver || !fs.existsSync(solver) || !fs.existsSync(example)) {
+        console.log(
+          "[integration] skipping the run suite: set GSIM_GENERAL_SIMULATOR_PATH to a " +
+            "general-simulator binary to exercise it",
+        );
+        this.skip();
+      }
+      // One schematic webview at a time: `webviewFor("schematic")` hands back
+      // the first registered, so leaving the empty `sample.gsim_sch` open
+      // would have the probe drive that one instead of the example.
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      const deadline = Date.now() + 10_000;
+      while (api.readyRoles().includes("schematic") && Date.now() < deadline) {
+        await sleep(100);
+      }
+      await vscode.commands.executeCommand(
+        "vscode.openWith",
+        vscode.Uri.file(example),
+        SCHEMATIC_VIEW_TYPE,
+      );
+      await api.waitForWebview("schematic");
+    });
+
+    test("pressing Run leaves a complete result on disk", async () => {
+      const before = api.runOutput().length;
+      const report = await api.probe<{
+        toasts: string[];
+        output: string[];
+        problems: { severity: string; message: string }[];
+        netlist: string | null;
+      }>("schematic", "run", {}, 120_000);
+
+      // The editor compiled it, in WebAssembly, in this webview.
+      assert.ok(report.netlist, "the webview compiled a netlist");
+      assert.match(report.netlist as string, /^vin /m, "the netlist is the buck converter's");
+
+      assert.ok(
+        report.toasts.some((message) => /Simulation finished/.test(message)),
+        `expected a finished toast, got ${JSON.stringify(report.toasts)}`,
+      );
+
+      // The run directory, found rather than assumed: its name is a timestamp.
+      const runsDir = path.join(workspaceDir(), ".gsim", "runs");
+      const runs = fs.readdirSync(runsDir).sort();
+      assert.ok(runs.length > 0, "a run directory was created");
+      const run = path.join(runsDir, runs[runs.length - 1] as string);
+
+      const netlistOnDisk = fs.readFileSync(path.join(run, "netlist.cir"), "utf8");
+      assert.equal(
+        netlistOnDisk.trimEnd(),
+        (report.netlist as string).trimEnd(),
+        "the host ran exactly the netlist the webview compiled",
+      );
+
+      const samples = fs.statSync(path.join(run, "run.gsim_samples"));
+      assert.ok(samples.size > 10_000, `the container holds samples (${samples.size} bytes)`);
+
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(run, "result.gsim_sim_result"), "utf8"),
+      );
+      assert.equal(manifest.schema_version, 2);
+      assert.equal(manifest.data.kind, "samples");
+      assert.equal(manifest.data.path, "run.gsim_samples");
+      assert.equal(
+        manifest.run.source,
+        "buck_converter.gsim_sch",
+        "the result names the document it came from, workspace-relative",
+      );
+      assert.ok(manifest.signals.length > 0, "the manifest names the container's signals");
+      assert.deepEqual(
+        manifest.sweep,
+        { name: "t", unit: "s", domain: "time" },
+        "a transient run's sweep is simulated seconds",
+      );
+
+      // And the solver's own output reached the VS Code channel, labelled.
+      const written = api.runOutput().slice(before);
+      assert.ok(
+        written.some((entry) => entry.text.includes("[compile]")),
+        "the compile was reported",
+      );
+      assert.ok(
+        written.some((entry) => /\[solver\].*--format samples/.test(entry.text)),
+        `the exact command line was reported, got ${JSON.stringify(written.slice(0, 8))}`,
+      );
+      assert.ok(
+        written.some((entry) => entry.text.includes("result.gsim_sim_result")),
+        "the result's path was reported",
+      );
+    });
+  });
 });

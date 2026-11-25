@@ -13,6 +13,7 @@ import { registerLibraryActivity } from "./library/register";
 import type { ModelDocument, ParamValue } from "./model/types";
 import { generateNetlist } from "./netlist/generate";
 import { registerNetlistTab } from "./netlist/register";
+import { registerOutputSurface } from "./output/register";
 import { CommandPalette } from "./palette/CommandPalette";
 import { registerProblemsSurface } from "./problems/register";
 import { registerSearchActivity } from "./search/register";
@@ -81,6 +82,7 @@ function bootRegistries() {
   registerNetlistTab();
   registerWaveformTab();
   registerSymbolEditorTab();
+  registerOutputSurface();
   registerProblemsSurface();
   // A wire naming a port its block does not have is drawn anyway; without
   // this nothing ever says so.

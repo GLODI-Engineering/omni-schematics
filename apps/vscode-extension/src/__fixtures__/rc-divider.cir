@@ -1,0 +1,4 @@
+* A resistor divider with a capacitor, for a fixture: 20 rows, 3 signals.
+v1 n_in 0 10
+r1 n_in n_out 1000
+c1 n_out 0 1e-6

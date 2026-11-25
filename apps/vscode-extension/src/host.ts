@@ -23,18 +23,25 @@
  * every other webview; the schematic webview's drop handler falls back to that
  * value when `getData()` comes back empty (see `resolveDroppedBlock`).
  */
+import { type ChildProcess, spawn as spawnChild } from "node:child_process";
+import * as os from "node:os";
 import path from "node:path";
 
 import * as vscode from "vscode";
 
 import { KernelSidecar } from "./kernel";
+import { buildKernelEnvironment } from "./kernel-environment";
 import {
   type HostBoundMessage,
+  type RunRequest,
+  type RunResult,
   type WebviewBoundMessage,
   type WebviewRole,
   isHostBoundMessage,
 } from "./protocol";
 import { type LevelledChannel, createRunOutputChannel, writeRunOutput } from "./run-output";
+import { runSimulation } from "./run-simulation";
+import { resolveSolver } from "./solver-path";
 import {
   SYMBOLS_DIR,
   SymbolLibraryError,
@@ -48,6 +55,40 @@ interface RegisteredWebview {
   webview: vscode.Webview;
 }
 
+/** Beside `.gsim/symbols/`, so a workspace has one directory to know about. */
+export const RUNS_DIR = ".gsim/runs";
+
+/**
+ * A run's identity, and its directory's name.
+ *
+ * The timestamp, with the characters a file name cannot carry replaced: it
+ * sorts, it says when, and it is the `run.id` of the result document, which
+ * the schema describes as what "ties a result back to a log line".
+ */
+export function runIdFor(when: Date): string {
+  return `run-${when.toISOString().replaceAll(":", "-").replace(".", "-")}`;
+}
+
+/**
+ * The document a run came from, as the result schema wants it: "workspace-relative
+ * path of the .gsim_sch this came from".
+ *
+ * The webview sends a URI, because that is what it has, and only this side
+ * knows where the workspace root is. An unparseable value is dropped rather
+ * than written through: `source` is optional, and a result naming garbage is
+ * worse than one naming nothing.
+ */
+export function relativeSource(uri: string | undefined): string | undefined {
+  if (!uri) {
+    return undefined;
+  }
+  try {
+    return vscode.workspace.asRelativePath(vscode.Uri.parse(uri, true), false);
+  } catch {
+    return undefined;
+  }
+}
+
 export class GsimHost implements vscode.Disposable {
   readonly kernel: KernelSidecar;
   private readonly webviews = new Set<RegisteredWebview>();
@@ -55,6 +96,15 @@ export class GsimHost implements vscode.Disposable {
 
   /** sim id of the most recent finished simulation, for the waveform panel. */
   lastSimId: string | null = null;
+
+  /**
+   * Solver processes in flight, by the request id the webview is waiting on.
+   *
+   * Held so Stop can signal one. Not a queue: two Run clicks start two
+   * solvers, each in its own directory, and the second is not a reason to
+   * refuse or to cancel the first.
+   */
+  private readonly runningChildren = new Map<string, ChildProcess>();
 
   private readonly onShowWaveformsEmitter = new vscode.EventEmitter<void>();
   readonly onShowWaveforms = this.onShowWaveformsEmitter.event;
@@ -208,6 +258,133 @@ export class GsimHost implements vscode.Disposable {
     }
   }
 
+  /**
+   * Where a run's four files go: `.gsim/runs/<run id>/` in the open folder.
+   *
+   * Beside `.gsim/symbols/`, which is already this extension's corner of a
+   * workspace, so one directory is all a user has to know about or gitignore.
+   * A window with no folder open falls back to the system temp directory —
+   * such a run is a scratch experiment by definition, and refusing to run
+   * because nothing is saved anywhere would be a worse answer than a result
+   * in `/tmp` whose path is printed.
+   */
+  runDirectory(runId: string): string {
+    const workspace = symbolWorkspace();
+    return workspace
+      ? path.join(workspace.fsPath, RUNS_DIR, runId)
+      : path.join(os.tmpdir(), "omni-schematics-runs", runId);
+  }
+
+  /**
+   * Run a netlist the webview compiled, and answer where the result landed.
+   *
+   * The whole of #159 arrives here. Everything this calls was already in this
+   * directory, tested and wired to nothing: the only new decisions are which
+   * directory a run owns, what the child process is told about its
+   * environment, and that the reply always goes back on the channel the
+   * webview is waiting on.
+   */
+  private async runSimulationRequest(requestId: string, request: RunRequest): Promise<void> {
+    const runId = runIdFor(new Date());
+    const directory = this.runDirectory(runId);
+    const settings = vscode.workspace.getConfiguration("omniSchematics");
+    const workspaceRoot = symbolWorkspace()?.fsPath;
+    // 0 means wait indefinitely, which is a usable answer now that Stop
+    // signals the child: before #159 a cancel only closed the kernel socket
+    // and left the solver running, so the editor needed a deadline of its own.
+    const timeoutSeconds = settings.get<number>("solverTimeoutSeconds", 600);
+
+    const emit = (lines: Parameters<typeof writeRunOutput>[1]) =>
+      writeRunOutput(this.runOutput, lines);
+
+    emit([{ source: "solver", severity: "info", text: `── run ${runId} ──` }]);
+
+    let result: RunResult;
+    try {
+      result = await runSimulation(
+        { ...request, source: relativeSource(request.source) },
+        {
+          runDirectory: directory,
+          resolve: () =>
+            resolveSolver({
+              configured: settings.get<string>("generalSimulatorPath"),
+              workspaceRoot,
+            }),
+          // The settings' environment, the same one the kernel's children got:
+          // `octaveCliPath` is a directory on PATH because `octave-ffi` looks
+          // there and nowhere else, `pythonPath` reaches `pyblock`, and
+          // `environment` is the escape hatch. The solver used to inherit this
+          // from the sidecar that spawned it; it inherits it from here now.
+          spawn: (binary, args) =>
+            spawnChild(binary, args, {
+              cwd: directory,
+              env: buildKernelEnvironment({
+                base: process.env,
+                settings: {
+                  generalSimulatorPath: settings.get<string>("generalSimulatorPath"),
+                  octaveCliPath: settings.get<string>("octaveCliPath"),
+                  pythonPath: settings.get<string[]>("pythonPath"),
+                  environment: settings.get<Record<string, string>>("environment"),
+                },
+                workspaceRoot,
+              }),
+              stdio: ["ignore", "pipe", "pipe"],
+            }),
+          onChild: (child) => this.runningChildren.set(requestId, child),
+          onOutput: emit,
+          timeoutMs: timeoutSeconds > 0 ? timeoutSeconds * 1000 : undefined,
+        },
+      );
+    } catch (error) {
+      // Nothing in `runSimulation` rejects by design, so this is a bug rather
+      // than an outcome -- and a bug must still answer, or the Run button
+      // spins forever.
+      const detail = error instanceof Error ? error.message : String(error);
+      this.log.appendLine(`[run] ${requestId} threw: ${detail}`);
+      emit([
+        { source: "solver", severity: "error", text: `the run failed unexpectedly: ${detail}` },
+      ]);
+      result = {
+        ok: false,
+        kind: "could-not-start",
+        summary: "The run failed unexpectedly",
+        detail,
+      };
+    } finally {
+      this.runningChildren.delete(requestId);
+    }
+
+    if (!result.ok) {
+      // The panel, revealed. A `solver-not-found` is five lines naming where
+      // it looked and the command that builds a binary; written to a channel
+      // that is closed by default it would be invisible, which is the shape of
+      // #130 and #170 both.
+      this.runOutput.show?.(true);
+    }
+    this.broadcast({ type: "gsim/runResult", requestId, result });
+  }
+
+  /**
+   * Signal the child of a run in flight.
+   *
+   * `SIGTERM`, not `SIGKILL`, for the reason `solver-run.ts` gives: the
+   * container's footer is written last, so a politely stopped run leaves a
+   * file whose trailing magic is missing, which `samples-index.ts` reports as
+   * truncated rather than as rubbish.
+   */
+  private cancelRun(requestId: string): void {
+    const child = this.runningChildren.get(requestId);
+    if (!child) {
+      this.log.appendLine(`[run] nothing to cancel for ${requestId}`);
+      return;
+    }
+    this.log.appendLine(`[run] stopping ${requestId}`);
+    writeRunOutput(this.runOutput, [
+      { source: "solver", severity: "warning", text: "stopped at the user's request" },
+    ]);
+    child.kill("SIGTERM");
+  }
+
   /** Read the workspace's components and push them to every webview. */
   async publishSymbols(): Promise<void> {
     const symbols = await this.readSymbols();
@@ -304,6 +481,18 @@ export class GsimHost implements vscode.Disposable {
           { type: "gsim/insertBlock", blockName: message.blockName },
           { exclude: source, role: "schematic" },
         );
+        return true;
+
+      // --- running a simulation (#159) -----------------------------------
+      // The webview compiled the netlist; this runs the solver on it. The
+      // reply is broadcast rather than sent to `source`, for the same reason
+      // every other answer here is: a Run started from the schematic should
+      // still land if that webview was replaced while the solver was running.
+      case "gsim/runSimulation":
+        void this.runSimulationRequest(message.requestId, message.request);
+        return true;
+      case "gsim/cancelRun":
+        this.cancelRun(message.requestId);
         return true;
 
       case "gsim/simulationFinished":

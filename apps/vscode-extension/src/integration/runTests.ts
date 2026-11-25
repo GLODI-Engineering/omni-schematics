@@ -31,6 +31,14 @@ function makeWorkspace(): string {
         ...(process.env.GSIM_KERNEL_PYTHON
           ? { "omniSchematics.kernelPython": process.env.GSIM_KERNEL_PYTHON }
           : {}),
+        // #159: the extension runs the solver itself, so the run test needs a
+        // binary and nothing else -- no interpreter, no kernel. Named through
+        // the setting rather than left to `PATH`, because the setting is the
+        // rung a user actually sets and the one whose description used to have
+        // to apologise for being read too late to matter.
+        ...(process.env.GSIM_GENERAL_SIMULATOR_PATH
+          ? { "omniSchematics.generalSimulatorPath": process.env.GSIM_GENERAL_SIMULATOR_PATH }
+          : {}),
         "window.restoreWindows": "none",
         "workbench.startupEditor": "none",
         "extensions.autoCheckUpdates": false,
@@ -43,6 +51,14 @@ function makeWorkspace(): string {
   // Empty file: the frontend boots its default model, which is enough to prove
   // the custom editor resolved and the React app mounted.
   fs.writeFileSync(path.join(dir, "sample.gsim_sch"), "");
+  // A real example, for the run test (#159). Copied rather than opened in
+  // place, for the same reason `omniSchematics.openExample` copies: a test
+  // that runs a simulation writes `.gsim/runs/` beside the document, and that
+  // belongs in a scratch directory rather than in this repository.
+  const example = path.resolve(__dirname, "../../../../examples/buck_converter.gsim_sch");
+  if (fs.existsSync(example)) {
+    fs.copyFileSync(example, path.join(dir, "buck_converter.gsim_sch"));
+  }
   return dir;
 }
 
@@ -71,6 +87,11 @@ async function main(): Promise<void> {
       // a kernel at all.
       ...(process.env.GSIM_KERNEL_PYTHON
         ? { GSIM_KERNEL_PYTHON: process.env.GSIM_KERNEL_PYTHON }
+        : {}),
+      // Same again: forwarded so the suite knows whether to expect a solver,
+      // while the setting above is what the extension acts on.
+      ...(process.env.GSIM_GENERAL_SIMULATOR_PATH
+        ? { GSIM_GENERAL_SIMULATOR_PATH: process.env.GSIM_GENERAL_SIMULATOR_PATH }
         : {}),
     },
     launchArgs: [

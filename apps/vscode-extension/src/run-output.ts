@@ -20,6 +20,17 @@ export interface LevelledChannel {
   info(message: string): void;
   warn(message: string): void;
   error(message: string): void;
+  /**
+   * Reveal the panel. Optional because a recording stand-in has no panel.
+   *
+   * The host calls this when a run fails (#159), and that is the whole reason
+   * it is here: a `SolverNotFound` is five lines of where-it-looked and a
+   * `cargo build` line, and the Output panel is closed by default, so without
+   * revealing it the one message that answers the user's question is written
+   * somewhere they never see. `preserveFocus` is passed, so the panel appears
+   * without taking the cursor out of the schematic.
+   */
+  show?(preserveFocus?: boolean): void;
 }
 
 export const RUN_OUTPUT_CHANNEL_NAME = "Omni Schematics";
@@ -74,12 +85,20 @@ export function writeRunOutput(channel: LevelledChannel, lines: readonly RunOutp
  */
 export function createRecordingRunOutput(): LevelledChannel & {
   readonly entries: { level: string; text: string }[];
+  readonly shown: () => number;
 } {
   const entries: { level: string; text: string }[] = [];
+  let shown = 0;
   return {
     entries,
+    shown: () => shown,
     info: (text: string) => entries.push({ level: "info", text }),
     warn: (text: string) => entries.push({ level: "warn", text }),
     error: (text: string) => entries.push({ level: "error", text }),
+    // Counted rather than ignored: "the panel was revealed" is the half of a
+    // failed run's reporting that a recorded entry list cannot show.
+    show: () => {
+      shown += 1;
+    },
   };
 }

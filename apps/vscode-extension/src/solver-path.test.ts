@@ -111,6 +111,16 @@ describe("resolveSolver", () => {
     // And it says what to do, including how to get a binary at all.
     expect(found.message).toContain("omniSchematics.generalSimulatorPath");
     expect(found.message).toContain("cargo build --release -p general-simulator-cli");
+    // The download first, and the sibling repositories named with the build:
+    // a bare clone of general-simulator does not build, because its workspace
+    // depends on three repositories by path, so cargo stops at "failed to load
+    // manifest for dependency" before compiling anything. Sending a stuck user
+    // there as the first suggestion is sending them to a second failure.
+    expect(found.message).toContain("/general-simulator/releases");
+    expect(found.message.indexOf("/releases")).toBeLessThan(found.message.indexOf("cargo build"));
+    for (const sibling of ["gs-waveform-measurements", "general-mna", "spice-lsp"]) {
+      expect(found.message).toContain(sibling);
+    }
   });
 
   it("ignores a setting that is blank or whitespace", () => {

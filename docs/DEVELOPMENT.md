@@ -629,11 +629,13 @@ runtime — no registration needed on the Python side.
 | `ipc/binary-frame.test.ts` | FE-31 | 3 |
 | `ipc/stub/stub-kernel.test.ts` | FE-32 | 3 |
 | `waveform/WaveformTab.test.tsx` | FE-35 | 2 |
-| `output/LogView.test.tsx` | FE-35b | 3 |
-| `output/OutputTab.test.tsx` | FE-35b | 1 |
+| `output/register.test.tsx` | #170 | 3 |
 | `waveform/lod-client.test.ts` | FE-36 | 2 |
 | `waveform/prefetch.test.ts` | FE-36 | 1 |
-| `shell/run.test.tsx` | FE-37 | 6 |
+| `shell/run.test.tsx` | FE-37 | 7 |
+| `shell/run-host.test.ts` | #159 | 6 |
+| `problems/run-events.test.ts` | #159 | 8 |
+| `waveform/populate.test.ts` | #159 | 7 |
 | `shell/StatusBar.test.tsx` | FE-38 | 6 |
 | `problems/ProblemsView.test.tsx` | FE-39 | 5 |
 | `problems/problems-store.test.ts` | FE-39 | 4 |

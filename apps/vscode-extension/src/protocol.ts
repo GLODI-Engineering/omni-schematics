@@ -20,6 +20,10 @@
 export type {
   HostBoundMessage,
   KernelConfig,
+  RunEventSummary,
+  RunFailureKind,
+  RunRequest,
+  RunResult,
   WebviewBoundMessage,
   WebviewInit,
   WebviewRole,
