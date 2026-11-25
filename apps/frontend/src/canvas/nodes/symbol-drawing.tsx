@@ -24,10 +24,23 @@ import { SYMBOL_SCALE } from "./port-hit-test";
  * the box they sit on.
  */
 
-/** Near-black for every stroke. Two colours exist; this is one of them. */
-export const STROKE = "#0f172a";
-/** White, for a shape that must occlude what is behind it. */
-export const FILL = "#ffffff";
+/**
+ * Ink for every stroke. Two colours exist; this is one of them.
+ *
+ * A CSS variable with the canvas's own near-black as its fallback, so the
+ * canvas is byte-for-byte what it was — nothing defines `--schematic-ink`
+ * there — while a surface that *does* define it gets artwork in its own
+ * palette. The library panel (#213) is the first: a near-black symbol on a
+ * white tile inside a dark VS Code sidebar was a bright hole in the window,
+ * and the owner asked for contrast between the drawing and its background,
+ * which is a thing only the host's theme can answer.
+ *
+ * `var()` resolves in an SVG presentation attribute in every engine VS Code
+ * ships on; the fallback is what renders if it ever does not.
+ */
+export const STROKE = "var(--schematic-ink, #0f172a)";
+/** Paper, for a shape that must occlude what is behind it. */
+export const FILL = "var(--schematic-paper, #ffffff)";
 
 /**
  * Stroke width for artwork, in local units.

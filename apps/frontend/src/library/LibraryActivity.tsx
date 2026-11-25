@@ -3,6 +3,7 @@ import type { BlockMetadata } from "../model/types";
 import { useLibraryStore, useUiStore } from "../store";
 import { SidebarItem } from "./SidebarItem";
 import { SimulatorSelect } from "./SimulatorSelect";
+import { qualifiersForCollidingLabels } from "./duplicate-labels";
 import { insertCatalogBlock } from "./insert";
 import { searchCatalog } from "./search";
 import { supportsBlock } from "./simulator-compat";
@@ -165,6 +166,17 @@ function dedupeAndCollapse(catalog: BlockMetadata[]): DisplayEntry[] {
       continue;
     }
 
+    // A family of one has nothing to collapse, and renaming it to the family's
+    // generic name loses what it is: `passive.inductor.coupled` is the only
+    // `passive.inductor.*` the engine ships, and the collapse relabelled a
+    // four-terminal coupled pair "Inductor" — which then read as a duplicate
+    // of the real `passive.inductor` two rows down (#213).
+    const only = variants.length === 1 ? variants[0] : undefined;
+    if (only) {
+      display.push({ entry: only, variants });
+      continue;
+    }
+
     const key = groupKey.replace("family:", "") as FamilyKey;
     const representative = preferredForFamily(key, variants);
     const merged: BlockMetadata = {
@@ -201,6 +213,14 @@ export function LibraryActivity() {
 
   const visibleCatalog = useMemo(() => dedupeAndCollapse(rawVisibleCatalog), [rawVisibleCatalog]);
 
+  // The engine ships two blocks called "Step" and two called "Scope". Neither
+  // pair is a duplicate -- they compile to different templates -- so the list
+  // has to say which is which rather than show the same word twice (#213).
+  const qualifiers = useMemo(
+    () => qualifiersForCollidingLabels(visibleCatalog.map((item) => item.entry)),
+    [visibleCatalog],
+  );
+
   // Searching ranks the components by name, label, alias and tag, with recently used ones
   // favoured — the same ranking Quick Insert uses, so the two agree about what "best match"
   // means. An empty query leaves the category tree alone.
@@ -219,11 +239,11 @@ export function LibraryActivity() {
 
   return (
     <section className="library-activity">
+      {/* No heading of our own: the view's `contextualTitle` already renders
+          "Omni Schematics: Block Library" in VS Code's own sidebar chrome
+          above this webview, and a second copy inside cost a row and a half
+          of the list (#213). The entry count moves into the search box. */}
       <header className="library-activity__header">
-        <div className="library-activity__header-row">
-          <strong>Block Library</strong>
-          <span>{visibleCatalog.length} entries</span>
-        </div>
         <div className="library-activity__header-row">
           <SimulatorSelect />
         </div>
@@ -231,7 +251,7 @@ export function LibraryActivity() {
           <input
             type="search"
             className="library-activity__search"
-            placeholder="Search components…"
+            placeholder={`Search ${visibleCatalog.length} components…`}
             aria-label="Search components"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -290,6 +310,7 @@ export function LibraryActivity() {
                 <SidebarItem
                   key={item.entry.name}
                   entry={item.entry}
+                  qualifier={qualifiers.get(item.entry.name)}
                   onInsert={insertCatalogBlock}
                   onOpenVariants={
                     item.variants.length > 1 ? () => setVariantPicker(item) : undefined
@@ -333,6 +354,7 @@ export function LibraryActivity() {
                       <SidebarItem
                         key={item.entry.name}
                         entry={item.entry}
+                        qualifier={qualifiers.get(item.entry.name)}
                         onInsert={insertCatalogBlock}
                         onOpenVariants={
                           item.variants.length > 1 ? () => setVariantPicker(item) : undefined
@@ -347,6 +369,7 @@ export function LibraryActivity() {
 
           <SignalFlowSection
             catalog={visibleCatalog}
+            qualifiers={qualifiers}
             expanded={expanded}
             setExpanded={setExpanded}
           />
@@ -402,11 +425,12 @@ export function LibraryActivity() {
 
 interface SignalFlowSectionProps {
   catalog: DisplayEntry[];
+  qualifiers: Map<string, string>;
   expanded: Record<string, boolean>;
   setExpanded: (id: string, value: boolean) => void;
 }
 
-function SignalFlowSection({ catalog, expanded, setExpanded }: SignalFlowSectionProps) {
+function SignalFlowSection({ catalog, qualifiers, expanded, setExpanded }: SignalFlowSectionProps) {
   const routingEntries = catalog
     .filter((item) => {
       const meta = item.entry as BlockMetadata & { paradigm?: string };
@@ -467,6 +491,7 @@ function SignalFlowSection({ catalog, expanded, setExpanded }: SignalFlowSection
                     <SidebarItem
                       key={item.entry.name}
                       entry={item.entry}
+                      qualifier={qualifiers.get(item.entry.name)}
                       onInsert={insertCatalogBlock}
                     />
                   ))}
@@ -493,6 +518,7 @@ function SignalFlowSection({ catalog, expanded, setExpanded }: SignalFlowSection
                     <SidebarItem
                       key={item.entry.name}
                       entry={item.entry}
+                      qualifier={qualifiers.get(item.entry.name)}
                       onInsert={insertCatalogBlock}
                     />
                   ))}

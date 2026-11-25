@@ -285,16 +285,32 @@ textarea:focus-visible {
   font-weight: 600;
 }
 
-.library-activity {
-  display: grid;
-  gap: 12px;
-}
+/* ---------------------------------------------------------------------------
+   Block Library panel — #213
 
-.library-tree__toggle,
-.library-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+   This is a VS Code sidebar view, so it is styled as one: a dense list of
+   rows, in the host's own colours. It used to be a stack of 57 px cards
+   painted #ffffff, which showed nine of 68 entries in a 282 px panel and read
+   as a bright hole in a dark window.
+
+   Every colour here is a `--vscode-*` variable with a neutral fallback, so
+   the panel is right in a light theme, a dark one and a high-contrast one
+   without a second rule per theme. The two `--schematic-*` variables are what
+   `symbol-drawing.tsx` paints the artwork with; undefined (on the canvas)
+   they fall back to the near-black-on-white the canvas has always used.
+   --------------------------------------------------------------------------- */
+
+.library-activity {
+  --schematic-ink: var(--vscode-foreground, #0f172a);
+  --schematic-paper: var(--vscode-sideBar-background, var(--vscode-editor-background, #ffffff));
+  --library-row-height: 24px;
+
+  display: grid;
+  align-content: start;
+  gap: 0;
+  min-height: 100%;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background, transparent));
+  color: var(--vscode-foreground, inherit);
 }
 
 .library-activity__header {
@@ -302,13 +318,14 @@ textarea:focus-visible {
   top: -12px;
   z-index: 3;
   margin: -12px -12px 0;
-  padding: 12px;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  font-size: 14px;
+  padding: 8px 12px;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background, transparent));
+  border-bottom: 1px solid
+    var(--vscode-panel-border, var(--vscode-sideBarSectionHeader-border, rgb(127 127 127 / 25%)));
+  font-size: 13px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -332,10 +349,11 @@ textarea:focus-visible {
 .library-activity__search {
   width: 100%;
   min-width: 0;
-  padding: 4px 8px;
+  padding: 3px 8px;
   font: inherit;
-  color: inherit;
-  background: var(--vscode-input-background, rgb(0 0 0 / 18%));
+  font-size: 12px;
+  color: var(--vscode-input-foreground, inherit);
+  background: var(--vscode-input-background, rgb(127 127 127 / 18%));
   border: 1px solid var(--vscode-input-border, rgb(127 127 127 / 40%));
   border-radius: 3px;
 }
@@ -356,95 +374,147 @@ textarea:focus-visible {
 }
 
 .library-activity__recent h3 {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin: 6px 0 4px 8px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  opacity: 0.7;
 }
 
 .library-activity__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
+  padding: 0 8px 6px;
 }
 
 .library-chip {
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--vscode-panel-border, rgb(127 127 127 / 35%));
   border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  padding: 4px 10px;
+  background: var(--vscode-badge-background, rgb(127 127 127 / 20%));
+  color: var(--vscode-badge-foreground, inherit);
+  font-size: 11px;
+  padding: 1px 8px;
   cursor: pointer;
 }
 
 .library-tree {
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 
 .library-tree__section {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  overflow: hidden;
+  min-width: 0;
 }
 
+/* A VS Code sidebar section header: small, quiet, and the height of a row. */
 .library-tree__toggle {
+  display: flex;
+  align-items: center;
   width: 100%;
   border: 0;
-  background: #f8fafc;
-  padding: 10px 12px;
+  background: transparent;
+  color: inherit;
+  padding: 3px 6px;
+  gap: 4px;
+  justify-content: flex-start;
   cursor: pointer;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  min-height: var(--library-row-height);
+}
+
+.library-tree__toggle:hover {
+  background: var(--vscode-list-hoverBackground, rgb(127 127 127 / 18%));
+}
+
+.library-tree__toggle--sub {
+  padding-left: 16px;
+  opacity: 0.85;
 }
 
 .library-tree__count {
-  color: #64748b;
-  font-size: 12px;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.65;
 }
 
+/* One column, pinned. Without a template the implicit column sizes to the
+   widest label and the whole panel scrolls sideways. */
 .library-tree__items {
   display: grid;
-  gap: 1px;
-  background: #e2e8f0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  background: transparent;
 }
 
 .library-item {
   width: 100%;
+  min-width: 0;
   text-align: left;
   border: 0;
-  background: #ffffff;
-  padding: 8px 10px;
+  background: transparent;
+  color: inherit;
+  padding: 0 6px;
   cursor: pointer;
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-columns: var(--library-tile-width, 40px) minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   justify-content: start;
+  min-height: var(--library-row-height);
 }
 
 .library-item:hover {
-  background: #f8fafc;
+  background: var(--vscode-list-hoverBackground, rgb(127 127 127 / 18%));
+}
+
+.library-item:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, currentcolor);
+  outline-offset: -1px;
 }
 
 .library-item__preview {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 40px;
+  width: 40px;
+  height: 20px;
   overflow: hidden;
 }
 
-.library-item__preview .block-symbol {
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
+/* A tile is ~0.3× the artwork's own scale, so an unmodified stroke comes out a
+   pale hairline. `non-scaling-stroke` takes the weight out of the transform
+   and the tile sets it in screen pixels, which is the only place a 20 px
+   picture can be told how heavy its lines should be. */
+.block-tile__art * {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1.1px;
+}
+
+.block-tile__caption {
+  font-family: inherit;
+  font-weight: 600;
 }
 
 .library-item__label {
-  font-weight: 500;
-  font-size: 13px;
+  min-width: 0;
+  font-weight: 400;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Which of two blocks sharing a label this row is — see `duplicate-labels.ts`. */
+.library-item__qualifier {
+  margin-left: 6px;
+  font-size: 11px;
+  opacity: 0.6;
 }
 
 .quick-insert__backdrop {
