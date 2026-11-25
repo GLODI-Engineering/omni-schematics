@@ -163,17 +163,7 @@ apps/kernel-sidecar/src/kernel_sidecar/
 │   ├── dispatch.py        Handler registry; routes by message type
 │   ├── handshake.py       Token verification (hmac.compare_digest)
 │   └── handlers/
-│       ├── execute.py     Code execution + stdout streaming + workspace update
-│       ├── simulate.py    Full pipeline orchestration (background task)
-│       ├── workspace.py   workspace_get + binary frame encoding
-│       ├── kernel.py      kernel_status transitions + kernel_restart
-│       └── completion.py  Completion stub (returns empty list in v1)
-├── kernel/
-│   ├── namespace.py       Persistent globals dict; pre-imports; thread lock
-│   ├── executor.py        ThreadPoolExecutor; CancelToken; eval/exec compile
-│   ├── stdout.py          contextvars-based stdout/stderr routing per request
-│   ├── snapshot.py        workspace_update builder; array previews
-│   └── matplotlib_hook.py Agg-backend figure capture; base64 PNG emission
+│       └── simulate.py    Full pipeline orchestration (background task)
 └── waveform/
     ├── manifest.py        manifest.json reader
     └── slice_server.py    aiohttp HTTP server co-located on WS port
@@ -221,21 +211,16 @@ _do_simulate
   └─ result_writer.write(bundle)    → manifest.json + npy files
 ```
 
-#### Execute path
+#### There is no execute path
 
-```
-handle_execute
-  ├─ emit kernel_status busy
-  ├─ MatplotlibHook.capture_context()   (context manager)
-  │   ├─ stdout_router context manager  (routes sys.stdout/stderr)
-  │   ├─ executor.execute(code, ns)     (ThreadPoolExecutor)
-  │   │   ├─ compile(code, mode="eval") → eval last expression
-  │   │   └─ compile(code, mode="exec") → exec, return None
-  │   └─ collect figures → emit plot_ready(s)
-  ├─ emit execute_result
-  ├─ emit workspace_update (snapshot of user namespace)
-  └─ emit kernel_status idle
-```
+`handle_execute` and the `kernel/` package it drove are gone (#161). The kernel
+ran a Python REPL for the editor's Workspace tab -- a persistent namespace with
+`np`, `scipy`, `plt`, `pd` and `sympy` pre-imported, stdout streamed back per
+request, and matplotlib figures captured off an Agg canvas as base64 PNGs.
+
+Scripting a schematic is now `gsim_tools` in an environment the user owns; see
+the README's **Scripting a schematic** section. The kernel answers `simulate`
+and nothing else.
 
 ### Startup sequence
 
@@ -350,13 +335,6 @@ apps/frontend/src/
 │   └── stub/
 │       ├── stub-kernel.ts   In-process fake kernel (VITE_IPC_TRANSPORT=stub)
 │       └── fixtures.ts      Canned responses + stub waveform manifest
-├── workspace/
-│   ├── WorkspaceTab.tsx     Bottom tab host for REPL + variable list
-│   ├── VariableList.tsx     Variable list; click → workspace_get
-│   ├── VariableValue.tsx    Scalar inline / array preview + "view full"
-│   ├── CodeEditor.tsx       Monaco in Python mode; Shift+Enter / Ctrl+Enter
-│   ├── Console.tsx          Stdout/stderr stream display
-│   └── register.ts          Registers core.workspace in BottomTabRegistry
 ├── waveform/
 │   ├── WaveformTab.tsx      uPlot host; auto-opens on simulate_result
 │   ├── SignalLegend.tsx     Trace legend; toggle visibility
@@ -580,12 +558,7 @@ runtime — no registration needed on the Python side.
 | `test_server.py` | BE-02 | ~35 | Single-connection rule, unknown-type error, handler dispatch |
 | `test_envelope.py` | BE-02 | ~10 | Message dataclass round-trips |
 | `test_handshake.py` | BE-03 | 4 | Good/bad token, KERNEL_READY stdout |
-| `test_namespace.py` | BE-04 | 13 | Pre-imports, persistence, reset |
-| `test_executor.py` | BE-05 | 6 | Concurrent exec, cancel, eval vs exec |
-| `test_stdout.py` | BE-06 | 6 | Per-request routing, exception restore |
-| `test_snapshot.py` | BE-07 | 7 | Pre-import filter, array preview, size bound |
-| `test_matplotlib_hook.py` | BE-08 | 4 | PNG capture, no popup, memory |
-| `test_binary_frame.py` | BE-09 | 18 | Header parse, round-trip dtypes, scalar path |
+| `test_binary_frame.py` | BE-09 | 15 | Header parse, round-trip dtypes |
 | `test_template_loader.py` | BE-10 | 4 | Discovery, bad import isolation, state_count mismatch |
 | `test_equations.py` | BE-11 | 28 | Edge cases per block; closed-form checks |
 | `test_ir1_builder.py` | BE-12 | 4 | Empty model, fixture topology, sum ports, float rejects |
@@ -595,8 +568,6 @@ runtime — no registration needed on the Python side.
 | `test_result_writer.py` | BE-16 | 8 | Round-trip npy, manifest schema, duplicate guard |
 | `test_slice_server.py` | BE-17 | 5 | manifest GET, signal GET, path-traversal 400, no-token 401 |
 | `test_simulate.py` | BE-18 | 3 | Happy path, algebraic-loop error, cancel mid-solve |
-| `test_kernel_status.py` | BE-19 | 4 | Status sequence, restart clears namespace |
-| `test_completion.py` | BE-20 | 3 | Empty reply, timing |
 | `test_solver_selection.py` | BE-21 | 5 | Control → ScipySolver, circuit → NotImplementedError |
 | `test_path_discovery.py` | BE-22 | 6 | env-var, settings-file, PATH, not-found error |
 | `tests/backend/e2e/` | BE-23 | 3 | Real sidecar smoke, timing, circuit xfail |
@@ -654,9 +625,6 @@ runtime — no registration needed on the Python side.
 | `ipc/client.test.ts` | FE-31 | 3 |
 | `ipc/binary-frame.test.ts` | FE-31 | 3 |
 | `ipc/stub/stub-kernel.test.ts` | FE-32 | 3 |
-| `workspace/VariableList.test.tsx` | FE-33 | 2 |
-| `workspace/WorkspaceTab.test.tsx` | FE-33 | 1 |
-| `workspace/CodeEditor.test.tsx` | FE-34 | 2 |
 | `waveform/WaveformTab.test.tsx` | FE-35 | 2 |
 | `output/LogView.test.tsx` | FE-35b | 3 |
 | `output/OutputTab.test.tsx` | FE-35b | 1 |
@@ -781,28 +749,26 @@ cause. The hook caught a real problem.
 | `type` | `payload` | Description |
 |--------|-----------|-------------|
 | `handshake` | `{ token: string }` | First message; token from CLI |
-| `execute` | `{ code: string }` | Run Python code |
-| `execute_cancel` | `{ id: string }` | Cancel a pending execute |
-| `workspace_get` | `{ name: string }` | Fetch full value of a variable |
-| `kernel_restart` | `{}` | Clear namespace; cancel all pending |
-| `completion_request` | `{ code, cursor_pos }` | Code completion (stub in v1) |
 | `simulate` | `{ model: ModelDocument, options? }` | Run simulation |
 | `simulate_cancel` | `{ id: string }` | Cancel a running simulation |
+
+Three of these and seven replies left with the REPL (#161): `execute`,
+`execute_cancel`, `workspace_get`, `kernel_restart` and `completion_request`
+outbound, and `execute_result`, `execute_stream`, `workspace_update`,
+`workspace_value`, `plot_ready` and `completion_reply` back. An unknown `type`
+is answered with `execute_error`, which keeps its name because it is the
+dispatcher's one error channel rather than part of the REPL.
 
 ### Kernel → Frontend
 
 | `type` | `payload` | Description |
 |--------|-----------|-------------|
-| `kernel_status` | `{ state: "idle"\|"busy"\|"restarting" }` | Status transitions |
-| `execute_result` | `{ value: any }` | Final result of execute |
-| `execute_stream` | `{ name: "stdout"\|"stderr", text: string }` | Stdout/stderr chunk |
-| `execute_error` | `{ type: string, message: string, traceback: string[] }` | Error |
-| `workspace_update` | `[{ name, type, preview, dtype?, shape? }, …]` | Namespace snapshot |
-| `workspace_value` | `{ name, value }` | Full scalar value (non-ndarray) |
-| `plot_ready` | `{ id, data: string }` | Base64 PNG figure |
-| `completion_reply` | `{ matches: [] }` | Completion matches (empty in v1) |
+| `kernel_status` | `{ state: "idle"\|"busy" }` | Status transitions |
+| `execute_error` | `{ exc_type: string, message: string, traceback: string }` | Unknown message type, or an unhandled handler exception |
 | `simulate_progress` | `{ frac: number }` | Progress in [0, 1] |
-| `simulate_result` | `{ status, manifest_url? }` | Simulation complete |
+| `simulate_result` | `{ status, sim_id, signals, … }` | Simulation complete |
+| `waveform_chunk` | binary frame | A window of one signal, streamed live |
+| `waveform_done` | `{ signal_id, manifest_entry }` | One signal finished streaming |
 
 ### Simulation options
 
@@ -927,11 +893,19 @@ async def main():
     async with websockets.connect("ws://127.0.0.1:9001") as ws:
         await ws.send(json.dumps({"id":"h","type":"handshake","payload":{"token":TOKEN}}))
         print(await ws.recv())
-        await ws.send(json.dumps({"id":"r1","type":"execute","payload":{"code":"1+1"}}))
+        await ws.send(
+            json.dumps(
+                {
+                    "id": "r1",
+                    "type": "simulate",
+                    "payload": {"netlist": "* rc\nR1 in out 1k\nC1 out 0 1u\n.tran 1u 1m\n.end\n"},
+                }
+            )
+        )
         while True:
             msg = json.loads(await ws.recv())
             print(msg)
-            if msg["type"] in ("execute_result", "execute_error"):
+            if msg["type"] in ("simulate_result", "execute_error"):
                 break
 
 asyncio.run(main())
