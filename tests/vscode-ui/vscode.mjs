@@ -1,15 +1,19 @@
 import pkg from "/home/elvis/node_modules/playwright-core/index.js";
 const { _electron } = pkg;
 
-export async function launchVSCode({ S, REPO, file, recordVideo }) {
+export async function launchVSCode({ S, REPO, file, recordVideo, profile = "pw" }) {
   // Dropping these two is the whole trick: with WAYLAND_DISPLAY set, Electron
   // ignores DISPLAY and maps no window at all, so VS Code starts and shows nothing.
   const { WAYLAND_DISPLAY: _w, XDG_SESSION_TYPE: _x, ...rest } = process.env;
   const env = { ...rest, DISPLAY: ":99", ELECTRON_OZONE_PLATFORM_HINT: "x11" };
   const args = [
     `--extensionDevelopmentPath=${REPO}/apps/vscode-extension`,
-    `--user-data-dir=${S}/udd-pw`,
-    `--extensions-dir=${S}/exts-pw`,
+    // A profile of this run's own. Sharing one with another VS Code process
+    // makes the new launch attach to the running window instead of starting
+    // its own, so the test then measures someone else's build and says nothing
+    // changed.
+    `--user-data-dir=${S}/udd-${profile}`,
+    `--extensions-dir=${S}/exts-${profile}`,
     "--ozone-platform=x11",
     "--disable-gpu",
     "--no-sandbox",
