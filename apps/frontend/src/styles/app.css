@@ -3752,6 +3752,12 @@ textarea:focus-visible {
   padding-top: 10px;
   border-top: 1px solid #e2e8f0;
 }
+.source-ports__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.source-ports__open,
 .source-ports__read,
 .source-ports__adopt {
   padding: 4px 10px;
@@ -3769,6 +3775,12 @@ textarea:focus-visible {
   color: #1e3a8a;
   font-weight: 600;
 }
+.source-ports__open {
+  border-color: #2563eb;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+.source-ports__open:hover,
 .source-ports__read:hover,
 .source-ports__adopt:hover {
   border-color: #94a3b8;

@@ -41,6 +41,7 @@ import {
 import BlockNode from "./nodes/BlockNode";
 import { SYMBOL_SCALE, getMetadataPortCenters } from "./nodes/port-hit-test";
 import { resolveBlockBbox, resolveBlockPorts } from "./nodes/resolve-ports";
+import { isScriptedBlockType, openBlockSource } from "./open-block-source";
 import { canConnect } from "./port-compat";
 import { readProbes, removeProbe } from "./probes";
 import { type RouterComponent, getObstacles } from "./router/obstacles";
@@ -1131,6 +1132,12 @@ function CanvasSurface() {
           const block = blocks.find((candidate) => candidate.id === node.id);
           if (block?.subsystem) {
             enterSubsystem(node.id);
+            return;
+          }
+          // A scripted block's body is a .c/.py/.m file. Hand it to VS Code,
+          // which is where the language services the user came for are (#212).
+          if (block && isScriptedBlockType(block.type)) {
+            void openBlockSource(block);
             return;
           }
           // Probe-type blocks open the axes assign modal (or auto-create if no figures).

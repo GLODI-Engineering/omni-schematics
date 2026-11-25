@@ -19,6 +19,7 @@
 
 export type {
   HostBoundMessage,
+  OpenBlockSourceResult,
   RunEventSummary,
   RunFailureKind,
   RunRequest,

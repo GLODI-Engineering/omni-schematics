@@ -2,6 +2,7 @@ import { resolveBlockMetadata } from "../canvas/subckt-metadata";
 import { listTiers } from "../library/catalog-core";
 import { canSwap } from "../library/fidelity-swap";
 import type { BlockMetadata, ParamValue } from "../model/types";
+import { scriptedSourceFor } from "../netlist/code-source";
 import { useGraphStore, useLibraryStore, useToastStore, useUiStore } from "../store";
 import { resolveModelParams } from "../store/model";
 import { FidelitySwap } from "./FidelitySwap";
@@ -278,9 +279,12 @@ export function Inspector() {
             Its ports live here and are handed to the code, so the two can
             disagree with nothing noticing. */}
         {(() => {
-          const sourcePath = block.params.path;
-          if (!/extensibility\.(cscript|py|oct)/.test(block.type)) return null;
-          if (typeof sourcePath !== "string" || sourcePath.trim() === "") return null;
+          // `scriptedSourceFor` is the one place that knows a `cscript` block
+          // names a compiled library rather than a source file — which is why
+          // this section never appeared for one before #212: it required a
+          // `path` parameter that type does not have.
+          const source = scriptedSourceFor(block);
+          if (!source) return null;
           const asList = (value: unknown): string[] =>
             Array.isArray(value)
               ? (value as string[])
@@ -294,7 +298,8 @@ export function Inspector() {
           return (
             <SourcePorts
               blockType={block.type}
-              sourcePath={sourcePath}
+              block={block}
+              source={source}
               {...(typeof fn === "string" && fn !== "" ? { functionName: fn } : {})}
               currentInputs={asList(block.params.input_names)}
               currentOutputs={asList(block.params.output_names)}

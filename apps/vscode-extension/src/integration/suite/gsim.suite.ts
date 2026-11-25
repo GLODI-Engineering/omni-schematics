@@ -873,4 +873,108 @@ suite("Omni Schematics — VS Code integration", () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  /**
+   * #212 — double-clicking a scripted block opens its source in VS Code.
+   *
+   * In the real editor, because that is the whole of the feature: a webview
+   * cannot open a text document, and what a user came to VS Code for is the
+   * language services that attach to one.
+   */
+  suite("a scripted block's source", () => {
+    const sourcePath = () => path.join(workspaceDir(), "blocks", "ctrl.c");
+
+    suiteSetup(async () => {
+      fs.mkdirSync(path.join(workspaceDir(), "blocks"), { recursive: true });
+      await api.waitForWebview("schematic");
+    });
+
+    teardown(async () => {
+      await vscode.commands.executeCommand("workbench.action.closeOtherEditors").then(
+        () => undefined,
+        () => undefined,
+      );
+    });
+
+    test("a double-click on the block opens the .c file beside the schematic", async () => {
+      fs.writeFileSync(
+        sourcePath(),
+        "int cscript_arity(int *in_len, int *out_len) { *in_len = 2; *out_len = 1; return 0; }\n",
+        "utf8",
+      );
+
+      await api.probe("schematic", "insertScriptedBlock", {
+        id: "cs1",
+        type: "extensibility.cscript",
+        params: { lib: "build/ctrl.so", input_names: ["u1", "u2"], output_names: ["y1"] },
+      });
+      await sleep(400);
+      await api.probe("schematic", "doubleClickBlock", { blockId: "cs1" });
+
+      let opened: vscode.TextEditor | undefined;
+      for (let i = 0; i < 60; i += 1) {
+        opened = vscode.window.visibleTextEditors.find(
+          (editor) => editor.document.uri.fsPath === sourcePath(),
+        );
+        if (opened) break;
+        await sleep(100);
+      }
+      assert.ok(opened, "the block's .c file is open in a text editor");
+      assert.equal(opened?.document.languageId, "c", "and VS Code knows it is C");
+    });
+
+    test("offers to create one when there is none, from a stub the parser agrees with", async () => {
+      fs.rmSync(sourcePath(), { force: true });
+      fs.rmSync(path.join(workspaceDir(), "blocks", "other.c"), { force: true });
+
+      await api.probe("schematic", "insertScriptedBlock", {
+        id: "cs2",
+        type: "extensibility.cscript",
+        params: { lib: "build/other.so", input_names: ["a", "b", "c"], output_names: ["y"] },
+      });
+      await sleep(400);
+      const result = await api.probe<{ toasts: string[] }>("schematic", "openBlockSource", {
+        blockId: "cs2",
+      });
+      void result;
+
+      const stubPath = path.join(workspaceDir(), "blocks", "other.c");
+      for (let i = 0; i < 60 && !fs.existsSync(stubPath); i += 1) await sleep(100);
+      assert.ok(fs.existsSync(stubPath), "the stub was written where the webview asked");
+
+      const stub = fs.readFileSync(stubPath, "utf8");
+      assert.match(stub, /cscript_arity/, "it declares the arity the engine checks");
+      assert.match(stub, /\*in_len = 3;/, "with this block's own three inputs");
+      assert.match(stub, /\*out_len = 1;/);
+    });
+
+    /**
+     * A `.gsim_sch` may have been opened from anywhere and its parameters are
+     * untrusted text. The host is the only side that can see the workspace, so
+     * it is the side that decides.
+     */
+    test("refuses a path that leaves the workspace", async () => {
+      const result = await api.probe<{ ok: boolean; reason?: string }>(
+        "schematic",
+        "requestOpenSource",
+        {
+          blockId: "evil",
+          candidates: ["../../../../etc/passwd"],
+          create: "../../../../etc/evil.c",
+        },
+      );
+      assert.equal(result.ok, false, "a traversal is refused rather than opened");
+      assert.ok(
+        !vscode.window.visibleTextEditors.some((editor) =>
+          editor.document.uri.fsPath.endsWith("/etc/passwd"),
+        ),
+        "and nothing outside the workspace was opened",
+      );
+      assert.equal(
+        fs.existsSync("/etc/evil.c"),
+        false,
+        "and nothing outside the workspace was created",
+      );
+    });
+  });
 });
