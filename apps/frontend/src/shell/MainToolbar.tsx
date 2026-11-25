@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnalysisPanel } from "../simulation/AnalysisPanel";
 import { useIpcStore } from "../store";
 import { useSimSettingsStore } from "../store/sim-settings";
-import { useWaveformStore } from "../store/waveform";
 import { ActiveTabToolbar } from "./ActiveTabToolbar";
 import {
   Btn,
@@ -43,9 +42,7 @@ export interface MainToolbarProps {
 
 export function MainToolbar({ onAction }: MainToolbarProps) {
   const status = useIpcStore((state) => state.status);
-  const simProgress = useIpcStore((state) => state.simProgress);
-  const lastManifest = useIpcStore((state) => state.lastManifest);
-  const signalCache = useWaveformStore((state) => state.signalCache);
+  const runStartedAt = useIpcStore((state) => state.runStartedAt);
   const tEnd = useSimSettingsStore((state) => state.settings.tEnd);
 
   const [simDialogOpen, setSimDialogOpen] = useState(false);
@@ -53,26 +50,34 @@ export function MainToolbar({ onAction }: MainToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => attachHorizontalWheelScroll(toolbarRef.current), []);
 
-  const busy = status === "busy" || simProgress !== null;
+  const busy = status === "busy" || runStartedAt !== null;
 
-  // FE-155: the current simulated time, not wall-clock elapsed time — read
-  // from the live-streamed waveform_chunk data (FE-154) already cached for
-  // the in-progress run's signals, which reflects genuine solver progress
-  // through the TRAN sweep. Falls back to frac * t_end (the backend's
-  // heartbeat progress estimate) until the first chunk arrives, or for
-  // analyses that don't stream live (AC/DC/OP).
-  const currentSimTime = useMemo(() => {
-    if (lastManifest) {
-      let maxT = 0;
-      for (const [key, signal] of signalCache) {
-        if (!key.startsWith(`${lastManifest.sim_id}::`) || signal.time.length === 0) continue;
-        const last = signal.time[signal.time.length - 1];
-        if (last !== undefined && last > maxT) maxT = last;
-      }
-      if (maxT > 0) return maxT;
+  // Wall-clock elapsed, ticking while a run is in flight.
+  //
+  // This used to be the *simulated* time, which is the number a user actually
+  // wants, read from the furthest sample the kernel had streamed back. Since
+  // #159 a run goes to the extension host and the solver writes its container
+  // directly, so nothing streams and there was nothing to read: the display
+  // sat at `0 s / 10 ms` and the meter beside it at 0% for the whole run,
+  // however long it took. A frozen meter reads as a hung solver, which is a
+  // worse answer than no meter (#189).
+  //
+  // So: no meter, and the one number this process genuinely knows. Simulated
+  // progress comes back if the engine ever prints it -- see
+  // GLODI-Engineering/general-simulator#114.
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    if (runStartedAt === null) {
+      setElapsedMs(0);
+      return;
     }
-    return simProgress !== null ? simProgress * tEnd : 0;
-  }, [lastManifest, signalCache, simProgress, tEnd]);
+    // Set once immediately so the first paint is not a blank, then every
+    // 200 ms: fast enough to look alive, slow enough not to re-render a
+    // toolbar five times a second for a number whose last digit is tenths.
+    setElapsedMs(Date.now() - runStartedAt);
+    const timer = setInterval(() => setElapsedMs(Date.now() - runStartedAt), 200);
+    return () => clearInterval(timer);
+  }, [runStartedAt]);
 
   return (
     <div
@@ -111,25 +116,12 @@ export function MainToolbar({ onAction }: MainToolbarProps) {
         <div className="main-toolbar__sim-status" aria-live="polite">
           <div className="main-toolbar__sim-status-row">
             <span className="main-toolbar__spinner" />
-            {simProgress !== null ? (
-              <div
-                className="main-toolbar__progress"
-                role="meter"
-                aria-valuenow={Math.round(simProgress * 100)}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="Simulation progress"
-                title={`${Math.round(simProgress * 100)}%`}
-              >
-                <div
-                  className="main-toolbar__progress-fill"
-                  style={{ width: `${Math.round(simProgress * 100)}%` }}
-                />
-              </div>
-            ) : null}
           </div>
-          <span className="main-toolbar__sim-times" title="Current / final simulated time">
-            {formatSimTime(currentSimTime)} / {formatSimTime(tEnd)}
+          <span
+            className="main-toolbar__sim-times"
+            title={`Running — elapsed. Simulating ${formatSimTime(tEnd)}.`}
+          >
+            {formatElapsed(elapsedMs)}
           </span>
         </div>
       ) : (
@@ -158,3 +150,23 @@ export function MainToolbar({ onAction }: MainToolbarProps) {
 }
 
 export default MainToolbar;
+
+/**
+ * Wall-clock elapsed, for a run in flight.
+ *
+ * Tenths below ten seconds, because that is where a run finishing feels
+ * instant and a tenth is the difference a user notices; whole seconds up to a
+ * minute; then `m:ss`, which is how anyone reads a wait that long.
+ */
+export function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, ms) / 1000;
+  if (seconds < 10) {
+    return `${seconds.toFixed(1)} s`;
+  }
+  if (seconds < 60) {
+    return `${Math.floor(seconds)} s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.floor(seconds % 60);
+  return `${minutes}:${String(rest).padStart(2, "0")}`;
+}

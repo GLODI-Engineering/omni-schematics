@@ -16,11 +16,12 @@
  */
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useIpcStore } from "../store";
 import { useSimSettingsStore } from "../store/sim-settings";
 import { useWaveformStore } from "../store/waveform";
-import { MainToolbar } from "./MainToolbar";
+import { MainToolbar, formatElapsed } from "./MainToolbar";
 
 afterEach(cleanup);
 
@@ -70,48 +71,83 @@ describe("FE-155: MainToolbar simulation time display", () => {
     expect(screen.queryByText("Starting simulation…")).toBeNull();
   });
 
-  it("shows current / final simulated time below the progress bar, from progress fraction before any data streams", () => {
-    useSimSettingsStore.setState((state) => ({ settings: { ...state.settings, tEnd: 0.01 } }));
-    useIpcStore.setState({ status: "busy", simProgress: 0.5 });
+  it("shows no progress meter while busy", () => {
+    // #189: the meter was fed by the kernel's heartbeat, and since #159 a run
+    // goes to the extension host where the solver writes its container
+    // directly -- nothing reports a fraction. It sat at 0% for the whole run,
+    // which reads as a hung solver. No meter is the better answer.
+    useIpcStore.setState({ status: "busy", runStartedAt: Date.now() });
     render(<MainToolbar onAction={() => {}} />);
 
-    // 50% of 10ms = 5ms current, 10ms final.
-    expect(screen.getByText("5ms / 10ms")).toBeTruthy();
+    expect(screen.queryByRole("meter")).toBeNull();
   });
 
-  it("prefers the live-streamed signal time over the progress-fraction estimate once data has arrived", () => {
+  it("shows elapsed wall-clock time, not a simulated time it cannot know", () => {
     useSimSettingsStore.setState((state) => ({ settings: { ...state.settings, tEnd: 0.01 } }));
-    useIpcStore.setState({
-      status: "busy",
-      simProgress: 0.1, // would estimate 1ms — the real streamed data (7ms) should win.
-      lastManifest: { sim_id: "sim-1", signals: ["v(out)"], t_start: 0, t_end: 0 },
-    });
-    useWaveformStore.setState((state) => {
-      const signalCache = new Map(state.signalCache);
-      signalCache.set("sim-1::v(out)", {
-        simId: "sim-1",
-        name: "v(out)",
-        analysis: "transient",
-        quantity: "voltage",
-        unit: "V",
-        domain: "time",
-        time: new Float64Array([0, 0.003, 0.007]),
-        values: new Float64Array([0, 1, 2]),
+    useIpcStore.setState({ status: "busy", runStartedAt: Date.now() - 2_400 });
+    render(<MainToolbar onAction={() => {}} />);
+
+    expect(screen.getByText("2.4 s")).toBeTruthy();
+    // And specifically not the old "current / final simulated time" readout,
+    // whose current half was always 0.
+    expect(screen.queryByText(/\/ 10ms$/)).toBeNull();
+  });
+
+  it("keeps the elapsed time moving", async () => {
+    vi.useFakeTimers();
+    try {
+      useIpcStore.setState({ status: "busy", runStartedAt: Date.now() });
+      render(<MainToolbar onAction={() => {}} />);
+      expect(screen.getByText("0.0 s")).toBeTruthy();
+
+      await act(async () => {
+        vi.advanceTimersByTime(1_000);
       });
-      return { signalCache };
-    });
-
-    render(<MainToolbar onAction={() => {}} />);
-
-    expect(screen.getByText("7ms / 10ms")).toBeTruthy();
+      expect(screen.getByText("1.0 s")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("shows the progress meter without the old text label while busy", () => {
-    useIpcStore.setState({ status: "busy", simProgress: 0.25 });
+  it("treats a started run as busy even before the status says so", () => {
+    // `runStartedAt` is the busy marker a run sets on its way out of
+    // `triggerRun`, before any reply has changed `status`.
+    useIpcStore.setState({ status: "idle", runStartedAt: Date.now() });
     render(<MainToolbar onAction={() => {}} />);
 
-    const meter = screen.getByRole("meter", { name: /simulation progress/i });
-    expect(meter).toBeTruthy();
-    expect(screen.queryByText(/^0\.\ds$/)).toBeNull();
+    // `Btn` names itself from its label, so a run in flight reads as "Stop".
+    expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Run" })).toBeNull();
+  });
+
+  it("shows no elapsed time when no run is in flight", () => {
+    useIpcStore.setState({ status: "idle", runStartedAt: null });
+    render(<MainToolbar onAction={() => {}} />);
+
+    expect(screen.queryByText(/^\d+\.\d s$/)).toBeNull();
+  });
+});
+
+describe("formatElapsed", () => {
+  it("shows tenths under ten seconds, where a tenth is noticeable", () => {
+    expect(formatElapsed(0)).toBe("0.0 s");
+    expect(formatElapsed(430)).toBe("0.4 s");
+    expect(formatElapsed(9_940)).toBe("9.9 s");
+  });
+
+  it("shows whole seconds up to a minute", () => {
+    expect(formatElapsed(10_000)).toBe("10 s");
+    expect(formatElapsed(59_900)).toBe("59 s");
+  });
+
+  it("shows m:ss beyond a minute, which is how a long wait reads", () => {
+    expect(formatElapsed(60_000)).toBe("1:00");
+    expect(formatElapsed(65_400)).toBe("1:05");
+    expect(formatElapsed(3_605_000)).toBe("60:05");
+  });
+
+  it("never shows a negative time, whatever the clock did", () => {
+    // A clock adjustment mid-run must not print "-3.0 s".
+    expect(formatElapsed(-3_000)).toBe("0.0 s");
   });
 });
