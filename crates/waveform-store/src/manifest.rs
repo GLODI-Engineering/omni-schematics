@@ -21,6 +21,14 @@ pub struct Run {
 #[serde(rename_all = "lowercase")]
 pub enum DataKind {
     Inline,
+    /// A `.gsim_samples` file beside this document, written by
+    /// general-simulator's `--format samples`. Read by [`crate::samples`].
+    Samples,
+    /// An HDF5 file. Readable natively and never in the viewer: every HDF5
+    /// binding links the libhdf5 C library, and a webview runs WebAssembly,
+    /// which has nothing to link it to. Kept so that result directories
+    /// written before `Samples` existed still open far enough to say what
+    /// they are.
     Hdf5,
 }
 

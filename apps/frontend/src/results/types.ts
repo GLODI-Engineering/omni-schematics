@@ -13,12 +13,23 @@ export type SampleEncoding = "f64-base64" | "json";
  * Where a document's samples live.
  *
  * `inline` keeps the file self-contained — it can be committed, attached to
- * a review or emailed. `hdf5` points at a file holding the samples and the
- * LOD pyramid over them, which is what a long run on a server wants: the
- * viewer asks for a window at a point budget and never moves the rest.
+ * a review or emailed, and is right up to a few million samples.
+ *
+ * `samples` points at a `.gsim_samples` file holding the samples and the LOD
+ * pyramid over them, which is what a long run needs: each signal is stored
+ * separately and every offset is arithmetic, so the viewer asks for a window
+ * at a point budget and reads only that. It is what general-simulator's
+ * `--format samples` writes.
+ *
+ * `hdf5` is the same arrangement with an HDF5 file, and is readable here only
+ * in the sense that this type can describe one. Every HDF5 binding links the
+ * libhdf5 C library and a webview runs WebAssembly, which has nothing to link
+ * it to — which is why the viewer could never open one and why `samples`
+ * exists.
  */
 export type GsimSimResultData =
   | { kind: "inline"; path?: undefined; pyramid?: boolean }
+  | { kind: "samples"; path: string; pyramid?: boolean }
   | { kind: "hdf5"; path: string; pyramid?: boolean };
 
 export interface GsimSimResultVector {
