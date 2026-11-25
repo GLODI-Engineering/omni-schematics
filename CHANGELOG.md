@@ -1,5 +1,143 @@
 # Changelog
 
+## 2026-11-26 — Omni Schematics (0.9.1)
+
+**The editor looks and behaves like part of VS Code, and two silent bugs are
+gone.** 0.9.0 removed Python; this is the release that makes what is left
+pleasant to use, and it exists because the owner installed it, used it, and
+said what was wrong.
+
+### Install it
+
+Unchanged from 0.9.0: the `.vsix` below, a `general-simulator` binary (**v0.8.0
+or newer**), and
+
+```jsonc
+"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"
+```
+
+### Fixed — a sheet you saved once was a copy from then on
+
+Build a model, press **Ctrl+S once**, close the tab, reopen it from the startup
+list — and every edit after that went to a **duplicate**. The first save had no
+reference to save *to*, so it went through "save as", which rewrote the model's
+id and appended " Copy" before writing. The window kept the original name, so
+nothing on screen said anything had happened.
+
+It hid because the symptom cancels itself: a *second* Ctrl+S writes the real
+document back under the copy's key, repairing the name inside the record but
+not the key. Save twice and there is nothing to see. The document is now
+written through untouched, and the adapter — which had no unit test at all —
+has five, each watched failing against the old code first.
+
+### Fixed — a causal signal was reported as a voltage
+
+In the engine, a `physical-signal` wire was compiled into a **circuit node**,
+because the test for "is this acausal?" was a string prefix and
+`"physical-signal"` starts with `"physical-"`. Four other places in the same
+crate already treated it as causal, one of them with a comment explaining that
+it deliberately avoided this very predicate.
+
+So a sensor-to-actuator connection became a node, the solver correctly reported
+that node's voltage, and **a reading of 0.42 arrived on a plot as 0.42 volts**.
+No error, no warning, a plausible number wearing the wrong unit. The guard that
+should have caught it only ever tested the kind `"signal"` — never the causal
+kind the predicate got wrong. Fixed in gsim-core 0.6.2, with the guard widened.
+
+### Fixed — on an AZERTY keyboard the command palette had no shortcut
+
+`palette.command-azerty` was declared in the keymap and handled nowhere: one
+occurrence in the repository, its own declaration. The dispatcher resolved the
+chord, waited out its timeout, fired the fallback, and the switch dropped it.
+On a layout where `.` needs Shift, `Ctrl+.` cannot be typed at all, so there
+was no way in. The keymap gates were green throughout — they check that an id
+is *registered*, never that it is *handled*.
+
+### The Block Library is dense, legible and follows your theme
+
+Rows **56 px → 24 px**, entries visible without scrolling **9 → 31**, and the
+list is **1,944 px** instead of 4,472. Every tile now draws inside its own box:
+before, **68 of 68** drew outside it, because artwork meant for a 120×264
+canvas symbol was being squeezed into a fixed 56×40 tile with the aspect ratio
+thrown away — `hierarchy.inport` squashed 3.6× sideways, `logic.flip_flop`
+collapsed to about 18 px wide. That, not the artwork, is what read as "ports
+mismatch".
+
+Colours come from VS Code's own variables, so the panel is no longer a white
+island in a dark editor. And three pairs of entries that were indistinguishable
+now say which is which: **Step** `signal.step` against **Step**
+`signal_flow.source.step`, and likewise for the inductors and scopes. One of
+those collisions turned out to be ours — a grouping rule was renaming a
+four-terminal coupled pair "Inductor".
+
+### The toolbar fits
+
+**54 px → 30 px**, buttons 44 → 24, labels became tooltips, and what does not
+fit moves into a `⋯` menu instead of being cut off mid-glyph behind a
+scrollbar. Measured at three pane widths: at 1205 px everything fits; at 706 px
+nine controls move into the menu; at 466 px seventeen do — and **Run stays
+visible in all three**.
+
+### New Schematic is reachable, and no longer writes an empty file
+
+The command existed and was reachable only by typing its name in the command
+palette. It is now in **File ▸ New File…**, on the Block Library's title bar,
+in the Explorer context menu and the editor title bar.
+
+It also wrote a **zero-byte file**, which was harmless until you used
+**File ▸ Revert** on one: the revert path had no empty check, parsing `""`
+threw, the document was recorded unreadable, and from then on **every save was
+a silent no-op**. It writes a real document now, and an empty file is read as
+an empty schematic rather than a parse failure.
+
+### A scripted block opens its own source
+
+Double-click a C, Python or Octave block and its source opens in a VS Code
+editor beside the schematic — with the language services that are the reason
+for being in VS Code at all. There is an **Open file** button in the Inspector
+too, and if the file does not exist the editor offers to create it from a stub
+carrying the right entry-point signature.
+
+Worth knowing: a `cscript` block declares a compiled **`lib`**, not a source
+path, so the `.c` is found by convention (`blocks/<stem>.c`, then beside the
+library, then the sheet's folder, then `src/`). The Inspector says so rather
+than implying the path was declared. A consequence of the same discovery: the
+Inspector's "Read ports from source" panel required a `path` parameter, so for
+a C block it had **never once appeared**.
+
+### The tests now drive the real editor
+
+A new suite under `tests/vscode-ui/` runs **VS Code itself** with the extension
+loaded: it clicks all **68** catalogue entries into an empty sheet, then walks
+one person's path — insert, place without overlapping, drag, wire, save — and
+presses Run against a real solver, checking the container on disk and the
+signals in the viewer. It records video.
+
+This exists because every defect in this release was found by a person using
+the editor, and none of them could have been seen by the tests we had: the rest
+of the suite runs the webview in a plain browser, which is wide, uses its own
+fonts, and has none of VS Code's injected CSS variables.
+
+Three perf budgets were also measuring the wrong thing — the clock sat in the
+test runner, around CDP round trips, so the numbers were mostly driver latency.
+**No budget was relaxed**; all three now read the figures the app already
+published about itself. One of them never loaded the model it claimed to time:
+the reload discarded the fixture, so a 200 ms budget was being held against a
+cold boot of an *empty* document, which is why it drifted from 226 ms to 687 ms
+on a retry of identical code.
+
+### Known
+
+The canvas sheet is still light while the rest of the editor follows your
+theme: the webview writes `data-theme="light"` over VS Code's own, from a
+stored preference nothing has written yet (#221). Fixing the precedence alone
+would give a half-dark editor — the stylesheet still carries 387 literal
+colours — so it is being done as a deliberate pass rather than a flag flip.
+
+One end-to-end spec remains red, and it is an engine data gap rather than an
+editor fault: the dimension overlay needs a port signature on every block in
+the path, and only 4 of 78 catalogue entries have one (gsim-core#64).
+
 ## 2026-11-25 — Omni Schematics (0.9.0)
 
 **The editor needs no Python.** Two downloads, one setting, and a schematic you
