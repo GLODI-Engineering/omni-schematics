@@ -222,10 +222,18 @@ to somebody else on PyPI; installed one at a time, pip resolves a sibling's
 requirement from the index and fetches a stranger's package instead of the file
 beside it.
 
-`numpy`, `scipy`, `sympy`, `websockets` and `h5py` are declared by those wheels,
-so pip resolves them — you do not list them yourself. Verified: a venv holding
+`numpy`, `scipy`, `sympy` and `websockets` are declared by those wheels, so
+pip resolves them — you do not list them yourself. Verified: a venv holding
 nothing but the four wheels starts the kernel and prints its `KERNEL_READY`
 line.
+
+`h5py` used to be on that list and is not any more (#156), which removes the
+only reason this install ever pinned a CPython version: `pip` went looking for
+`hdf5.dll` on Windows whenever the interpreter fell outside h5py's wheel range.
+Nothing here constrains the version from above now — **any CPython from 3.11**,
+which is the floor every `pyproject.toml` declares. If you also install `gsim_py`
+to script a document, that wheel is a compiled extension and its own range,
+3.11–3.15, is the ceiling; the kernel itself has none.
 
 `matplotlib` and `pandas` used to be on that list, and are not any more: they
 were there for the in-editor Python REPL, which is gone (#161). Scripting lives

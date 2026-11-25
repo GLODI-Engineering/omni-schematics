@@ -1,10 +1,16 @@
-"""BE-16 / BE-52 — Result writer (manifest + data.h5) tests.
+"""BE-16 — Result writer (manifest) tests.
 
 Covers:
-- Round-trip: write → read from data.h5 returns identical arrays.
 - manifest.json is canonical-key-ordered JSON.
-- Signal arrays are float32; time is float64.
+- Every signal is described: its url, its shape and its dtype.
+- No sample file is written beside it (#156).
 - Two writes for the same sim_id raise without an explicit overwrite flag.
+
+The round-trip assertions this file used to carry read the arrays back out of
+``data.h5``. There is no sample file here to read them out of any more: the
+samples a run produces are the solver's ``.gsim_samples`` container (#163),
+which ``crates/waveform-store`` round-trips in Rust. What is left to check
+about this writer is the index it writes, which is all it writes.
 """
 
 from __future__ import annotations
@@ -13,11 +19,10 @@ import json
 import pathlib
 import uuid
 
-import h5py
 import numpy as np
 import pytest
 
-from simulator.postprocess.hdf5_store import dataset_key
+from simulator.postprocess.result_writer import dataset_key
 
 
 def _import_writer():  # type: ignore[no-untyped-def]
@@ -61,67 +66,66 @@ def _make_bundle(n_points: int = 100):  # type: ignore[no-untyped-def, return]
 
 
 # ---------------------------------------------------------------------------
-# Round-trip
+# No sample file (#156)
 # ---------------------------------------------------------------------------
 
 
-def test_time_array_round_trip(tmp_path: pathlib.Path) -> None:
+def test_no_sample_file_is_written(tmp_path: pathlib.Path) -> None:
+    """The writer writes an index and nothing else.
+
+    `data.h5` was the last sample file it wrote, and h5py went with it. A
+    revived `time.npy` + `signals/*.npy` stopgap would count as a failure here
+    too, deliberately: nothing reads either one, because the samples live in
+    the container the solver writes.
+    """
     ResultWriter, _, _ = _import_writer()
     bundle = _make_bundle()
     writer = ResultWriter(workdir=tmp_path)
-    writer.write(bundle)
+    result_dir = writer.write(bundle)
 
-    h5_path = tmp_path / "results" / bundle.sim_id / "data.h5"
-    assert h5_path.exists(), f"data.h5 not found at {h5_path}"
-
-    with h5py.File(h5_path, "r") as f:
-        recovered = f["time"][:]
-    np.testing.assert_array_equal(recovered, bundle.time)
-
-
-def test_signal_arrays_round_trip(tmp_path: pathlib.Path) -> None:
-    ResultWriter, _, _ = _import_writer()
-    bundle = _make_bundle()
-    writer = ResultWriter(workdir=tmp_path)
-    writer.write(bundle)
-
-    h5_path = tmp_path / "results" / bundle.sim_id / "data.h5"
-    with h5py.File(h5_path, "r") as f:
-        for sig in bundle.signals:
-            key = dataset_key(sig.block_id, sig.port_id)
-            assert key in f["signals"], f"No dataset for signal {sig.name}"
-            recovered = f["signals"][key][:]
-            np.testing.assert_array_equal(recovered, sig.data)
+    written = sorted(path.name for path in result_dir.iterdir())
+    assert written == ["manifest.json"], f"unexpected files beside the manifest: {written}"
 
 
 # ---------------------------------------------------------------------------
-# dtype checks
+# Every signal is described
 # ---------------------------------------------------------------------------
 
 
-def test_time_npy_is_float64(tmp_path: pathlib.Path) -> None:
+def test_manifest_describes_every_signal(tmp_path: pathlib.Path) -> None:
     ResultWriter, _, _ = _import_writer()
     bundle = _make_bundle()
     writer = ResultWriter(workdir=tmp_path)
-    writer.write(bundle)
+    result_dir = writer.write(bundle)
 
-    h5_path = tmp_path / "results" / bundle.sim_id / "data.h5"
-    with h5py.File(h5_path, "r") as f:
-        arr = f["time"][:]
-    assert arr.dtype == np.float64, f"Expected float64 for time, got {arr.dtype}"
+    data = json.loads((result_dir / "manifest.json").read_text(encoding="utf-8"))
+    by_url = {entry["url"]: entry for entry in data["signals"]}
+    assert len(by_url) == len(bundle.signals), "two signals share a url"
+
+    for sig in bundle.signals:
+        key = dataset_key(sig.block_id, sig.port_id)
+        url = f"results/{bundle.sim_id}/signals/{key}.npy"
+        assert url in by_url, f"no manifest entry for signal {sig.name}"
+        entry = by_url[url]
+        assert entry["name"] == sig.name
+        assert entry["shape"] == [len(sig.data)]
+        # float32 for a sample, which is what the solver's container stores and
+        # what the plot can show; the time vector stays float64 in the bundle.
+        assert entry["dtype"] == "float32", f"{sig.name} is not float32: {entry['dtype']}"
+        assert sig.data.dtype == np.float32
+    assert bundle.time.dtype == np.float64
 
 
-def test_signal_arrays_are_float32(tmp_path: pathlib.Path) -> None:
+def test_manifest_records_the_sweep_extent(tmp_path: pathlib.Path) -> None:
     ResultWriter, _, _ = _import_writer()
     bundle = _make_bundle()
     writer = ResultWriter(workdir=tmp_path)
-    writer.write(bundle)
+    result_dir = writer.write(bundle)
 
-    h5_path = tmp_path / "results" / bundle.sim_id / "data.h5"
-    with h5py.File(h5_path, "r") as f:
-        for key in f["signals"]:
-            arr = f["signals"][key][:]
-            assert arr.dtype == np.float32, f"{key} is not float32: {arr.dtype}"
+    data = json.loads((result_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert data["t_start"] == bundle.t_start
+    assert data["t_end"] == bundle.t_end
+    assert data["n_points"] == len(bundle.time)
 
 
 # ---------------------------------------------------------------------------

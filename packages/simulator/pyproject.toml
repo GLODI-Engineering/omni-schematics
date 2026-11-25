@@ -17,7 +17,6 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.13",
     "sympy>=1.13",
-    "h5py>=3.11",
     "networkx>=3.3",
     "jsonschema>=4.0",
 ]

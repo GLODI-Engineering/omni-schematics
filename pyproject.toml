@@ -153,7 +153,7 @@ disallow_untyped_defs = false
 
 # Third-party libs without stubs — silence the noise rather than chase shims.
 [[tool.mypy.overrides]]
-module = ["h5py.*", "scipy.*", "sympy.*", "networkx.*", "yaml", "yaml.*"]
+module = ["scipy.*", "sympy.*", "networkx.*", "yaml", "yaml.*"]
 ignore_missing_imports = true
 
 # `gsim_tools` ships no stubs, and is hand-installed rather than locked (see the

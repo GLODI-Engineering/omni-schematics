@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### The install pins no Python version, because h5py is gone
+
+`h5py` was the hardest wheel in this install, and it is not declared anywhere
+in the repository any more (#156). With it go
+`simulator/postprocess/hdf5_store.py`, the last `data.h5` any part of this
+repository could write, and the last copy of Python decimation — the private
+pyramid builder inside that module.
+
+**What it means for an install.** The 0.8.0 notes below say *use CPython 3.12
+or 3.13*, and the only reason was h5py: its wheels covered 3.10–3.14, so an
+interpreter outside that range sent `pip` looking for `hdf5.dll` on Windows and
+the install failed in a way nothing in the message explained. That reason has
+expired, so the pin goes with it.
+
+**The real range is any CPython from 3.11, with no ceiling.** 3.11 is the floor
+every `pyproject.toml` here declares and nothing above it is excluded; `numpy`,
+`scipy`, `sympy`, `networkx`, `jsonschema` and `websockets` all ship wheels well
+past it. One ceiling is left and it is not the kernel's: a `gsim_py` wheel is a
+compiled extension with wheels for 3.11–3.15, so *if* you install it to script a
+document, that is your range. The editor needs it for nothing (#158).
+
+**An existing result directory holding a `data.h5` does not open, and did not
+before this.** Nothing in the repository could read one: every HDF5 binding
+links a C library, a webview has nothing to link it to, so the reader over
+`data.h5` was never finished — which is why the writer is being deleted rather
+than ported. `.gsim_sim_result` documents whose `data.kind` is `"hdf5"` are
+refused by name, with that reason. The samples of a run made from this version
+on are the solver's `.gsim_samples` container (#163), read by
+`crates/waveform-store` (#157).
+
+`result_writer.write` now writes `manifest.json` and nothing else. It has not
+been on the path of a run since #159, and #162 deletes it with the rest of the
+sidecar.
+
 ### A completed run plots itself — one decimator, in Rust
 
 Pressing Run now ends in a waveform. The solver writes a `.gsim_samples`
@@ -44,9 +78,9 @@ rounding bucket for bucket; it now calls the crate. `lod-client.ts` and
 `prefetch.ts`, imported by nothing, are deleted, as are
 `simulator/postprocess/decimation.py` and the whole of
 `kernel_sidecar/waveform/` — so the sidecar no longer serves binary LOD frames
-or `.npy` slices, and `server.py` has no HTTP surface at all. The one piece of
-Python decimation left is a private helper inside `hdf5_store.py`, which is
-what builds that legacy writer's pyramid and goes with it in #156.
+or `.npy` slices, and `server.py` has no HTTP surface at all. The last piece of
+Python decimation was a private helper inside `hdf5_store.py`, which built that
+legacy writer's pyramid; #156 deleted both, so there is none left.
 
 **Where the plot appears.** Inside VS Code the schematic webview hosts only the
 schematic, so a finished run opens the waveform panel and the panel reads the
