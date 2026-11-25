@@ -17,9 +17,9 @@ and the server's was indistinguishable from a bug in the simulation.
 There is one now, and it is this (#157). The TypeScript copy and both Python
 ones are deleted; the viewer calls this crate directly, built to WebAssembly
 and committed in `packages/waveform-wasm`, and the frontend's whole test
-suite runs its reduction assertions through that bundle. The one piece of
-Python decimation left is private to `hdf5_store.py`, which is the legacy
-HDF5 writer #156 removes.
+suite runs its reduction assertions through that bundle. There is no Python
+decimation left at all: the last copy was private to the legacy HDF5 writer
+`hdf5_store.py`, and #156 deleted both.
 
 It also makes a hosted deployment affordable. A plot 1500 px wide can
 distinguish about 3000 points: two per pixel, one for the top of each column
@@ -76,13 +76,13 @@ number with a unit after it cannot.
 
 ## Not done yet
 
-- **HDF5.** The engine writes `data.h5` with a precomputed LOD pyramid, and
-  a `WaveformSource` over it is the next implementation. One obstacle is
-  worth knowing about first: `hdf5_store.py` writes with `compression="lzf"`,
-  which is h5py's own filter (ID 32000) and not part of the HDF5 standard.
-  Neither the Rust `hdf5` crate nor a WASM build can read those datasets.
-  Writing with `gzip` instead — a standard filter — makes the same file
-  readable by h5py, MATLAB, this crate and WASM alike.
+- ~~**HDF5.**~~ Not happening, and nothing writes one any more. A
+  `WaveformSource` over `data.h5` was listed here as the next
+  implementation; #156 deleted the writer instead. Every HDF5 binding links a
+  C library, so the WASM build this crate ships as can never read one however
+  the file is compressed — which is why the reader was never finished. The
+  samples live in the `.gsim_samples` container the solver writes, which this
+  crate reads natively.
 - **Streaming.** A live run appends; this reads a finished document.
 
 ## Building

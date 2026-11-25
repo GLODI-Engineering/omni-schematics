@@ -7,7 +7,6 @@ dependencies = [
     "simulator",
     "numpy>=1.26",
     "websockets>=13.0",
-    "h5py>=3.11",
 ]
 
 [project.scripts]

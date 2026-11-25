@@ -1,9 +1,18 @@
-"""Result writer: write a ResultBundle to disk (BE-16, BE-47, BE-50, BE-51, BE-52).
+"""Result writer: write a ResultBundle to disk (BE-16, BE-47, BE-50, BE-51).
 
-Writes a single data.h5 (BE-52 — see hdf5_store.py) and a manifest.json
-index. Prior to BE-52 this wrote one time.npy plus one .npy per signal;
-manifest.json's shape and signal url scheme are unchanged so that migration
-was transparent to every HTTP consumer (see hdf5_store.py's docstring).
+Writes a manifest.json index, and nothing else. It wrote the samples too
+until #156: one ``time.npy`` plus one ``.npy`` per signal first, then a single
+``data.h5`` (BE-52). Both are gone, and nothing replaced them *here* — the
+samples a run produces are written by the solver, in Rust, as the
+``.gsim_samples`` container beside the result document (#163), and the viewer
+reads its windows out of that container directly (#157). HDF5 could never be
+that container: every binding for it links a C library, so a WebAssembly
+reader has nothing to link, which is why the reader over ``data.h5`` was never
+finished and why ``h5py`` — the hardest wheel in the install — went with it.
+
+manifest.json's shape is unchanged, ``url`` included: it has named
+``signals/<block_id>__<port_id>.npy`` since before BE-52, through the whole of
+the HDF5 era, and nothing has served it since #157 deleted the slice server.
 
 Exports
 -------
@@ -12,6 +21,7 @@ DcOpEntry     — one row in the dc_op_table (BE-50).
 ResultBundle  — aggregates SignalArray list + time vector + metadata.
 ResultWriter  — writes a ResultBundle to disk.
 infer_signal_meta — infer (analysis, quantity, unit, domain) from name + analysis type.
+dataset_key   — the ``<block_id>__<port_id>`` spelling the manifest's url uses.
 """
 
 from __future__ import annotations
@@ -25,7 +35,6 @@ from typing import Any
 import numpy as np
 
 from simulator.postprocess.event_log import EventLog
-from simulator.postprocess.hdf5_store import dataset_key, write_hdf5
 
 _SCHEMA_VERSION = 2
 
@@ -206,6 +215,17 @@ class ResultBundle:
         )
 
 
+def dataset_key(block_id: str, port_id: str) -> str:
+    """Return the manifest's filename component for one signal.
+
+    ``<block_id>__<port_id>``, the scheme the pre-BE-52 ``.npy`` writer used as
+    a filename and the HDF5 writer then reused as a dataset name. It lived in
+    ``hdf5_store.py`` until #156 deleted that module; the manifest is the only
+    thing that still spells a signal this way, so it lives with the manifest.
+    """
+    return f"{block_id}__{port_id}"
+
+
 # ---------------------------------------------------------------------------
 # Writer
 # ---------------------------------------------------------------------------
@@ -250,9 +270,6 @@ def write(
             f"Result directory already exists: {result_dir}. Pass overwrite=True to replace it."
         )
     result_dir.mkdir(parents=True, exist_ok=overwrite)
-
-    # BE-52: single HDF5 file replaces time.npy + signals/*.npy.
-    write_hdf5(bundle, result_dir / "data.h5")
 
     signal_entries: list[dict[str, Any]] = []
     for sig in bundle.signals:
