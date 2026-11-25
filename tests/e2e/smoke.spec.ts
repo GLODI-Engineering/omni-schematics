@@ -85,16 +85,21 @@ test.describe("Smoke — web build", () => {
       .then(() => true)
       .catch(() => false);
 
-    // The browser harness runs against `createStubKernel`, which answers
-    // the handshake but produces no samples, so pressing Run here is a
-    // check that the button is reachable and wired — not that the solver
-    // works. The solver is covered where it actually runs: the extension's
-    // own integration suite, and the engine's cross-check against an
-    // independent C implementation.
+    // No samples arrive here, and there is no kernel involved in that any
+    // more. `shell/run.ts` compiles with the WebAssembly engine and posts the
+    // netlist to the extension host, which resolves and spawns the solver —
+    // and the browser harness has no extension host, so nothing answers. The
+    // sidecar this comment used to blame, and the `createStubKernel` that
+    // stood in for it, were both deleted in 0.9.0.
     //
-    // Skipped rather than failed, and says which, so a genuinely broken Run
-    // in a session that does have a kernel still shows up as a failure.
-    test.skip(!gotSamples, "stub kernel: no samples produced, so nothing to assert on");
+    // So pressing Run here checks that the button is reachable and wired, not
+    // that the solver works. The solver is covered where it actually runs: the
+    // extension's own integration suite, and the engine's cross-check against
+    // an independent C implementation.
+    //
+    // Skipped rather than failed, and says which, so a genuinely broken Run in
+    // a session that does reach a solver still shows up as a failure.
+    test.skip(!gotSamples, "no extension host in the browser harness: no samples to assert on");
     expect(gotSamples).toBe(true);
   });
 });

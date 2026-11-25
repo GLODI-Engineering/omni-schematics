@@ -32,9 +32,10 @@ async function buildRc(appPage: import("@playwright/test").Page) {
     // records the two other ngspice tests being deleted for that; these two set it through the
     // window hook rather than naming it in a title, and were missed.
     //
-    // It is not why they timed out. No samples arrive here whatever the simulator is: the
-    // browser harness answers with a stub kernel. Corrected rather than left standing, because
-    // a comment naming the wrong cause sends the next reader somewhere there is nothing wrong.
+    // It is not why they timed out. No samples arrive here whatever the simulator is, because
+    // the browser harness has no extension host to spawn one. Corrected rather than left
+    // standing, because a comment naming the wrong cause sends the next reader somewhere there
+    // is nothing wrong.
     win.__gensim_setActiveSimulator?.("general-simulator");
   });
 }
@@ -71,10 +72,12 @@ async function setAnalysis(
 }
 
 async function waitForSamples(page: import("@playwright/test").Page): Promise<boolean> {
-  // The browser harness runs against `createStubKernel`, which answers the handshake and
-  // produces **no samples** -- `smoke.spec.ts` says so in as many words, and spells the
-  // consequence: pressing Run here checks that the button is reachable and wired, not that the
-  // solver works. The solver is covered where it actually runs, in the extension's own
+  // No samples arrive here, and no kernel is involved in that: the browser harness has no
+  // extension host, so the netlist `shell/run.ts` compiles is posted to nothing and the solver
+  // is never spawned. The sidecar this used to blame, and the `createStubKernel` that stood in
+  // for it, were both deleted in 0.9.0. `smoke.spec.ts` says so in as many words, and spells
+  // the consequence: pressing Run here checks that the button is reachable and wired, not that
+  // the solver works. The solver is covered where it actually runs, in the extension's own
   // integration suite.
   //
   // So this returns whether samples arrived instead of insisting they did, and the caller skips
@@ -125,7 +128,10 @@ test("RC circuit headless frontend flow with screenshots (schematic + TRAN/AC/DC
   // The three waveform captures need a solver, so they are attempted and the test says plainly
   // when the harness could not supply one, rather than writing three pictures of an empty plot.
   const captured = await runAndCapture(appPage, "TRAN", "test-results/rc-circuit/tran.png");
-  test.skip(!captured, "stub kernel: no samples, so the waveform screenshots cannot be made");
+  test.skip(
+    !captured,
+    "no extension host in the browser harness: the waveform screenshots cannot be made",
+  );
   await runAndCapture(appPage, "AC", "test-results/rc-circuit/ac.png");
   await runAndCapture(appPage, "DC", "test-results/rc-circuit/dc.png");
 });
