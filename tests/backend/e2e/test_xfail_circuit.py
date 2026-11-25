@@ -6,12 +6,17 @@ Those backends are gone -- general-simulator is the only one -- so the surviving
 is the useful half: the reply is either a real solve, or an error that names the missing
 piece rather than being opaque.
 
-The model is a fixture rather than a literal in this file. It used to be built inline as a
-schema_version 1 document, which no reader accepts (there is no v1 reader, by design), with
-no `paradigm` on its blocks, no `kind` on its wires, no ground, and the catalogue's `p`/`n`
-port spelling for two-pin passives where the compiler wants `p1`/`p2`
-(GLODI-Engineering/gsim-core#4). It is now generated through gsim_py, so the schema and the
-spelling come from the engine.
+What is sent is netlist text (#158). The kernel does not compile: the editor does,
+with `gsim-core` built to WebAssembly. So this test does not need an engine binding
+at all -- it takes a netlist from `examples/expected-netlists/`, which a gate holds
+to the byte, and the reply is either a solve or a named missing piece.
+
+Before that it sent a document, and before *that* the document was a literal in this
+file: a schema_version 1 model that no reader accepts (there is no v1 reader, by
+design), with no `paradigm` on its blocks, no `kind` on its wires, no ground, and the
+catalogue's `p`/`n` port spelling for two-pin passives where the compiler wanted
+`p1`/`p2` (GLODI-Engineering/gsim-core#4). Each step moved the thing under test closer
+to the thing the product does.
 """
 
 from __future__ import annotations
@@ -27,13 +32,8 @@ from tests.backend.e2e._ws_helpers import recv_json
 pytestmark = pytest.mark.asyncio
 
 
-FIXTURES = pathlib.Path(__file__).parent.parent / "fixtures"
-RC_MODEL = FIXTURES / "models" / "rc_circuit.gsim"
-
-
-def _rc_circuit_model() -> dict:  # type: ignore[type-arg]
-    """The minimal RC circuit, as a schema_version 2 document."""
-    return json.loads(RC_MODEL.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+REPO_ROOT = pathlib.Path(__file__).parents[3]
+NETLIST = REPO_ROOT / "examples" / "expected-netlists" / "buck_converter.net"
 
 
 async def test_circuit_element_result_is_ok_or_no_simulator(e2e_server: dict) -> None:
@@ -59,7 +59,7 @@ async def test_circuit_element_result_is_ok_or_no_simulator(e2e_server: dict) ->
                     "id": "circuit-sim-28",
                     "type": "simulate",
                     "payload": {
-                        "model": _rc_circuit_model(),
+                        "netlist": NETLIST.read_text(encoding="utf-8"),
                         "options": {"t_start": 0.0, "t_end": 1e-3, "n_samples": 100},
                     },
                 }
@@ -92,13 +92,12 @@ async def test_circuit_element_result_is_ok_or_no_simulator(e2e_server: dict) ->
         assert "phase 2" not in error_text, (
             f"Error must not mention 'Phase 2' after BE-28: {error_text}"
         )
-        # `general-simulator` (via gsim-core's `gsim_py` extension) is the default
-        # path now, and its unavailability message names `gsim_py`/`gsim-core`/
-        # `maturin` — none of which contain the words this list originally held.
         # The assertion's point is that the reply says *which* component is
-        # missing rather than being opaque, so the vocabulary follows the solvers
-        # that actually exist, not just the three SPICE ones.
-        named = ("spice", "ngspice", "xyce", "simulator", "gsim_py", "gsim-core", "gsim")
+        # missing rather than being opaque, so the vocabulary follows what can
+        # actually be missing. Since #158 that is one thing -- the
+        # `general-simulator` binary -- because the compiler ships with the
+        # editor and cannot be absent from a kernel that never had it.
+        named = ("spice", "ngspice", "xyce", "simulator", "gsim")
         assert any(word in error_text for word in named), (
             f"Error message names no solver (expected one of {named}): {error_text}"
         )

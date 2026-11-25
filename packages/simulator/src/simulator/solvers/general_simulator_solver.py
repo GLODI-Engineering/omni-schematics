@@ -1,8 +1,8 @@
 """`general-simulator` subprocess backend — the project's own native solver.
 
-Half of the bypass-the-old-pipeline path described in
-`simulator.compiler.gsim_py_netlist`'s own module doc comment: that module compiles a
-`.gsim_sch` document straight to a netlist via `gsim-core`'s own compile registry; this module
+The solve half of the path. The compile half is not in this repository's Python any more
+(#158): the editor compiles a `.gsim_sch` document with `gsim-core` built to WebAssembly
+(`packages/gsim-wasm`) and sends the kernel netlist text. This module
 runs that netlist through the real `general-simulator` binary (the Rust LCP/PWL engine — see
 `general-simulator/README.md` for what it actually solves and why) and parses its CSV output
 back into the same `ResultBundle` shape `NgspiceSolver`/`XyceSolver` already produce, so nothing

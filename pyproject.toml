@@ -40,13 +40,17 @@ gsim-model = { workspace = true }
 # (which prunes anything it does not lock, so both need redoing after a sync):
 #
 #   uv pip install -e ../gsim-tools
-#   # and the gsim_py wheel — see packages/simulator/src/simulator/compiler/
-#   # gsim_py_netlist.py's own module doc comment for the maturin step.
+#   # and the gsim_py wheel:
+#   #   maturin build --release --manifest-path <gsim-core>/crates/gsim-py/Cargo.toml
+#   #   uv pip install <gsim-core>/target/wheels/gsim_py-*.whl
 #
-# Every import of either is lazy, every test that needs them skips when they are
-# absent, and the IPC layer turns their absence into a `SolverUnavailable` reply
-# naming the build step — so a checkout without them is a working checkout that
-# simply cannot run the general-simulator solve path.
+# Neither is needed to compile a schematic any more (#158). The editor compiles
+# with `gsim-core` built to WebAssembly — committed in `packages/gsim-wasm`, no
+# Python involved — and the kernel is handed netlist text. What these two are
+# still for is the example generators under `examples/`, which author documents
+# in Python, and the integration tests that want an engine in-process. Every
+# import of either is lazy and every test that needs them skips when they are
+# absent, so a checkout without them is a working checkout.
 # gsim-tools = { path = "../gsim-tools" }
 
 [dependency-groups]
