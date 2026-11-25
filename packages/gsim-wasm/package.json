@@ -1,0 +1,30 @@
+{
+  "name": "@gensim/gsim-wasm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "gsim-core's own crates/gsim-wasm, built to WebAssembly. The engine the editor compiles with, in the webview and in Node. The engine version this bundle was built from is in provenance.json, not here — one place for it.",
+  "main": "./pkg/gsim_wasm.js",
+  "types": "./pkg/gsim_wasm.d.ts",
+  "exports": {
+    ".": {
+      "types": "./pkg/gsim_wasm.d.ts",
+      "default": "./pkg/gsim_wasm.js"
+    },
+    "./compile": {
+      "types": "./compile.d.ts",
+      "default": "./compile.js"
+    },
+    "./node": {
+      "types": "./node.d.ts",
+      "default": "./node.js"
+    },
+    "./wasm": "./pkg/gsim_wasm_bg.wasm",
+    "./provenance.json": "./provenance.json"
+  },
+  "files": ["pkg", "compile.js", "compile.d.ts", "node.js", "node.d.ts", "provenance.json"],
+  "scripts": {
+    "build": "node ../../scripts/build-gsim-wasm.mjs",
+    "check": "node ../../scripts/check-gsim-wasm-fresh.mjs --check"
+  }
+}

@@ -1,6 +1,7 @@
 packages:
   - "apps/frontend"
   - "apps/vscode-extension"
+  - "packages/gsim-wasm"
   - "packages/schemas"
   - "packages/webview-protocol"
   - "tests/schemas"
