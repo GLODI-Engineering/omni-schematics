@@ -8,7 +8,7 @@
  * sole example in the repository -- already used a block type the engine no
  * longer declares, and nothing had noticed.
  *
- * Five things are checked per file in `examples/`:
+ * Seven things are checked per file in `examples/`:
  *
  *   1. it parses as a `.gsim_sch` document with blocks in it;
  *   2. every block type resolves in the engine catalogue, by name or alias;
@@ -17,7 +17,10 @@
  *      webview itself loads);
  *   5. it compiles, **to the netlist byte for byte**, and emits exactly the
  *      compiler notes recorded in `examples/expected-netlists/`;
- *   6. the committed file matches what its generating script emits, when it has
+ *   6. the engine's own `loadDocument` → `saveDocument` gives the same document
+ *      back, gives the same bytes on a second pass, and what comes out still
+ *      compiles to the netlist in arm 5 (#174);
+ *   7. the committed file matches what its generating script emits, when it has
  *      one -- the same shape as gsim-core's `examples-still-emit-what-they-
  *      emitted` job.
  *
@@ -48,7 +51,7 @@
  * gsim-core 0.6.0 -- so "the same netlist as today" is a fact about this file
  * and not a claim about it. See `examples/expected-netlists/README.md`.
  *
- * No Python is needed for arms 1-5. Arm 6 runs the generators, which author
+ * No Python is needed for arms 1-6. Arm 7 runs the generators, which author
  * documents in Python with `gsim-tools`; without them it says so rather than
  * failing.
  *
@@ -98,7 +101,7 @@ function engineDir() {
 /**
  * The interpreter that has `gsim_tools` and `gsim_py` in it.
  *
- * Needed by arm 6 alone -- the example generators author their documents in
+ * Needed by arm 7 alone -- the example generators author their documents in
  * Python. `python3` on PATH is almost never the right one: the engine bindings
  * live in this workspace's venv, and `gsim_py` is a compiled extension that has
  * to be built. Preference order mirrors `gen-engine-catalog.mjs`: an explicit
@@ -246,6 +249,139 @@ function compilesToTheExpectedNetlist(engine, compileDocument, name, documentPat
   }
   const lines = result.netlist.split("\n").filter((line) => line.trim() && !line.startsWith("*"));
   return { ok: true, lines: lines.length, notes: result.notes.length };
+}
+
+/**
+ * Does the engine read and write this document without changing what it means?
+ *
+ * The arm #174 added, and the one a byte comparison of netlists cannot stand in
+ * for. Compiling proves the engine can *read* a document; it says nothing about
+ * what the engine would write back, and `saveDocument` is the function the
+ * editor was asked to start saving through. A writer that drops a field still
+ * compiles the document it kept.
+ *
+ * Three questions, in the order they can hurt someone:
+ *
+ *   1. **Is the round-trip lossless?** `loadDocument` then `saveDocument`,
+ *      compared with the committed file as data. Key order and whitespace are
+ *      normalised away because the engine pretty-prints in its own order; a
+ *      missing or added *value* is not.
+ *   2. **Is it stable?** The same bytes on a second pass. A save is not a
+ *      one-shot — the host writes, hands the text back, and the document is
+ *      read again — so a round-trip that moved the document a little each time
+ *      would walk it somewhere else one save at a time, and question 1 alone
+ *      would not notice.
+ *   3. **Does what came out still compile to the same netlist?** The strongest
+ *      of the three, and the cheapest: it closes the loop between this arm and
+ *      the compile arm above. A round-trip could satisfy both of the first two
+ *      and still produce a document the compiler reads differently.
+ *
+ * ## What this arm is *not* able to check, and where that is checked instead
+ *
+ * It cannot compare the engine's writer against the editor's, because the
+ * editor's is `apps/frontend/src/file/serializer.ts` — TypeScript, and this is
+ * a bare Node script with no transpiler. Re-implementing it here in JavaScript
+ * would be a third writer of the format, which is the disease #174 is about.
+ * That comparison lives in `apps/frontend/src/file/engine-agreement.test.ts`,
+ * which runs in the `frontend` job where TypeScript is available, and which is
+ * where the four features the engine's writer drops are recorded (#200).
+ *
+ * The five examples are flat — no subsystem, no `.SUBCKT` body, no boundary
+ * ports — so none of those four can bite here, and this arm is a true lossless
+ * claim about them rather than a projection. An example that grows one will
+ * fail question 1, which is the right place to find out.
+ */
+function engineRoundTripsLosslessly(engine, compileDocument, name, documentPath) {
+  const committed = readFileSync(documentPath, "utf8");
+  let once;
+  let twice;
+  try {
+    const roundTrip = (text) =>
+      engine.saveDocument(JSON.stringify(JSON.parse(engine.loadDocument(text)).model));
+    once = roundTrip(committed);
+    twice = roundTrip(once);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `the engine could not read and rewrite it — ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
+
+  const problems = [];
+  if (normaliseJson(once) !== normaliseJson(committed)) {
+    problems.push(
+      "the engine's round-trip is not lossless: a field it wrote back differs from the " +
+        `committed document.${firstJsonDifference(committed, once)}`,
+    );
+  }
+  if (twice !== once) {
+    problems.push(
+      "the engine's round-trip is not stable: a second pass produced different bytes " +
+        `(${once.length} then ${twice.length})${firstDifference(once, twice)}`,
+    );
+  }
+  const expectedNetlist = join(EXPECTED_DIR, `${name}.net`);
+  if (existsSync(expectedNetlist)) {
+    try {
+      const recompiled = compileDocument(engine, once);
+      const expected = readFileSync(expectedNetlist, "utf8");
+      if (recompiled.netlist !== expected) {
+        problems.push(
+          "the round-tripped document no longer compiles to " +
+            `${name}.net${firstDifference(expected, recompiled.netlist)}`,
+        );
+      }
+    } catch (error) {
+      problems.push(
+        "the round-tripped document no longer compiles at all — " +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
+  }
+  return problems.length > 0 ? { ok: false, reason: problems.join("\n    ") } : { ok: true };
+}
+
+/** The first JSON path at which two documents hold different values. */
+function firstJsonDifference(expected, actual) {
+  let parsedExpected;
+  let parsedActual;
+  try {
+    parsedExpected = JSON.parse(expected);
+    parsedActual = JSON.parse(actual);
+  } catch {
+    return "";
+  }
+  const found = walk(parsedExpected, parsedActual, "");
+  return found ? `\n      ${found}` : "";
+}
+
+function walk(expected, actual, path) {
+  if (JSON.stringify(sortKeys(expected)) === JSON.stringify(sortKeys(actual))) {
+    return null;
+  }
+  const bothPlainObjects =
+    expected &&
+    actual &&
+    typeof expected === "object" &&
+    typeof actual === "object" &&
+    !Array.isArray(expected) &&
+    !Array.isArray(actual);
+  if (bothPlainObjects) {
+    for (const key of new Set([...Object.keys(expected), ...Object.keys(actual)])) {
+      const found = walk(expected[key], actual[key], `${path}/${key}`);
+      if (found) return found;
+    }
+  }
+  if (Array.isArray(expected) && Array.isArray(actual) && expected.length === actual.length) {
+    for (let index = 0; index < expected.length; index += 1) {
+      const found = walk(expected[index], actual[index], `${path}/${index}`);
+      if (found) return found;
+    }
+  }
+  const show = (value) => (value === undefined ? "(absent)" : JSON.stringify(value).slice(0, 120));
+  return `at ${path || "/"}: committed ${show(expected)}, engine wrote ${show(actual)}`;
 }
 
 /** Where two texts first diverge, as a line number and the two lines. */
@@ -483,6 +619,16 @@ for (const file of files) {
     } else {
       failures.push(`${name}: ${compiled.reason}`);
       console.log(`  ✗ ${compiled.reason}`);
+    }
+
+    const roundTripped = engineRoundTripsLosslessly(engine, compileDocument, name, path);
+    if (roundTripped.ok) {
+      console.log(
+        "  · survives the engine's own load → save unchanged, stably, and still compiles",
+      );
+    } else {
+      failures.push(`${name}: ${roundTripped.reason}`);
+      console.log(`  ✗ ${roundTripped.reason}`);
     }
   }
 

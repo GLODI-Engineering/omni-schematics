@@ -34,7 +34,7 @@ const ASSET_REF = /(\s(?:src|href)=")(\.?\/?assets\/[^"]+)(")/g;
  * 2. **Parametric expressions** (`store/model.ts`,
  *    `inspector/ParamExpressionInput.tsx`) evaluated user expressions with
  *    `new Function`. They now use the lexer/parser in
- *    `apps/frontend/src/persistence/param_expression.ts`, which implements the
+ *    `apps/frontend/src/params/param_expression.ts`, which implements the
  *    grammar the format spec actually defines (§5.2) and generates no code.
  *
  * So: **nothing in the webview bundle may generate code at runtime.** Adding a

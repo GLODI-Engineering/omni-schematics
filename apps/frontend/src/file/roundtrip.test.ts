@@ -1,3 +1,16 @@
+/**
+ * The `.gsim_sch` round-trip, asserted against the loader and writer the editor
+ * actually runs.
+ *
+ * It used to assert it against `persistence/gsim_sch_loader.ts` and
+ * `gsim_sch_saver.ts` — a reader and writer of this format that no production
+ * code path ever imported (#174). So the properties below held, for 159 lines
+ * of TypeScript that never saw a user's file, while `file/deserializer.ts` and
+ * `file/serializer.ts` — the pair every real open and every real save goes
+ * through — were covered by neither. The dead pair is deleted and these point
+ * at the live one.
+ */
+
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -5,8 +18,8 @@ import { fileURLToPath } from "node:url";
 import Ajv from "ajv/dist/2020";
 import { describe, expect, it } from "vitest";
 
-import { loadGsimSch } from "./gsim_sch_loader";
-import { saveGsimSch } from "./gsim_sch_saver";
+import { deserialize } from "./deserializer";
+import { serialize } from "./serializer";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = resolve(
@@ -36,13 +49,19 @@ describe("FE-63: .gsim_sch roundtrip", () => {
 
   it("test_roundtrip_semantic: load + save preserves document semantics", () => {
     const text = readFixture();
-    const loaded = loadGsimSch(text);
-    if ("error" in loaded) {
-      throw new Error(`loadGsimSch failed: ${loaded.error}`);
-    }
-    const reparsed = JSON.parse(saveGsimSch(loaded));
+    const reparsed = JSON.parse(serialize(deserialize(text)));
     const original = JSON.parse(text);
     expect(reparsed).toEqual(original);
+  });
+
+  // The property that protects a user's file across repeated saves. A save is
+  // not a one-shot: the host writes, the webview is handed its own bytes back on
+  // the next `gsim/setDocument`, and reads them again. A round-trip that moved
+  // the document even slightly on each pass would walk it somewhere else one
+  // save at a time, and no single comparison would show it.
+  it("is idempotent: a second round-trip changes nothing, byte for byte", () => {
+    const once = serialize(deserialize(readFixture()));
+    expect(serialize(deserialize(once))).toBe(once);
   });
 
   it("test_fixture_features: fixture contains required FE-63 features", () => {
@@ -83,9 +102,7 @@ describe("model.role (spec §4.1)", () => {
     const original = JSON.parse(readFixture());
     expect(original.model.role).toBeUndefined();
 
-    const loaded = loadGsimSch(readFixture());
-    if ("error" in loaded) throw new Error(`loadGsimSch failed: ${loaded.error}`);
-    expect("role" in JSON.parse(saveGsimSch(loaded)).model).toBe(false);
+    expect("role" in JSON.parse(serialize(deserialize(readFixture()))).model).toBe(false);
   });
 
   it('round-trips role: "library" through load + save', () => {
@@ -93,10 +110,9 @@ describe("model.role (spec §4.1)", () => {
     doc.model.role = "library";
     expect(compileSchema()(doc)).toBe(true);
 
-    const loaded = loadGsimSch(JSON.stringify(doc));
-    if ("error" in loaded) throw new Error(`loadGsimSch failed: ${loaded.error}`);
+    const loaded = deserialize(JSON.stringify(doc));
     expect(loaded.model.role).toBe("library");
-    expect(JSON.parse(saveGsimSch(loaded)).model.role).toBe("library");
+    expect(JSON.parse(serialize(loaded)).model.role).toBe("library");
   });
 
   it("rejects an unknown role value", () => {

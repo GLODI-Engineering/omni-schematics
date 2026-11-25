@@ -126,7 +126,7 @@ things needed it, and both have since been removed:
   of time by `apps/frontend/scripts/gen-validators.mjs` into ordinary ES
   modules, checked in and drift-checked on every build.
 - **Parametric expressions** were evaluated with `new Function`. They now go
-  through `apps/frontend/src/persistence/param_expression.ts`, a lexer and
+  through `apps/frontend/src/params/param_expression.ts`, a lexer and
   recursive-descent parser for the grammar the format spec defines (§5.2).
 
 A dependency that generates code at runtime — a JSON-schema compiler, a
