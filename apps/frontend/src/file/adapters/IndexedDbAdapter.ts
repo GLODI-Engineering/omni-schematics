@@ -100,13 +100,46 @@ export class IndexedDbAdapter implements StorageAdapter {
     });
   }
 
+  /**
+   * Store `doc` under a ref of its own and return that ref.
+   *
+   * This used to rewrite the document before writing it: `model.id` became
+   * `<id>-copy-<timestamp>` and `model.name` gained a " Copy" suffix. So every
+   * call duplicated the model rather than storing it, and neither caller asks
+   * for a duplicate — `saveFile()` routes the *first* save of a never-saved
+   * model here, because there is no ref yet, and the `file.save-as` command's
+   * own toast says "Model saved".
+   *
+   * What that cost, measured: build a model, press Ctrl+S once, reload, open it
+   * from the startup list, and you get "<name> Copy" under a record keyed
+   * `model-1-copy-<timestamp>` — while the in-memory document keeps its own id
+   * and name, so nothing on screen says anything happened. A second Ctrl+S then
+   * writes the real document back under the copy's key, leaving a record whose
+   * key and `model.id` disagree. Hence a user who saves, closes and reopens is
+   * quietly working on a duplicate from then on.
+   *
+   * A storage adapter allocates refs. Renaming the user's model is not its
+   * decision to make, so the document is written through untouched and the ref
+   * is its own `model.id` — the two stay in step, and a save → open round trip
+   * is byte-identical. The timestamp suffix is only for the case the name
+   * implies: a Save As over a model that is already stored, where a fresh key is
+   * the whole point and clobbering the original would not be.
+   */
   async saveAs(doc: ModelDocument): Promise<ModelRef> {
-    const copy = cloneDocument(doc);
-    const nextId = `${copy.model.id}-copy-${Date.now()}`;
-    copy.model.id = nextId;
-    copy.model.name = `${copy.model.name} Copy`;
-    await this.save(nextId, copy);
-    return nextId;
+    const ref = (await this.hasRecord(doc.model.id))
+      ? `${doc.model.id}-${Date.now()}`
+      : doc.model.id;
+    await this.save(ref, doc);
+    return ref;
+  }
+
+  /** Whether a record is already stored under this ref. */
+  private async hasRecord(id: ModelRef): Promise<boolean> {
+    const db = await this.openDatabase();
+    const transaction = db.transaction(MODELS_STORE, "readonly");
+    const key = await requestToPromise(transaction.objectStore(MODELS_STORE).getKey(id));
+    await transactionDone(transaction);
+    return key !== undefined;
   }
 
   async delete(id: ModelRef): Promise<void> {
