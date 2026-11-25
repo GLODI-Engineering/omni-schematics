@@ -47,6 +47,24 @@ describe("transientArgs", () => {
   });
 });
 
+describe("transientArgs and the event stream", () => {
+  it("asks for the event stream when a path is given", () => {
+    // Without `--events` the engine writes its findings into a temporary
+    // directory that goes away with the run, so every rating exceeded and
+    // every short dead time was discarded.
+    expect(transientArgs({ ...request, eventsPath: "/tmp/run.events.jsonl" })).toEqual([
+      ...transientArgs(request),
+      "--events",
+      "/tmp/run.events.jsonl",
+    ]);
+  });
+
+  it("omits the flag entirely when no path is given", () => {
+    // Not an empty `--events ""`, which the solver would take as a filename.
+    expect(transientArgs(request)).not.toContain("--events");
+  });
+});
+
 describe("runTransient", () => {
   it("reports where the samples went when the solver succeeds", async () => {
     const { onLine } = collect();

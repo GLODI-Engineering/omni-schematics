@@ -35,6 +35,16 @@ export interface TransientRequest {
   netlistPath: string;
   /** Where the solver should write its `.gsim_samples` container. */
   samplesPath: string;
+  /**
+   * Where the solver should write its rule-event stream, read back by
+   * `event-log.ts`.
+   *
+   * Asked for explicitly because without `--events` the engine writes the file
+   * into a temporary directory that is deleted with the run, so every finding
+   * of every run was discarded (#68). A run with no rules declared writes no
+   * file at all, which is an empty log rather than an error.
+   */
+  eventsPath?: string;
   tEnd: number;
   tStep: number;
   /** Abandon the run after this long. `undefined` waits indefinitely. */
@@ -55,7 +65,7 @@ export type SolverOutcome =
  * explain when the exact command is in the Output panel.
  */
 export function transientArgs(request: TransientRequest): string[] {
-  return [
+  const args = [
     request.netlistPath,
     "--mode",
     "transient",
@@ -68,6 +78,10 @@ export function transientArgs(request: TransientRequest): string[] {
     "--out",
     request.samplesPath,
   ];
+  if (request.eventsPath !== undefined) {
+    args.push("--events", request.eventsPath);
+  }
+  return args;
 }
 
 export interface RunOptions {
