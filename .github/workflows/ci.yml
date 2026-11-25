@@ -312,10 +312,31 @@ jobs:
       # just built handed to it.
       - name: build the kernel environment
         run: node scripts/make-kernel-venv.mjs --out "$RUNNER_TEMP/kernel-venv" --force --gsim-py /tmp/wheels/gsim_py-*.whl
+      # And `gsim-tools`, which `make-kernel-venv.mjs` installs only from a checkout beside
+      # this one, and there is none here. Without it the generator arm reported "generator did
+      # not run" on all five examples and the job stayed green -- so the one check holding a
+      # committed example to its own `build_*.py` had never actually run in CI, on this branch
+      # or on `main`. Installed from the repository, which is the route the README documents.
+      - name: add gsim-tools, which the generators author documents with
+        run: |
+          "$RUNNER_TEMP/kernel-venv/bin/python" -m pip install --quiet \
+            'gsim-tools @ git+https://github.com/GLODI-Engineering/gsim-tools'
       # The same command again, now with an interpreter that can run the generators, so the
       # last arm is real rather than reported-as-absent.
       - name: examples check, with the generators
-        run: GSIM_PYTHON="$RUNNER_TEMP/kernel-venv/bin/python" node scripts/check-examples.mjs --check
+        run: |
+          GSIM_PYTHON="$RUNNER_TEMP/kernel-venv/bin/python" node scripts/check-examples.mjs --check \
+            | tee /tmp/examples.log
+          # A run that reported "generator did not run" five times and exited 0 is the failure
+          # this step exists to prevent, and it is indistinguishable from a pass without this.
+          if grep -q "generator did not run" /tmp/examples.log; then
+            echo "::error::a generator did not run, so nothing held an example to its own build_*.py"
+            exit 1
+          fi
+          if ! grep -q "matches its generator" /tmp/examples.log; then
+            echo "::error::no example was checked against its generator"
+            exit 1
+          fi
 
   keybinding-drift:
     # `package.json`'s keybindings and docs/keyboard-conflicts.md are generated from the
