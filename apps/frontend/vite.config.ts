@@ -67,8 +67,8 @@ export default defineConfig({
       // library — FE-62 through FE-66
       "src/library/fidelity-swap.test.ts",
       // "src/library/signal_attributes_palette.test.tsx", // FE-66 implemented
-      // persistence — FE-63
-      // "src/persistence/roundtrip.test.ts", // FE-63 implemented
+      // file — FE-63
+      // "src/file/roundtrip.test.ts", // FE-63 implemented
       // simulation — scaffold tests (re-enable as epics land)
       // e2e Playwright specs — run via playwright, not vitest
       "tests/e2e/**",

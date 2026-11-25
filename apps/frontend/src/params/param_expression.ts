@@ -1,3 +1,49 @@
+/**
+ * The §5.2 param-expression evaluator — `{Rload * 2}` — and why it is here.
+ *
+ * ## It is not a second copy of the engine's evaluator
+ *
+ * #174 expected it to be one, and it is not. `gsim-core` has an expression
+ * grammar, `${{ }}`, and it belongs to the *symbol* format (GSF v2): it sizes a
+ * component's geometry, and `evaluateComponent` is its door. The grammar below
+ * is the *document* format's §5.2 — a block or model parameter whose value is
+ * written `"{Rload * 2}"` — and the engine does not implement it. Its own
+ * `document/model.rs` says the syntax "is not evaluated by this crate in
+ * Phase 1", `docs/decisions/002` §Finding 4.3 records it as absent, and the
+ * behaviour is observable: give the engine a resistor with `R: "{3 + 4}"` and
+ * `compile` emits
+ *
+ *     rload n_cout_p 0 {3 + 4}
+ *
+ * — the text, verbatim, into the netlist. There is nothing to delegate to.
+ * Deleting this module would not move the work into the engine; it would
+ * remove the only thing that does it. See GLODI-Engineering/omni-schematics#199.
+ *
+ * ## What it is actually for, and why that is not the compile path
+ *
+ * Both callers are read-only and display-time:
+ *
+ *   - `inspector/ParamExpressionInput.tsx` greys out a resolved-value readout
+ *     as the user types, including while the expression is half-written;
+ *   - `store/model.ts`'s `resolveModelParams` builds the `name → number` map
+ *     the three inspector panels show beside each field.
+ *
+ * Nothing here rewrites the document. A parameter's text reaches the engine
+ * exactly as the user wrote it, which is why this module cannot drift the
+ * netlist the way #143 and #153 did: it has no say in one. Its only duty is to
+ * agree with what the compiler will eventually make of the same string — and
+ * once the engine implements §5.2, that agreement becomes testable and this
+ * module becomes deletable.
+ *
+ * ## Why it parses rather than evaluating
+ *
+ * It replaced two `new Function` call sites. The VS Code webview's CSP has no
+ * `'unsafe-eval'` and must not gain one — `apps/vscode-extension/src/
+ * webview-html.ts` explains at length — so the grammar is lexed and walked by
+ * hand. `'wasm-unsafe-eval'`, which the engine needs, does not permit this and
+ * is not a route back to it.
+ */
+
 type Token =
   | { type: "number"; value: number }
   | { type: "identifier"; value: string }

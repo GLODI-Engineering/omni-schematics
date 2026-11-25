@@ -1,3 +1,26 @@
+/**
+ * Writing a `.gsim_sch`. The editor's writer, and the only one that runs on a
+ * user's file.
+ *
+ * ## Why not the engine's `saveDocument`
+ *
+ * #174 asked exactly that, and the answer is that the engine's writer is a
+ * compiler's: it drops `blocks[].subsystem` (an entire nested model),
+ * `subckt_defs[].body` (a `.SUBCKT`'s SPICE text), `model.ports` and
+ * `model.parent_param_aliases`. Saving through it would silently destroy any
+ * document using one of them. All four are recorded, and asserted to still
+ * happen, in `./engine-agreement.test.ts`; the open question of whether the
+ * engine should carry them is #200. Until it does, this function stays, and
+ * that test is what holds it to the engine's reading of the same document.
+ *
+ * ## The compact form is not a decision this file made on purpose
+ *
+ * `JSON.stringify` is called with no indent, so a document is written on one
+ * line — while `examples/_builder.py` and the engine both pretty-print with
+ * 2-space indent. The round-trip is lossless and idempotent either way, so
+ * nothing is at risk; what suffers is `git diff` on a saved sheet. #201.
+ */
+
 import type { ModelDocument } from "../model/types";
 
 function assertInteger(value: number, label: string): void {

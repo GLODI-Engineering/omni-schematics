@@ -17,7 +17,7 @@ import type { Analysis, ParamEntry } from "../model/types";
 // The parser in param_expression implements exactly the grammar the format
 // spec defines for these strings (§5.2), and evaluates it without generating
 // code — which the VS Code webview's CSP requires.
-import { tryEvalExpr as evalExpr } from "../persistence/param_expression";
+import { tryEvalExpr as evalExpr } from "../params/param_expression";
 
 /**
  * Resolve all model-level params into a flat `name → number` map.

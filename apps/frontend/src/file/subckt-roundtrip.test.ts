@@ -7,6 +7,17 @@
  * false` with no `subckt_ref` property (so any real gsim-core document failed
  * validation before it could render), and `SubcktDef` had no way to carry a
  * .gsim_sch-native `blocks`/`wires` body.
+ *
+ * Retargeted from the dead `persistence/` loader and writer onto
+ * `file/deserializer.ts` and `file/serializer.ts`, the pair the editor runs
+ * (#174). One assertion had to get more specific as a result, and it is the
+ * interesting one: this fixture spells two of its block types the old way, and
+ * the live loader resolves an alias to the canonical name on the way in
+ * (`canonical-types.ts`). So the round-trip is *not* value-identical here, by
+ * design — the netlist emitter accepts canonical names only, and a document
+ * that kept its aliases would render perfectly and then fail to compile with a
+ * message naming a type the user never typed. The test below asserts that
+ * resolution happens and that nothing else moves.
  */
 
 import { readFileSync } from "node:fs";
@@ -17,8 +28,8 @@ import Ajv from "ajv/dist/2020";
 import { describe, expect, it } from "vitest";
 
 import { resolveBlockMetadata } from "../canvas/subckt-metadata";
-import { loadGsimSch } from "./gsim_sch_loader";
-import { saveGsimSch } from "./gsim_sch_saver";
+import { deserialize } from "./deserializer";
+import { serialize } from "./serializer";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = resolve(__dirname, "../../../../tests/fixtures/gsim_sch/subckt.gsim_sch");
@@ -29,12 +40,14 @@ const SCHEMA_PATH = resolve(
 
 const TEXT = readFileSync(FIXTURE_PATH, "utf-8");
 
+/** The two types this fixture spells as pre-#143 aliases, and what they resolve to. */
+const ALIASES: Record<string, string> = {
+  "physical-electrical.source.voltage_dc": "source.voltage.dc",
+  "physical-electrical.passive.resistor": "passive.resistor",
+};
+
 function loadOrThrow() {
-  const loaded = loadGsimSch(TEXT);
-  if ("error" in loaded) {
-    throw new Error(`loadGsimSch failed: ${loaded.error}`);
-  }
-  return loaded;
+  return deserialize(TEXT);
 }
 
 describe("spice-subckt document round-trip", () => {
@@ -50,16 +63,29 @@ describe("spice-subckt document round-trip", () => {
   });
 
   it("load + save preserves subckt_ref, subckt_defs and every wire endpoint", () => {
-    const reparsed = JSON.parse(saveGsimSch(loadOrThrow()));
-    expect(reparsed).toEqual(JSON.parse(TEXT));
+    const reparsed = JSON.parse(serialize(loadOrThrow()));
+    const expected = JSON.parse(TEXT);
+    // The one intended difference: an alias becomes the canonical name the
+    // netlist emitter will accept. Applied to the expectation rather than
+    // excused, so that a *second* difference still fails this test.
+    for (const block of expected.model.blocks) {
+      if (block.type in ALIASES) block.type = ALIASES[block.type];
+    }
+    expect(reparsed).toEqual(expected);
+  });
+
+  it("resolves this fixture's aliased types, which is why the above is not value-identical", () => {
+    const loaded = loadOrThrow();
+    const types = loaded.model.blocks.map((block) => block.type);
+    for (const [alias, canonical] of Object.entries(ALIASES)) {
+      expect(JSON.parse(TEXT).model.blocks.map((b: { type: string }) => b.type)).toContain(alias);
+      expect(types).toContain(canonical);
+      expect(types).not.toContain(alias);
+    }
   });
 
   it("a wire endpoint on a subckt port survives a save/reload cycle", () => {
-    const before = loadOrThrow();
-    const reloaded = loadGsimSch(saveGsimSch(before));
-    if ("error" in reloaded) {
-      throw new Error(`reload failed: ${reloaded.error}`);
-    }
+    const reloaded = deserialize(serialize(loadOrThrow()));
 
     const wire = reloaded.model.wires.find((candidate) => candidate.id === "w_v1_x1");
     expect(wire?.to).toEqual({ block: "X1", port: "inp" });

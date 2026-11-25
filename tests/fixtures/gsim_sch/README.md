@@ -14,5 +14,5 @@ It intentionally includes at least one example of each required v2 feature:
 
 Used by:
 
-- `apps/frontend/src/persistence/roundtrip.test.ts`
+- `apps/frontend/src/file/roundtrip.test.ts`
 - `tests/backend/e2e/test_v2_comprehensive.py`
