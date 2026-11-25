@@ -31,7 +31,14 @@ export function setCurrentModelRef(ref: ModelRef | null): void {
   syncFilePath(ref);
 }
 
-function createEmptyDocument(): ModelDocument {
+/**
+ * A new, empty schematic.
+ *
+ * Exported for `vscode/document-load.ts`, which needs the same answer for an
+ * empty *file* — see the note there. One definition, so "empty" cannot come to
+ * mean two things.
+ */
+export function createEmptyDocument(): ModelDocument {
   return {
     schema_version: 2,
     model: {

@@ -68,7 +68,9 @@
       {
         "command": "omniSchematics.newSchematic",
         "title": "New Schematic",
-        "category": "Omni Schematics"
+        "shortTitle": "Schematic",
+        "category": "Omni Schematics",
+        "icon": "$(new-file)"
       },
       {
         "command": "omniSchematics.openExample",
@@ -92,6 +94,31 @@
           "command": "omniSchematics.showWaveforms",
           "when": "activeCustomEditorId == omniSchematics.schematic",
           "group": "navigation@1"
+        },
+        {
+          "command": "omniSchematics.newSchematic",
+          "when": "activeCustomEditorId == omniSchematics.schematic",
+          "group": "navigation@2"
+        }
+      ],
+      "file/newFile": [
+        {
+          "command": "omniSchematics.newSchematic",
+          "group": "file"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "omniSchematics.newSchematic",
+          "when": "view == omniSchematics.library",
+          "group": "navigation@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "omniSchematics.newSchematic",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@10"
         }
       ],
       "commandPalette": [

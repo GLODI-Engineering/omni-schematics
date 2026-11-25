@@ -20,6 +20,12 @@ import { openExample } from "./examples";
 import { GsimHost } from "./host";
 import { LIBRARY_VIEW_ID, LibraryViewProvider } from "./libraryView";
 import { mirrorToConsole } from "./log";
+import {
+  NEW_SCHEMATIC_BASENAME,
+  SCHEMATIC_EXTENSION,
+  modelNameFor,
+  newSchematicDocument,
+} from "./new-schematic";
 import { RESULTS_VIEW_TYPE, ResultsEditorProvider } from "./resultsEditor";
 import { createRecordingRunOutput, createRunOutputChannel } from "./run-output";
 import { SCHEMATIC_VIEW_TYPE, SchematicEditorProvider } from "./schematicEditor";
@@ -131,14 +137,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<GsimTe
       }
       host.broadcast({ type: "gsim/forwardedChord", chord }, { role: "schematic" });
     }),
-    vscode.commands.registerCommand("omniSchematics.newSchematic", async () => {
-      const target = await vscode.window.showSaveDialog({
-        filters: { "General Simulator schematic": ["gsim_sch"] },
-        saveLabel: "Create schematic",
-      });
-      if (!target) return;
-      await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(""));
-      await vscode.commands.executeCommand("vscode.openWith", target, SCHEMATIC_VIEW_TYPE);
+    /**
+     * Create a schematic and open it in the canvas.
+     *
+     * The first thing a new user touches, and until #211 the only way to reach
+     * it was to know its name in the command palette: it was contributed to
+     * `commandPalette` and nowhere else, so "click the extension and there is
+     * no way to create a new file" was an accurate description of the product.
+     * It is contributed to `file/newFile`, the Block Library's title bar and
+     * the Explorer context menu now.
+     *
+     * `target` is what those entry points hand over. A `.gsim_sch` URI is
+     * created directly, which is also the door the integration suite uses — a
+     * modal Save dialog cannot be driven from a test, and this path being
+     * untestable is how the zero-byte file below went unnoticed. A folder (the
+     * Explorer's selection) seeds the dialog instead of being written to.
+     */
+    vscode.commands.registerCommand("omniSchematics.newSchematic", async (target?: unknown) => {
+      const hint = target instanceof vscode.Uri ? target : undefined;
+      const direct = hint?.path.endsWith(SCHEMATIC_EXTENSION) ? hint : undefined;
+
+      const uri = direct ?? (await askWhereToPutIt(hint));
+      if (!uri) return;
+
+      // Never clobber. `showSaveDialog` asks before it returns an existing
+      // path, but the direct form above has no dialog in front of it, and a
+      // command that silently replaces a schematic with an empty one is the
+      // worst thing on this code path.
+      if (!(await exists(uri))) {
+        await vscode.workspace.fs.writeFile(
+          uri,
+          new TextEncoder().encode(newSchematicDocument(modelNameFor(uri.path))),
+        );
+      }
+      await vscode.commands.executeCommand("vscode.openWith", uri, SCHEMATIC_VIEW_TYPE);
     }),
     vscode.commands.registerCommand("omniSchematics.openSchematic", async () => {
       const picked = await vscode.window.showOpenDialog({
@@ -154,6 +186,46 @@ export async function activate(context: vscode.ExtensionContext): Promise<GsimTe
 
   // Only the @vscode/test-electron harness gets a handle on the live host.
   return isIntegrationTest() ? createTestApi(host) : undefined;
+}
+
+/** True when something is already at this path. */
+async function exists(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The Save dialog, opened somewhere the user will recognise.
+ *
+ * It used to open with no `defaultUri` at all, which puts it in whatever
+ * directory the OS last remembered and offers no file name — so the first
+ * step of using this editor was typing a path and remembering the extension.
+ * The order is: where the user clicked, then the folder of the schematic they
+ * are looking at, then the workspace root.
+ */
+async function askWhereToPutIt(hint?: vscode.Uri): Promise<vscode.Uri | undefined> {
+  const directory =
+    hint ?? folderOfActiveSchematic() ?? vscode.workspace.workspaceFolders?.[0]?.uri ?? undefined;
+
+  return vscode.window.showSaveDialog({
+    ...(directory ? { defaultUri: vscode.Uri.joinPath(directory, NEW_SCHEMATIC_BASENAME) } : {}),
+    filters: { "Omni Schematics schematic": ["gsim_sch"] },
+    title: "New schematic",
+    saveLabel: "Create schematic",
+  });
+}
+
+function folderOfActiveSchematic(): vscode.Uri | undefined {
+  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input as
+    | { uri?: vscode.Uri }
+    | undefined;
+  const uri = input?.uri;
+  if (!uri || !uri.path.endsWith(SCHEMATIC_EXTENSION)) return undefined;
+  return vscode.Uri.joinPath(uri, "..");
 }
 
 export function deactivate(): void {

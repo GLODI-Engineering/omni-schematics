@@ -109,6 +109,44 @@ describe("a document that cannot be read", () => {
   });
 });
 
+/**
+ * #211 — the revert path, which is the one the open path's guard was hiding.
+ *
+ * "New Schematic" wrote a zero-byte file. Opening it was fine, because
+ * `schematic-main.tsx` checks for empty text before loading anything. Pressing
+ * File ▸ Revert was not: `revertCustomDocument` posts the file's bytes
+ * straight here, `JSON.parse("")` throws, the document is recorded unreadable
+ * and from then on `currentDocumentText()` returns the original bytes — so
+ * every save is a silent no-op and the user's work goes nowhere.
+ */
+describe("an empty file", () => {
+  it("is an empty schematic, not an unreadable document", () => {
+    loadDocumentTextOrReport("");
+    expect(unreadableDocument()).toBeNull();
+    expect(document.getElementById("gsim-unreadable-banner")).toBeNull();
+  });
+
+  it("leaves the editor able to save, which is what the old behaviour took away", () => {
+    loadDocumentTextOrReport("");
+    // Not the original bytes handed back: a real serialisation of the (empty)
+    // store, which is what a save writes.
+    const text = currentDocumentText();
+    expect(text).not.toBe("");
+    expect(JSON.parse(text).schema_version).toBe(2);
+  });
+
+  it("says nothing alarming to the host about it", () => {
+    loadDocumentTextOrReport("");
+    const types = postToHost.mock.calls.map(([message]) => (message as { type: string }).type);
+    expect(types).not.toContain("gsim/documentUnreadable");
+  });
+
+  it("treats whitespace the same way", () => {
+    loadDocumentTextOrReport("\n  \n");
+    expect(unreadableDocument()).toBeNull();
+  });
+});
+
 describe("a document that reads correctly", () => {
   const GOOD = JSON.stringify({
     schema_version: 2,
