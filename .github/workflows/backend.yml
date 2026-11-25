@@ -1,10 +1,19 @@
 name: backend-v2-e2e
 
-# Runs the v2 end-to-end roundtrip gate test (BE-41) on every PR and push.
-# It exercises the v2 pipeline: load → flatten → resolve_goto_from → substitute_params
-# → compile → solve. (`build_ir1`/`lower_ir2` were the Python-simulator lowering stages, which
-# went with the backend refactor; gsim-core compiles the document now.)
-# No host SPICE simulator is required.
+# Drives the kernel end to end on every PR and push: a real sidecar in-process, a
+# `simulate` request, progress frames, a result, a manifest fetched over HTTP, and
+# every signal it names read back.
+#
+# It used to be one test, `test_v2_roundtrip.py`, over a pipeline of Python stages:
+# load → flatten → resolve_goto_from → substitute_params → compile → solve. Every
+# stage of that is `gsim-core` now and none of it is Python (#158), so the test and
+# the modules it exercised are gone. What is left to drive from here is the half the
+# kernel still owns — receive a netlist, solve it, write and serve the result — and
+# that is `tests/backend/e2e/`.
+#
+# No host SPICE simulator is required: the tests that need the `general-simulator`
+# binary skip without it, and the netlist they send comes from
+# `examples/expected-netlists/`, which `scripts/check-examples.mjs` holds to the byte.
 
 on:
   push:
@@ -36,14 +45,17 @@ jobs:
       - name: mypy (simulator)
         run: uv run mypy packages/simulator/src/
 
-      # test_v2_comprehensive.py was one of five e2e files the backend refactor deleted along
-      # with the SPICE paths they covered. Naming a file that no longer exists made pytest exit
-      # "file or directory not found" before running anything, so this gate had been failing
-      # without testing a thing.
-      - name: v2 e2e roundtrip test
+      # The directory, not a file. Naming a file is how this gate broke twice: once when
+      # `test_v2_comprehensive.py` went with the SPICE paths it covered, once when
+      # `test_v2_roundtrip.py` went with the Python compiler it round-tripped through.
+      # Both times pytest exited "file or directory not found" before running anything,
+      # so the gate failed while testing nothing — and the name of the missing file was
+      # the only clue. A directory keeps working when its contents are renamed, and
+      # pytest still exits 4 if it ever becomes empty.
+      - name: backend end-to-end tests
         run: |
           uv run pytest \
-            tests/backend/e2e/test_v2_roundtrip.py \
+            tests/backend/e2e/ \
             -v --tb=short
 
       - name: Upload test artifacts on failure
