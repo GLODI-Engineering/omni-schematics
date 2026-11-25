@@ -1,4 +1,12 @@
-export type BinaryDType = "float32" | "float64" | "int16";
+/**
+ * What a run says about its signals, and the shape a window of them has.
+ *
+ * This file used to describe a WebSocket conversation: a request to send, a
+ * result to await, a binary frame to decode, a client to hold. The sidecar that
+ * answered it is gone (#162) -- a run is the extension host spawning the solver
+ * (#159) and the plot is the viewer reading the `.gsim_samples` container
+ * (#157) -- so what is left is the vocabulary both of those still speak.
+ */
 
 export interface WaveformTrace {
   label: string;
@@ -32,8 +40,8 @@ export interface WaveformSlice {
  *
  * `SimulationManifest.signals` is a list of names, which is all the viewer
  * needed while every signal was something the solver computed. It is not
- * enough to tell a measured capture from a computed trace, and the kernel has
- * always sent more than a name.
+ * enough to tell a measured capture from a computed trace, and a run has
+ * always known more than a name.
  */
 export interface SignalDetail {
   name: string;
@@ -52,11 +60,11 @@ export interface SimulationManifest {
   t_start: number;
   t_end: number;
   /**
-   * The same signals, with what the kernel knows about each.
+   * The same signals, with what the run knows about each.
    *
-   * Optional, and in the same order as `signals` when present: a fixture or a
-   * stub kernel that answers with names alone stays valid, and a consumer
-   * that only wants names is unaffected.
+   * Optional, and in the same order as `signals` when present: a fixture that
+   * answers with names alone stays valid, and a consumer that only wants names
+   * is unaffected.
    */
   details?: SignalDetail[];
 }
@@ -66,64 +74,4 @@ export interface DcOpEntry {
   quantity: string;
   value: number;
   unit: string;
-}
-
-/**
- * What a `simulate` request resolves to.
- *
- * Still called `ExecuteResult` because `execute()` is the one request method on
- * the client and `simulate` is now the only thing it sends -- renaming both is
- * churn across the run path for no change in meaning. `chunks` carries the
- * error text of a failed run; it used to carry a REPL cell's stdout as well.
- */
-export interface ExecuteResult {
-  status?: string;
-  manifest: SimulationManifest;
-  chunks?: string[];
-  dc_op_table?: DcOpEntry[];
-}
-
-export interface SimulateRequest {
-  type: "simulate";
-  /**
-   * Netlist text, always — the kernel does not compile (#158).
-   *
-   * There used to be a `model` field here carrying the whole document, and the
-   * kernel compiled it with a Python reimplementation of `gsim-core`. The
-   * editor holds the engine itself now, so what crosses the wire is the
-   * engine's own output. A kernel asked to simulate without a netlist answers
-   * `MissingNetlist` rather than reaching for a compiler it no longer has.
-   */
-  netlist: string;
-  solver?: string;
-  analysis_type?: "TRAN" | "AC" | "DC" | "OP" | "NOISE";
-  t_end?: number;
-  t_step?: number;
-  ac_fstart?: number;
-  ac_fstop?: number;
-  ac_points?: number;
-  dc_source?: string;
-  dc_start?: number;
-  dc_stop?: number;
-  dc_step?: number;
-}
-
-export interface BinaryFramePayload {
-  dtype: BinaryDType;
-  shape: number[];
-  data: Float32Array | Float64Array | Int16Array;
-}
-
-export class CancelledError extends Error {
-  constructor(message = "Request cancelled") {
-    super(message);
-    this.name = "CancelledError";
-  }
-}
-
-export interface IpcClient {
-  execute(payload: unknown): Promise<ExecuteResult>;
-  cancel(id?: string): void;
-  waveformGet(simId: string, signals: string[]): Promise<WaveformSlice>;
-  subscribe(event: "kernel_status", listener: (payload: unknown) => void): () => void;
 }

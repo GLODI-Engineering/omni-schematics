@@ -42,7 +42,7 @@ describe("recent-netlists", () => {
     const [entry] = listRecentNetlists();
     if (!entry) throw new Error("expected a recorded entry");
 
-    useIpcStore.setState({ status: "busy", simProgress: 0.4 });
+    useIpcStore.setState({ runStartedAt: Date.now() });
 
     openRecentNetlist(entry);
 
@@ -52,7 +52,6 @@ describe("recent-netlists", () => {
     expect(state.activeEditorTabId).toBe("core.netlist");
     // resetForNewModel() must run first — a stuck busy state from whatever
     // was loaded before must not carry over into the reopened netlist.
-    expect(state.status).toBe("idle");
-    expect(state.simProgress).toBeNull();
+    expect(state.runStartedAt).toBeNull();
   });
 });

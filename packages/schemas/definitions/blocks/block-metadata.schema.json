@@ -287,7 +287,7 @@
         "equation_template": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
-          "description": "Reference to the simulator-side equation template (resolved by the `packages/simulator/` lowering stage). Conventionally equals `name` and may contain multiple dotted segments, but is kept separate so a block can be renamed without breaking its template binding."
+          "description": "Reference to the engine-side equation template (resolved by the engine's lowering stage). Conventionally equals `name` and may contain multiple dotted segments, but is kept separate so a block can be renamed without breaking its template binding."
         }
       },
       "description": "Solver-facing metadata. The frontend uses `causality` to lay out ports; the simulator uses all four fields during IR-1 \u2192 IR-2 lowering."

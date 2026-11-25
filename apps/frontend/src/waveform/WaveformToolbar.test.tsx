@@ -26,7 +26,6 @@ describe("FE-114 WaveformToolbar", () => {
       ]),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     render(<WaveformToolbar axesId="a-1" />);
@@ -56,7 +55,6 @@ describe("FE-114 WaveformToolbar", () => {
       ]),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     render(<WaveformToolbar axesId="a-1" />);
@@ -89,7 +87,6 @@ describe("FE-114 WaveformToolbar", () => {
       ]),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     render(<WaveformToolbar axesId="a-1" />);
@@ -161,7 +158,6 @@ describe("FE-114 WaveformToolbar", () => {
           },
         ],
       ]),
-      streamingSignals: new Set(),
     });
 
     render(<WaveformToolbar axesId="a-1" />);
@@ -209,7 +205,6 @@ describe("FE-114 WaveformToolbar", () => {
           },
         ],
       ]),
-      streamingSignals: new Set(),
     });
 
     render(<WaveformToolbar axesId="a-1" />);

@@ -13,12 +13,6 @@ vi.mock("./shell/BottomPanel", () => ({ BottomPanel: () => null }));
 vi.mock("./shell/ShellDialogs", () => ({ ShellDialogs: () => null }));
 vi.mock("./inspector/Inspector", () => ({ Inspector: () => null }));
 vi.mock("./shell/ToastHost", () => ({ ToastHost: () => null }));
-vi.mock("./ipc/transport", () => ({
-  getIpcClient: () => ({
-    subscribe: () => () => {},
-  }),
-}));
-
 import App from "./App";
 import type { BlockMetadata } from "./model/types";
 import { useGraphStore, useLibraryStore, useUiStore } from "./store";

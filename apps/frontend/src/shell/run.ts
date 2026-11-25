@@ -13,13 +13,13 @@
  * What used to be here: a WebSocket to a kernel sidecar whose job was to find
  * that same binary, spawn it, read what it printed and time it out — 794 lines
  * of Python around a process the extension host was already placed to start.
- * `apps/kernel-sidecar/` and the socket client are still in the tree; deleting
- * them is #162, and the waveform store still reaches for the socket to fetch a
- * signal's samples until #163 teaches it to read the container.
+ * Neither the sidecar nor the socket client is in the tree any more (#162), and
+ * the waveform store no longer reaches for a socket to fetch a signal: the
+ * viewer reads the container the solver wrote (#157).
  *
  * ## Why a click must always answer
  *
- * Run used to begin by connecting to the kernel and returning bare if that
+ * Run used to begin by connecting to the sidecar and returning bare if that
  * failed, with the reason going to the Output panel — which starts hidden, so
  * from the outside clicking Run did nothing at all (#130). An empty schematic
  * was not checked anywhere, so that click did nothing either, for a different
@@ -276,14 +276,12 @@ export function samplesReadLine(report: {
 async function runOnHost(request: RunRequest): Promise<void> {
   const ipc = useIpcStore.getState();
   ipc.appendOutput("── Running the solver… ────────────────────────────");
-  ipc.setSimProgress(0, "Starting simulation…");
   ipc.setRunStartedAt(Date.now());
   // The webview's own Output tab, which exists again (#170) and is the only
   // one a browser-hosted shell has.
   useUiStore.getState().focusBottomTab("core.output");
 
   const result: RunResult = await requestRun(request);
-  useIpcStore.getState().setSimProgress(null);
   useIpcStore.getState().setRunStartedAt(null);
 
   if (!result.ok) {

@@ -20,7 +20,6 @@ describe("FE-160 GridLayout empty-cell signal drop", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
   });
 
@@ -30,7 +29,6 @@ describe("FE-160 GridLayout empty-cell signal drop", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const { container } = render(<GridLayout figureId="fig-1" rows={1} cols={1} />);
@@ -60,7 +58,6 @@ describe("FE-160 GridLayout empty-cell signal drop", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const { container } = render(<GridLayout figureId="fig-1" rows={1} cols={1} />);
@@ -82,7 +79,6 @@ describe("FE-167 GridLayout maximize/restore", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
   });
 
@@ -97,7 +93,6 @@ describe("FE-167 GridLayout maximize/restore", () => {
       ]),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
   }
 
@@ -155,7 +150,6 @@ describe("a row has a floor, and the figure scrolls past it", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
       activeAxesId: null,
     });
     const figureId = useWaveformStore.getState().createFigure("F", 3, 1);
@@ -173,7 +167,6 @@ describe("#29 resizing a figure's tracks from the keyboard", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
   });
 
@@ -183,7 +176,6 @@ describe("#29 resizing a figure's tracks from the keyboard", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
     return render(<GridLayout figureId="fig-1" rows={2} cols={2} />);
   }

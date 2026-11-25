@@ -25,7 +25,6 @@ beforeEach(() => {
     axes: new Map(),
     couplingGroups: new Map(),
     signalCache: new Map(),
-    streamingSignals: new Set(),
     activeAxesId: null,
   });
   useIpcStore.setState({ lastManifest: null });

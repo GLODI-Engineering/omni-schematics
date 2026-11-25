@@ -11,7 +11,6 @@ function resetStore() {
     axes: new Map(),
     couplingGroups: new Map(),
     signalCache: new Map(),
-    streamingSignals: new Set(),
   });
 }
 

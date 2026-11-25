@@ -21,6 +21,14 @@ suite runs its reduction assertions through that bundle. There is no Python
 decimation left at all: the last copy was private to the legacy HDF5 writer
 `hdf5_store.py`, and #156 deleted both.
 
+`src/decimate.rs`'s own header names
+`packages/simulator/src/simulator/postprocess/decimation.py` as what both
+strategies were ported from. That path is gone with the rest of the Python
+(#162) and the header is kept as it stands deliberately: every file under
+`src/` is in the digest `scripts/check-waveform-wasm-fresh.mjs` compares, so
+editing a comment there would mean rebuilding and re-committing a 203 KiB
+WebAssembly bundle to say nothing new.
+
 It also makes a hosted deployment affordable. A plot 1500 px wide can
 distinguish about 3000 points: two per pixel, one for the top of each column
 and one for the bottom. Everything past that is paid for and not seen. On a

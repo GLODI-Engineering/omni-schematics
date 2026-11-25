@@ -9,7 +9,6 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import { installCrossWebviewDnd } from "../canvas/dnd";
-import { initKernelFromVsCode } from "../ipc/transport";
 import { getWebviewInit, onHostMessage, postToHost } from "../ipc/vscode-host";
 import { followVsCodeTheme } from "../ipc/vscode-theme";
 import { LibraryActivity } from "../library/LibraryActivity";
@@ -24,7 +23,6 @@ import "../styles/app.css";
 
 function boot(): void {
   followVsCodeTheme();
-  initKernelFromVsCode();
 
   // Publishes library drags to the extension host, which relays the payload to
   // the schematic webview — plain HTML5 DnD cannot cross the webview boundary.

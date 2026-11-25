@@ -1,15 +1,18 @@
 /**
  * Omni Schematics — the VS Code extension's entry point.
  *
- * Activation wires up three things:
+ * Activation wires up two things:
  *
- * 1. the kernel-sidecar child process (owned by the extension host, ported
- *    from `apps/desktop/src-tauri/src/main.rs`),
- * 2. the Block Library `WebviewView` in the Activity Bar container, and
- * 3. the `*.gsim_sch` Custom Editor Provider hosting the schematic canvas,
+ * 1. the Block Library `WebviewView` in the Activity Bar container, and
+ * 2. the `*.gsim_sch` Custom Editor Provider hosting the schematic canvas,
  *    and the read-only `*.gsim_sim_result` one hosting the waveform viewer,
  *
  * plus the `General Simulator: Show Waveforms` panel command.
+ *
+ * It used to wire up a third: a Python child process, started on activation,
+ * that a run was sent to. There is no child process to start (#162) — the
+ * extension spawns the solver itself when Run is pressed (#159) — so nothing
+ * here runs before the user asks for something.
  */
 import * as vscode from "vscode";
 
@@ -91,19 +94,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<GsimTe
 
   context.subscriptions.push(
     vscode.commands.registerCommand("omniSchematics.showWaveforms", () => waveforms.show()),
-    vscode.commands.registerCommand("omniSchematics.restartKernel", async () => {
-      const config = await host.kernel.restart();
-      if (config) {
-        void vscode.window.showInformationMessage(
-          `General Simulator: kernel restarted on port ${config.port}.`,
-        );
-      } else {
-        void vscode.window.showErrorMessage(
-          "General Simulator: kernel failed to start — see the General Simulator output channel.",
-        );
-      }
-    }),
-    vscode.commands.registerCommand("omniSchematics.showKernelLog", () => log.show()),
+    vscode.commands.registerCommand("omniSchematics.showLog", () => log.show()),
     /**
      * Open one of the bundled examples (#131).
      *
@@ -161,18 +152,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<GsimTe
     }),
   );
 
-  const autoStart = vscode.workspace
-    .getConfiguration("omniSchematics")
-    .get<boolean>("autoStartKernel", true);
-  if (autoStart) {
-    void host.kernel.start();
-  }
-
   // Only the @vscode/test-electron harness gets a handle on the live host.
   return isIntegrationTest() ? createTestApi(host) : undefined;
 }
 
 export function deactivate(): void {
-  // Everything is registered in `context.subscriptions`; VS Code disposes it,
-  // and `GsimHost.dispose()` tears the kernel sidecar down.
+  // Everything is registered in `context.subscriptions`, and VS Code disposes
+  // it. There is no child process started at activation left to tear down.
 }

@@ -23,8 +23,8 @@ files in the same workspace, under the same version control, with the same
 editor and the same language servers.
 
 So the schematic is a VS Code custom editor for `*.gsim_sch`, the block
-library is a view in the Activity Bar, waveforms are a panel, and the
-simulation kernel is a child process the extension owns.
+library is a view in the Activity Bar, waveforms are a panel, and the solver
+is a child process the extension spawns when you press Run.
 
 ## What it does today
 
@@ -51,7 +51,6 @@ VS Code extension host (Node)
 │   ├── solver-run.ts       spawns it, streams stdout and stderr apart
 │   ├── event-log.ts        reads what the run's rules found
 │   └── result-manifest.ts  writes the .gsim_sim_result beside the container
-├── KernelSidecar           spawns the Python kernel, parses KERNEL_READY
 ├── LibraryViewProvider     WebviewView in the Activity Bar
 ├── SchematicEditorProvider CustomEditorProvider for *.gsim_sch
 └── WaveformPanel           singleton results panel
@@ -63,12 +62,13 @@ webviews (Vite bundles from apps/frontend)
     └── gsim-core as WebAssembly   compiles the sheet to a netlist
 
 general-simulator (a binary) solves the netlist, writes a .gsim_samples container
-
-kernel sidecar (Python)      nothing in a run reaches it any more (#159); it is
-                             started for the status indicator and for reading a
-                             signal out of a run it already holds, and #162
-                             deletes it
+    └── crates/waveform-store as WebAssembly   reads windows of it back
 ```
+
+**Two processes, and neither is an interpreter.** There used to be a third: a
+Python kernel sidecar the extension spawned on activation and a run was sent
+to. It is deleted (#162), with the seven packages a user had to install to
+build its environment.
 
 ### Run needs no Python
 
@@ -81,24 +81,25 @@ passed back into the webview to ask what a block means.
 What that replaced was 794 lines of Python whose whole job was to find that same
 binary, start it, read what it printed and time it out — reached by starting an
 interpreter, handing it a path and having it look. The extension was already
-doing exactly that for the kernel process itself, one level up.
+doing exactly that for the kernel process itself, one level up; that kernel is
+gone too (#162).
 
 `omniSchematics.generalSimulatorPath` is therefore the only setting a run reads,
-and it is read on the first Run of a session rather than after a kernel has
-started. The solver's stdout and stderr reach VS Code's own Output panel as
-separate, labelled streams while the run is going (#139).
+and it is read on the first Run of a session. The solver's stdout and stderr
+reach VS Code's own Output panel as separate, labelled streams while the run is
+going (#139).
 
-One thing a completed run does **not** yet do is plot itself: the samples live
-in the `.gsim_samples` container and teaching the waveform store to read one is
-[#163](https://github.com/GLODI-Engineering/omni-schematics/issues/163). The run
-reports where it wrote the result, and the file is a complete, self-describing
-`.gsim_sim_result`.
+And a completed run plots itself (#157): the solver's `.gsim_samples` container
+is read by `crates/waveform-store`, built to WebAssembly, which works out which
+byte ranges a window needs and reduces them to what the chart can show. The run
+also writes a complete, self-describing `.gsim_sim_result` beside it, which has
+its own read-only editor.
 
 ### The compiler is in the editor
 
 `gsim-core` is the engine: one Rust implementation of what a document means,
 what each block compiles to, and what netlist comes out. The editor used to
-post the whole document to the kernel and let Python compile it there — through
+post the whole document to a Python kernel and let it compile there — through
 roughly 1,600 lines that reimplemented the engine's expression evaluator,
 Goto/From resolution, subcircuit flattening and document I/O in a second
 language. The two drifted twice that anyone noticed, and each time the symptom
@@ -119,10 +120,6 @@ and throw `Cannot find module` on everyone else's, with no build, test or
 typecheck here catching it. The engine runs where it is already loaded, and the
 host does what a webview cannot: resolve a binary, spawn it, read and write
 files, own an Output channel.
-
-The webviews still talk to the sidecar over a loopback WebSocket for what is
-left of it. The extension host owns the process and tells the webviews which
-port and token to use.
 
 ### The decimator is in the viewer, and the bytes come from the host
 
@@ -191,72 +188,20 @@ its workspace depends on by path — `gs-waveform-measurements`, `general-mna`
 and `spice-lsp` — cloned next to each other; with only the first, `cargo build`
 stops at `failed to load manifest for dependency` before compiling anything.
 
-`omniSchematics.kernelPython` is no longer part of that. It was required while
-the kernel ran the solver; the extension runs it now, so a machine with no
-Python at all opens an example and simulates it. The kernel is still started
-when the setting is set — for the status indicator, and to read a signal out of
-a run it already holds — and [#162](https://github.com/GLODI-Engineering/omni-schematics/issues/162)
-deletes it along with the rest of the sidecar.
+**There is nothing else to install.** No Python, no wheels, no virtual
+environment, no `omniSchematics.kernelPython`. The editor used to need a
+simulation kernel — a Python process the extension spawned, built from seven
+packages a user downloaded from the release and `pip install`ed into a venv of
+their own — and that whole arrangement is deleted (#162): the editor compiles
+with `gsim-core` in WebAssembly (#158), the extension spawns the solver itself
+(#159), and the viewer reads the container the solver wrote (#157).
 
-Preparing that environment anyway, from a checkout of this repo:
+So the install is: the `.vsix`, and a path to a solver binary. A machine with
+no Python on it at all opens every example, runs one, and gets a waveform.
 
-```sh
-node scripts/make-kernel-venv.mjs            # ~/.omni-schematics/kernel-venv
-```
-
-It installs the four kernel packages and their dependencies, adds `gsim_py` and
-`gsim-tools` if it finds them beside this checkout — for scripting, not for the
-editor, which compiles in WebAssembly — starts the kernel to check the result,
-and prints the path to paste into the setting. `--out <dir>` puts it somewhere
-else and `--python <exe>` picks the base interpreter.
-
-Without a checkout, the same thing by hand from a release's wheels:
-
-```sh
-python -m venv gsim-venv
-gsim-venv/bin/pip install <wheels>/*.whl   # the four kernel packages
-```
-
-One command, not four. One of these packages is named `schemas`, which belongs
-to somebody else on PyPI; installed one at a time, pip resolves a sibling's
-requirement from the index and fetches a stranger's package instead of the file
-beside it.
-
-`numpy`, `scipy`, `sympy` and `websockets` are declared by those wheels, so
-pip resolves them — you do not list them yourself. Verified: a venv holding
-nothing but the four wheels starts the kernel and prints its `KERNEL_READY`
-line.
-
-`h5py` used to be on that list and is not any more (#156), which removes the
-only reason this install ever pinned a CPython version: `pip` went looking for
-`hdf5.dll` on Windows whenever the interpreter fell outside h5py's wheel range.
-Nothing here constrains the version from above now — **any CPython from 3.11**,
-which is the floor every `pyproject.toml` declares. If you also install `gsim_py`
-to script a document, that wheel is a compiled extension and its own range,
-3.11–3.15, is the ceiling; the kernel itself has none.
-
-`matplotlib` and `pandas` used to be on that list, and are not any more: they
-were there for the in-editor Python REPL, which is gone (#161). Scripting lives
-in your own environment now — see [Scripting a schematic](#scripting-a-schematic).
-
-The wheels are attached to every release; `uv build --all-packages --out-dir dist`
-builds them from a checkout.
-
-Two packages that used to be needed as well — a `gsim_py` wheel and
-`gsim-tools` — are not (#158): they were what the kernel compiled a schematic
-with, and the editor compiles its own now with the same engine built to
-WebAssembly. They are still worth having in that environment if you want to
-script a document from Python — see
-[Scripting a schematic](#scripting-a-schematic) — and nothing in the editor
-notices their absence.
-
-On Windows the interpreter is `gsim-venv\Scripts\python.exe`; either the
-directory or the executable is accepted.
-
-The kernel announces a protocol version in its handshake, and the extension
-refuses an environment that does not match its own — so if you upgrade the
-extension and the kernel stops starting, the message tells you to reinstall
-those packages, rather than failing somewhere less obvious.
+Scripting a schematic is still Python, and still supported — in an environment
+you own rather than one the editor dictates. See
+[Scripting a schematic](#scripting-a-schematic).
 
 ### The example schematics
 
@@ -292,24 +237,19 @@ Then **open this repository as your VS Code workspace folder** and open
 `examples/buck_converter.gsim_sch`. It opens in the schematic editor, with
 the block library in the Activity Bar.
 
-Working on this repo needs the same `omniSchematics.kernelPython` a user needs
-— there is no developer shortcut, because a shortcut is how the user-facing path
-stays broken without anyone noticing:
+Working on this repo needs exactly what a user needs, and there is no developer
+shortcut — a shortcut is how the user-facing path stays broken without anyone
+noticing. What a user needs is a solver binary. There used to be a second step
+here, `node scripts/make-kernel-venv.mjs`, building the Python environment the
+kernel ran in; both the script and the kernel are gone (#162).
 
-```sh
-node scripts/make-kernel-venv.mjs
-```
-
-Then paste the path it prints into `omniSchematics.kernelPython`. Rerun it with
-`--force` after changing anything under `packages/` or `apps/kernel-sidecar`.
-
-`General Simulator: Show Kernel Log` in the command palette shows exactly what
-was spawned, which is the first place to look when a run does nothing.
+`Omni Schematics: Show Log` in the command palette shows exactly what was
+spawned, which is the first place to look when a run does nothing.
 
 The engine binary is not bundled. Point the extension at your own build with
 `omniSchematics.generalSimulatorPath`, or set `GENSIM_GENERAL_SIMULATOR_PATH`
-in the environment the kernel inherits. Nothing else needs a path: the engine
-is the only simulator this editor runs.
+in the environment the extension inherits. Nothing else needs a path: the
+engine is the only simulator this editor runs.
 
 ### Developing on it
 
@@ -380,7 +320,7 @@ every example schematic in this repository is generated that way.
 
 ### Why not in the editor
 
-Until #161 the kernel ran a Python REPL for a **Workspace** bottom tab: a
+Until #161 the Python kernel ran a REPL for a **Workspace** bottom tab: a
 persistent namespace with `numpy`, `scipy`, `matplotlib.pyplot`, `pandas` and
 `sympy` pre-imported, a variable list, and captured plots. It is gone, and
 nothing replaced it inside the editor.
@@ -396,18 +336,17 @@ or simulating a schematic imported them — so they left with it.
 
 Everything the extension needs to find lives under **General Simulator** in VS Code's settings
 (`Ctrl+,`, then search `omniSchematics`). Every path may be left empty, in which case it is
-searched for — with one exception: `omniSchematics.kernelPython` has nowhere to be searched
-for, and nothing in a run reads it any more (#159).
+searched for. There are five, and two fewer than there were:
+`omniSchematics.kernelPython` and `omniSchematics.autoStartKernel` went with the
+kernel they configured (#162).
 
 | Setting | What it is for |
 | --- | --- |
 | `omniSchematics.generalSimulatorPath` | The `general-simulator` binary — the engine that runs a simulation, and the only setting a run reads. Download a [release build](https://github.com/GLODI-Engineering/general-simulator/releases) or build one from source (see above). |
 | `omniSchematics.octaveCliPath` | The `octave-cli` binary, for `octfunc` / `octblock` code blocks. |
 | `omniSchematics.pythonPath` | Extra directories on `PYTHONPATH`, so a `pyblock` / `pyfunc` block can import your own modules. Relative entries resolve against the workspace folder. |
-| `omniSchematics.environment` | Extra environment variables for the kernel and everything it starts. The escape hatch for anything without its own setting. |
+| `omniSchematics.environment` | Extra environment variables for the solver and everything it starts. The escape hatch for anything without its own setting. |
 | `omniSchematics.solverTimeoutSeconds` | Abandon a run still going after this long; `0` waits indefinitely. Stop signals the solver process either way. |
-| `omniSchematics.kernelPython` | The Python environment the simulation kernel runs in. **No longer needed to simulate** (#159); `scripts/make-kernel-venv.mjs` builds one. |
-| `omniSchematics.autoStartKernel` | Start the kernel when the extension activates. |
 
 ### How a binary is actually found
 
@@ -437,9 +376,9 @@ Two of these are not quite like the others:
 - **`pythonPath`** does not choose an interpreter. The engine embeds the one it was built
   against; this only adds places for a block's `import` to look.
 
-The kernel log (`General Simulator: Show Kernel Log`) lists the variable *names* it was given
-on start-up, so you can tell a setting arrived without a path appearing in a log you might
-paste into an issue.
+The log (`Omni Schematics: Show Log`) names the environment variables a run was
+given, without their values, so you can tell a setting arrived without a path
+appearing in a log you might paste into an issue.
 
 ## Testing
 
@@ -454,7 +393,7 @@ The integration suite launches an actual VS Code, loads the extension, and
 asserts on state pulled out of the live webviews — activation, the custom
 editor resolving a `.gsim_sch`, the bundle loading under the webview CSP,
 React mounting, dirty-state and save writing bytes, the cross-webview drag
-fan-out, and the kernel handshake.
+fan-out, and a real run against a real solver binary reaching a real result.
 
 Rendering quality is checked by rendering and looking, not by assertion — no
 test notices that two labels overlap. See

@@ -1,14 +1,19 @@
 /**
- * Turn the extension's settings into the environment the simulation kernel —
- * and everything it starts, including the `general-simulator` process itself —
+ * Turn the extension's settings into the environment the `general-simulator`
+ * process — and everything it starts, `octave-cli` and `pyblock` included —
  * will inherit.
  *
- * Kept apart from `kernel.ts` because it is the half worth testing: `kernel.ts`
- * spawns a child process, this decides what that child is told. Before this
- * existed the spawn passed no `env` at all, so the kernel inherited whatever
+ * Kept apart from the spawn because it is the half worth testing: `host.ts`
+ * starts a child process, this decides what that child is told. Before it
+ * existed the spawn passed no `env` at all, so the solver inherited whatever
  * the editor happened to have and no setting could reach it.
  *
- * The resolution chain this feeds is `path_discovery.find_solver`'s: an
+ * This was `kernel-environment.ts` and built the *sidecar's* environment,
+ * which the solver then inherited because the sidecar was what spawned it.
+ * #159 moved the spawn here and #162 deleted the sidecar; the environment it
+ * described is the solver's, and always was the part that mattered.
+ *
+ * The resolution chain this feeds is the engine's own `find_solver`: an
  * explicit request option, then the app settings file, then
  * `GENSIM_<NAME>_PATH`, then `PATH`. These settings are the third rung, which
  * is the one a GUI can set per-workspace without writing to a shared file.
@@ -17,17 +22,17 @@
 import * as path from "node:path";
 
 /** Settings this module reads. Mirrors `contributes.configuration`. */
-export interface KernelEnvironmentSettings {
+export interface SolverEnvironmentSettings {
   generalSimulatorPath?: string;
   octaveCliPath?: string;
   pythonPath?: string[];
   environment?: Record<string, string>;
 }
 
-export interface BuildKernelEnvironmentOptions {
+export interface BuildSolverEnvironmentOptions {
   /** The environment to extend — normally `process.env`. */
   base: NodeJS.ProcessEnv;
-  settings: KernelEnvironmentSettings;
+  settings: SolverEnvironmentSettings;
   /** Folder that relative `pythonPath` entries resolve against. */
   workspaceRoot?: string;
   /** Separator for PATH-like variables. `path.delimiter` outside tests. */
@@ -48,7 +53,7 @@ export function solverEnvVar(solverName: string): string {
 
 const trimmed = (value: string | undefined): string => (value ?? "").trim();
 
-export function buildKernelEnvironment(options: BuildKernelEnvironmentOptions): NodeJS.ProcessEnv {
+export function buildSolverEnvironment(options: BuildSolverEnvironmentOptions): NodeJS.ProcessEnv {
   const { base, settings, workspaceRoot } = options;
   const delimiter = options.delimiter ?? path.delimiter;
   const env: NodeJS.ProcessEnv = { ...base };

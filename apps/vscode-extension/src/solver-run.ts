@@ -1,10 +1,11 @@
 /**
  * Running `general-simulator` and reporting what it said.
  *
- * This replaces `packages/simulator/src/simulator/solvers/` -- 794 lines whose
- * whole job was to find a binary, start it, read what it printed, and time it
- * out. The extension already does exactly that for a child process elsewhere,
- * one level up, so doing it here costs a module rather than an interpreter.
+ * This replaced `simulator/solvers/` -- 794 lines of Python whose whole job was
+ * to find a binary, start it, read what it printed, and time it out. The
+ * extension already does exactly that for a child process elsewhere, one level
+ * up, so doing it here costs a module rather than an interpreter. That package
+ * is deleted (#162).
  *
  * ## stdout and stderr stay apart
  *

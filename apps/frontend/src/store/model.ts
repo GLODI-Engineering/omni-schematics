@@ -270,7 +270,7 @@ export function syncAncestorSubsystemPorts(document: ModelDocument, path: string
 // ---------------------------------------------------------------------------
 
 /**
- * Convert a v2 Analysis object into the IPC SimulateRequest analysis payload.
+ * Convert a v2 Analysis object into the analysis fields of a run request.
  */
 export function analysisToPayload(analysis: Analysis): Record<string, unknown> {
   switch (analysis.type) {

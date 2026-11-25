@@ -2,6 +2,65 @@
 
 ## Unreleased
 
+### The editor installs as one `.vsix` — **breaking**
+
+**A machine with no Python on it opens every example, runs one, and gets a
+waveform.** That is the whole of the milestone this closes, and it is now true
+by construction rather than by luck: there is nothing left in this repository
+that could start an interpreter (#162).
+
+Deleted, with everything built to ship it:
+
+- `apps/kernel-sidecar/` — the Python process the extension spawned on
+  activation and sent a run to.
+- `packages/simulator`, `packages/gsim-model`, and the Python half of
+  `packages/schemas`. The schema *definitions* and the TypeScript they generate
+  stay; the Pydantic models went with the kernel that imported them.
+- The WebSocket layer, both ends: `server.py`, `ipc/`, `binary_frame.py`,
+  `handshake.py`, and the frontend's `ipc/client.ts`, `transport.ts`,
+  `binary-frame.ts`, `waveform-chunk-frame.ts`, `error-map.ts` and `stub/`.
+- The root `pyproject.toml`, `uv.lock`, `conftest.py`,
+  `requirements-venv-freeze.txt`, `scripts/make-kernel-venv.mjs`,
+  `scripts/build.sh`, `scripts/dev.sh` and `tests/backend/`.
+- `ci.yml`'s `python` job and the whole of `.github/workflows/backend.yml`.
+- `release.yml`'s `wheels` job: no wheels are built, none are attached, and the
+  release carries one file.
+
+**Two settings are gone.** `omniSchematics.kernelPython` and
+`omniSchematics.autoStartKernel`, with the `Restart Simulation Kernel` command,
+the kernel-start path, and every "the kernel did not start" diagnostic —
+**including the one about a missing `pyproject.toml`**, which is the message
+this milestone was opened over. `General Simulator: Show Kernel Log` is now
+`Omni Schematics: Show Log`; it was never about a kernel.
+
+`omniSchematics.generalSimulatorPath` is the only setting a run reads, and
+`GENSIM_KERNEL_PORT` / `GENSIM_KERNEL_TOKEN` are no longer read at all.
+
+**What the install is now.** Install the `.vsix`. Point
+`omniSchematics.generalSimulatorPath` at a `general-simulator` binary. That is
+the whole list. 0.7.0 needed nine Python packages and shipped seven; 0.8.0
+worked but needed all nine and a hand-built venv. The question does not apply.
+
+**The release has a gate again, and a stronger one.** The nine-wheel compile
+gate — which existed because 0.7.0 shipped a kernel that started and could not
+compile — is replaced rather than dropped. `release.yml` now compiles every
+`examples/*.gsim_sch` through the committed WebAssembly engine, counts them
+against the tree so a run over zero examples cannot pass, and runs with a PATH
+holding `node` and nothing else, failing outright if `python`, `python3` or
+`uv` can be reached from it. Watched failing three ways before being trusted.
+
+Also gone, because their only writer was the kernel client: `simProgress` and
+`simMessage` in the webview's store (nothing has reported a fraction since
+#159, and a meter stuck at 0% reads as a hung solver), `registerLiveSignal`,
+the live-chunk streaming path, `fetchSignal` — which still fetched waveforms
+over an HTTP route the sidecar stopped serving in #157, and whose silent
+`catch` would have drawn an empty trace rather than said anything (#194) — and
+the kernel-connection `status` the Run button coloured itself from. A run in
+flight is `runStartedAt`, and only that.
+
+`kernel-environment.ts` is `solver-environment.ts`. It always described the
+solver's environment; the sidecar was merely what used to pass it on.
+
 ### The install pins no Python version, because h5py is gone
 
 `h5py` was the hardest wheel in this install, and it is not declared anywhere
@@ -16,12 +75,18 @@ interpreter outside that range sent `pip` looking for `hdf5.dll` on Windows and
 the install failed in a way nothing in the message explained. That reason has
 expired, so the pin goes with it.
 
-**The real range is any CPython from 3.11, with no ceiling.** 3.11 is the floor
-every `pyproject.toml` here declares and nothing above it is excluded; `numpy`,
-`scipy`, `sympy`, `networkx`, `jsonschema` and `websockets` all ship wheels well
-past it. One ceiling is left and it is not the kernel's: a `gsim_py` wheel is a
-compiled extension with wheels for 3.11–3.15, so *if* you install it to script a
-document, that is your range. The editor needs it for nothing (#158).
+**The real range is any CPython from 3.11, with no ceiling.** 3.11 was the floor
+every `pyproject.toml` in this repository declared, and nothing above it was
+excluded: `numpy`, `scipy`, `sympy`, `networkx`, `jsonschema` and `websockets`
+all ship wheels well past it. One ceiling was left and it was not the kernel's —
+a `gsim_py` wheel is a compiled extension, with wheels for 3.11–3.15, so *if*
+you install it to script a document, that is your range. The editor needs it for
+nothing (#158).
+
+Read this as the answer to a question the install no longer asks. The section
+above deletes those packages, and with them the last reason the editor cared
+what interpreter a machine had. Any CPython from 3.11 is what *scripting* a
+document wants.
 
 **An existing result directory holding a `data.h5` does not open, and did not
 before this.** Nothing in the repository could read one: every HDF5 binding

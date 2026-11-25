@@ -13,7 +13,6 @@ describe("FE-115 ProbeAssignModal", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     render(<ProbeAssignModal blockId="probe-1" portId="out" onClose={vi.fn()} />);

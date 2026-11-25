@@ -14,7 +14,7 @@ import { runTests } from "@vscode/test-electron";
 
 /**
  * A scratch workspace for the test window: one `.gsim_sch` file plus settings
- * that keep the run hermetic (the kernel test starts the sidecar explicitly).
+ * that keep the run hermetic.
  */
 function makeWorkspace(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gsim-vscode-test-"));
@@ -23,19 +23,12 @@ function makeWorkspace(): string {
     path.join(dir, ".vscode", "settings.json"),
     JSON.stringify(
       {
-        "omniSchematics.autoStartKernel": false,
-        // #141: the kernel starts from a named environment and nothing else, so
-        // the suite is handed one or skips the test that needs it. `GSIM_KERNEL_PYTHON`
-        // is what CI sets after running `scripts/make-kernel-venv.mjs`; locally,
-        // export it to point at the venv you already have.
-        ...(process.env.GSIM_KERNEL_PYTHON
-          ? { "omniSchematics.kernelPython": process.env.GSIM_KERNEL_PYTHON }
-          : {}),
         // #159: the extension runs the solver itself, so the run test needs a
-        // binary and nothing else -- no interpreter, no kernel. Named through
-        // the setting rather than left to `PATH`, because the setting is the
-        // rung a user actually sets and the one whose description used to have
-        // to apologise for being read too late to matter.
+        // binary and nothing else -- no interpreter, and since #162 there is no
+        // kernel to configure either. Named through the setting rather than
+        // left to `PATH`, because the setting is the rung a user actually sets
+        // and the one whose description used to have to apologise for being
+        // read too late to matter.
         ...(process.env.GSIM_GENERAL_SIMULATOR_PATH
           ? { "omniSchematics.generalSimulatorPath": process.env.GSIM_GENERAL_SIMULATOR_PATH }
           : {}),
@@ -84,12 +77,7 @@ async function main(): Promise<void> {
       GSIM_TEST_WORKSPACE: workspace,
       // Forwarded, not read, by the suite: the setting above is what the
       // extension acts on, and this is how the suite knows whether to expect
-      // a kernel at all.
-      ...(process.env.GSIM_KERNEL_PYTHON
-        ? { GSIM_KERNEL_PYTHON: process.env.GSIM_KERNEL_PYTHON }
-        : {}),
-      // Same again: forwarded so the suite knows whether to expect a solver,
-      // while the setting above is what the extension acts on.
+      // a solver at all.
       ...(process.env.GSIM_GENERAL_SIMULATOR_PATH
         ? { GSIM_GENERAL_SIMULATOR_PATH: process.env.GSIM_GENERAL_SIMULATOR_PATH }
         : {}),

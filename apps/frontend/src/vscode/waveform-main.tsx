@@ -1,20 +1,20 @@
 /**
  * Entry point for the waveform/results webview panel.
  *
- * This is a *panel* opened by the `General Simulator: Show Waveforms` command,
- * not a file-backed Custom Editor, because simulation results are not a
- * user-facing document: `packages/simulator/postprocess/result_writer.py`
- * writes them to `<sidecar workdir>/results/<sim_id>/` — an app-private cache
- * under `$XDG_DATA_HOME/general-simulator/`, outside the workspace, keyed by an
- * in-memory sim id, and readable only through the running kernel sidecar's
- * token-gated HTTP slice server. There is nothing in the Explorer to
- * double-click, and VS Code's dirty/save/revert lifecycle would be a lie for
- * read-only derived data.
+ * This is a *panel* opened by the `General Simulator: Show Waveforms` command
+ * and not a file-backed Custom Editor, because what it shows is not one file.
+ * A run writes `.gsim/runs/<run id>/` beside the schematic (#159) and the
+ * picture is made from two of the files in there — the `.gsim_samples`
+ * container and the `.gsim_sim_result` that indexes it — so there is no single
+ * thing in the Explorer to double-click, and VS Code's dirty/save/revert
+ * lifecycle would be a lie for read-only derived data. The
+ * `.gsim_sim_result` *is* a document, and it has its own read-only Custom
+ * Editor (`resultsEditor.ts`); this panel is where a run that just finished
+ * becomes a picture without being opened by hand.
  */
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import { initKernelFromVsCode } from "../ipc/transport";
 import { onHostMessage, postToHost } from "../ipc/vscode-host";
 import { followVsCodeTheme } from "../ipc/vscode-theme";
 import { plotRunContainer } from "../results/container-plot";
@@ -28,7 +28,6 @@ import "../styles/app.css";
 
 function boot(): void {
   followVsCodeTheme();
-  initKernelFromVsCode();
 
   onHostMessage((message) => {
     /**

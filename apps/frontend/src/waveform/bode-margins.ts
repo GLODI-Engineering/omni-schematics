@@ -1,14 +1,17 @@
 /**
  * Bode stability margins, from a frequency sweep.
  *
- * A port of `packages/simulator/src/simulator/postprocess/bode_margins.py`,
- * kept faithful on purpose: the numbers the measurement panel shows must not
- * change because the arithmetic moved out of Python. The two subtleties below
- * are where a careless rewrite would quietly disagree.
+ * Ported from `simulator/postprocess/bode_margins.py`, faithfully on purpose:
+ * the numbers the measurement panel shows must not change because the
+ * arithmetic moved out of Python. The two subtleties below are where a careless
+ * rewrite would quietly disagree, and `__fixtures__/bode-margins-parity.json`
+ * is what holds this to the Python's own answers.
  *
- * Nothing here is wired up yet. It is a prerequisite for deleting the Python,
- * not a feature: #162 removes `postprocess/`, and that cannot happen while
- * this is the only implementation of it.
+ * The Python is gone (#162), so this is the implementation rather than a copy
+ * of one. It is still not wired up: an AC sweep is not something a run can
+ * produce yet (#184 refuses every non-transient analysis by name), and this
+ * exists so that the measurement is not what has to be rewritten when one
+ * can.
  */
 
 /** Every field is null when its metric cannot be determined. */

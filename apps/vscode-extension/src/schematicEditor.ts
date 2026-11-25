@@ -111,7 +111,6 @@ export class SchematicEditorProvider implements vscode.CustomEditorProvider<Sche
         userSymbols: await this.host.readSymbols(),
         documentUri: document.uri.toString(),
         documentText: document.text,
-        kernel: this.host.kernel.current ?? undefined,
       },
       this.host.log,
     );

@@ -16,11 +16,6 @@
 /** Which surface a webview is hosting. */
 export type WebviewRole = "schematic" | "library" | "waveform" | "results";
 
-export interface KernelConfig {
-  port: number;
-  token: string;
-}
-
 /** Injected into every webview as `window.__GSIM_INIT__` before the bundle runs. */
 export interface WebviewInit {
   role: WebviewRole;
@@ -28,8 +23,6 @@ export interface WebviewInit {
   documentUri?: string;
   /** Present for the schematic custom editor: the on-disk document contents. */
   documentText?: string;
-  /** Absent until the kernel sidecar signals ready. */
-  kernel?: KernelConfig;
   /** User-authored components read from the workspace before React mounts. */
   userSymbols?: unknown[];
   /**
@@ -47,8 +40,6 @@ export interface WebviewInit {
 export type HostBoundMessage =
   /** The webview finished mounting and is ready to receive host messages. */
   | { type: "gsim/ready"; role: WebviewRole }
-  /** Restart the kernel sidecar child process. Replaces Tauri's invoke(). */
-  | { type: "gsim/restartKernel" }
   /**
    * The in-app File actions, handed off to VS Code when the app runs inside a
    * Custom Editor. VS Code — not this app's storage adapter — owns the
@@ -85,9 +76,10 @@ export type HostBoundMessage =
   /**
    * Stop the run with this `requestId`.
    *
-   * The Stop button used to close the kernel socket, which left the solver
-   * running as the sidecar's own child. The host holds the child process now,
-   * so stopping means signalling it — and `SIGTERM` rather than `SIGKILL`,
+   * The Stop button used to close a socket to a Python sidecar, which left the
+   * solver running as that process's own child. The host holds the child
+   * process now, so stopping means signalling it — and `SIGTERM` rather than
+   * `SIGKILL`,
    * because the container's footer is written last and a politely killed run
    * leaves a file the reader reports as truncated rather than as rubbish.
    */
@@ -95,10 +87,12 @@ export type HostBoundMessage =
   /**
    * Lines a run produced, for the VS Code Output panel (#139).
    *
-   * The webview opens its own socket to the kernel, so the extension host sees
-   * nothing of a run unless the webview tells it. Output used to go only to the
-   * webview's own bottom-panel Output tab, which is not the VS Code Output
-   * panel and is not mounted in every shell.
+   * What the webview itself reports — a document that will not compile, an
+   * empty sheet — is known only to the webview, so the host sees nothing of it
+   * unless it is told. Output used to go only to the webview's own
+   * bottom-panel Output tab, which is not the VS Code Output panel and is not
+   * mounted in every shell. The solver's own two streams reach the channel
+   * directly, because the host is what spawns it.
    */
   | { type: "gsim/output"; lines: RunOutputLine[] }
   /**
@@ -135,8 +129,8 @@ export type HostBoundMessage =
    * The webview was handed a document it could not read.
    *
    * Distinct from `gsim/log` because the two have different audiences. `gsim/log`
-   * is appended to the kernel's lifecycle channel, which is closed by default and
-   * right for diagnostics nobody needs unless they go looking. A file the user
+   * is appended to the extension's own lifecycle channel, which is closed by
+   * default and right for diagnostics nobody needs unless they go looking. A file the user
    * just opened and which did not load is not that: it is the one thing they are
    * waiting to be told. Routed through `gsim/log` alone, the editor showed an
    * empty canvas and a toast saying the schematic was empty -- true of the store,
@@ -155,11 +149,13 @@ export type HostBoundMessage =
  *
  * - `solver`  the simulation engine's own messages
  * - `build`   compiling a `cscript` / `pyblock` / `octfunc` code block
- * - `kernel`  the sidecar process itself
  * - `compile` turning the schematic into a netlist
  * - `editor`  the front end's own reporting, e.g. "the schematic is empty"
+ *
+ * `kernel` was a fifth, for the Python sidecar's own lifecycle. Nothing can
+ * produce one (#162).
  */
-export type RunOutputSource = "solver" | "build" | "kernel" | "compile" | "editor";
+export type RunOutputSource = "solver" | "build" | "compile" | "editor";
 
 /** Severity, mapped onto the output channel's own levels. */
 export type RunOutputSeverity = "info" | "warning" | "error";
@@ -322,19 +318,6 @@ export type SamplesReadResult =
 // ---------------------------------------------------------------------------
 
 export type WebviewBoundMessage =
-  /** Kernel sidecar became ready (or was restarted on a new port). */
-  | { type: "gsim/kernelConfig"; kernel: KernelConfig }
-  /**
-   * Kernel sidecar went away, or never came up; the webview should fall back /
-   * show a warning.
-   *
-   * `reason` carries the host's own diagnosis when there is one (#130) --
-   * "kernelPython is not set", "there is no interpreter at that path", "the
-   * kernel started but never signalled KERNEL_READY". It is the only useful
-   * sentence a user can be given at that moment, and it used to exist only in
-   * an output channel that is closed by default.
-   */
-  | { type: "gsim/kernelStopped"; reason?: string }
   /** Replace the schematic document (initial load, revert, external file change). */
   | { type: "gsim/setDocument"; text: string }
   /** Host asks the webview to serialise its current document (save / backup). */

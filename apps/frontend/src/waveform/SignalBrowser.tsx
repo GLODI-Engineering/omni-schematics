@@ -28,7 +28,6 @@ interface ContextMenuState {
 
 export function SignalBrowser() {
   const lastManifest = useIpcStore((state) => state.lastManifest);
-  const streamingSignals = useWaveformStore((state) => state.streamingSignals);
   const figures = useWaveformStore((state) => state.figures);
   const axes = useWaveformStore((state) => state.axes);
   const addSignalToAxes = useWaveformStore((state) => state.addSignalToAxes);
@@ -156,14 +155,13 @@ export function SignalBrowser() {
             {!isCollapsed && (
               <ul className="signal-browser__signals">
                 {signals.map((signalName) => {
-                  const streamingKey = `${simId}::${signalName}`;
-                  const isStreaming = streamingSignals.has(streamingKey);
+                  const signalKey = `${simId}::${signalName}`;
                   return (
                     <li key={signalName} className="signal-browser__signal-item">
                       <input
                         type="checkbox"
                         className="signal-browser__check"
-                        checked={onTarget.has(streamingKey)}
+                        checked={onTarget.has(signalKey)}
                         disabled={targetAxesId === null}
                         aria-label={`Plot ${signalName}`}
                         title={
@@ -178,14 +176,13 @@ export function SignalBrowser() {
                       <SignalRow
                         simId={simId}
                         signalName={signalName}
-                        isStreaming={isStreaming}
                         onContextMenu={handleContextMenu}
                       />
                       {/* The unit is what decides whether this signal lands
                           on the existing y-axis or gets one of its own, so
                           it belongs where the choice is made. */}
                       <span className="signal-browser__quantity">
-                        {signalCache.get(streamingKey)?.unit ?? ""}
+                        {signalCache.get(signalKey)?.unit ?? ""}
                       </span>
                     </li>
                   );

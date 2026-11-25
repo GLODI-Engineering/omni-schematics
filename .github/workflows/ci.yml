@@ -21,32 +21,6 @@ jobs:
       - run: ./scripts/check-invariants.sh
 
   # ---------------------------------------------------------------------------
-  # Python: ruff format check + ruff lint + mypy + tests
-  # ---------------------------------------------------------------------------
-  python:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # No cache: `uv.lock` is gitignored, so there is nothing in a fresh
-      # checkout for setup-uv to key a cache on, and asking for one fails
-      # the job at setup.
-      - uses: astral-sh/setup-uv@v3
-      - run: uv sync --all-packages --group dev
-      - name: ruff format check
-        run: uv run ruff format --check .
-      - name: ruff lint
-        run: uv run ruff check .
-      - name: mypy
-        run: uv run mypy
-      # `tests/integration` and `tests/validation` hold nothing but a `.gitkeep`,
-      # so naming them collected zero tests and exited 5 ("no tests collected"),
-      # failing the job on a green tree while the 859 real tests under
-      # `pyproject.toml`'s own `testpaths` were never run. Let testpaths decide,
-      # and deselect the marker that needs ngspice/Xyce on the host.
-      - name: pytest
-        run: uv run pytest -m "not integration"
-
-  # ---------------------------------------------------------------------------
   # Frontend: biome + tsc + vitest + production build
   # ---------------------------------------------------------------------------
   frontend:
@@ -96,20 +70,6 @@ jobs:
         run: pnpm --filter ./apps/vscode-extension test
       - name: build frontend for webviews
         run: pnpm --filter @gensim/frontend build
-      # #141: the extension starts the kernel from an environment it is given and
-      # from nothing else, so the integration suite has to be given one -- and
-      # the honest way to give it one is the same script a user runs. That makes
-      # this a gate on the install instructions as well as on the extension: if
-      # `make-kernel-venv.mjs` stops producing a kernel that reaches
-      # KERNEL_READY, this job goes red rather than a user finding out.
-      #
-      # `gsim_py` and `gsim-tools` are absent here on purpose, and since #158
-      # nothing in the product misses them: the kernel starts without them and
-      # compiling a schematic is the editor's own job, done in WebAssembly. They
-      # are still what the example *generators* need, and `examples-still-work`
-      # builds a wheel itself for that.
-      - name: build the kernel environment the suite will be pointed at
-        run: node scripts/make-kernel-venv.mjs --out "$RUNNER_TEMP/kernel-venv" --force
       # #159: the extension runs the solver itself, so the run test needs a real
       # binary -- and it is fetched here rather than skipped, for the reason
       # `engine-catalogue-drift` gives about `gsim_py`: a check that cannot fail
@@ -131,9 +91,12 @@ jobs:
             --pattern general-simulator-linux-x86_64.tar.gz --dir "$RUNNER_TEMP" --clobber
           tar -xzf "$RUNNER_TEMP/general-simulator-linux-x86_64.tar.gz" -C "$RUNNER_TEMP"
           "$RUNNER_TEMP/general-simulator-linux-x86_64/general-simulator" --version
+      # No interpreter is prepared for this job, and that is the assertion:
+      # since #162 the extension has nothing that could start one, so a VS Code
+      # window on a runner with no Python environment configured must still
+      # open every example and run one.
       - name: integration tests (real VS Code)
         env:
-          GSIM_KERNEL_PYTHON: ${{ runner.temp }}/kernel-venv
           GSIM_GENERAL_SIMULATOR_PATH: ${{ runner.temp }}/general-simulator-linux-x86_64/general-simulator
         run: |
           # `pipefail` first: without it the exit status of the pipeline is
@@ -228,8 +191,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Schema codegen drift check (FE-02): re-runs codegen and diffs against the
-  # committed generated files. Fails if generated/typescript/index.ts or
-  # generated/python/__init__.py are out of sync with the schema sources.
+  # committed generated file. Fails if generated/typescript/index.ts is out of
+  # sync with the schema sources. It also emitted Pydantic models until #162,
+  # for a Python half that no longer exists.
   # ---------------------------------------------------------------------------
   engine-catalogue-drift:
     # The engine owns the component library — what the palette shows, what each component's
@@ -349,11 +313,16 @@ jobs:
     # `examples/expected-netlists/` -- which was captured from the Python compiler as it
     # stood before #158, so "the same netlist as today" is checked rather than asserted.
     #
-    # What the Python environment is still for is the last arm: the generators under
+    # What a Python environment is still for is the last arm: the generators under
     # `examples/` author their documents with `gsim-tools`, so a document that no longer
     # matches its own generator needs them to be caught. `gsim_py` is built here rather
     # than skipped, for the reason `engine-catalogue-drift` gives: a check that cannot fail
     # is not one.
+    #
+    # That environment is two `pip install`s into a bare venv now. It used to be
+    # `scripts/make-kernel-venv.mjs`, which built the *kernel's* environment -- four
+    # workspace packages and their scientific dependencies -- and both the script and the
+    # packages are gone (#162). Neither generator ever imported one of them.
     name: The examples still open, compile, and match their generators
     runs-on: ubuntu-latest
     steps:
@@ -372,24 +341,23 @@ jobs:
           git clone --depth 1 https://github.com/GLODI-Engineering/gsim-core.git /tmp/gsim-core
           python -m pip install --upgrade maturin
           maturin build --release --manifest-path /tmp/gsim-core/crates/gsim-py/Cargo.toml --out /tmp/wheels
-      # One command for the whole environment, the same one a user runs, with the wheel
-      # just built handed to it.
-      - name: build the kernel environment
-        run: node scripts/make-kernel-venv.mjs --out "$RUNNER_TEMP/kernel-venv" --force --gsim-py /tmp/wheels/gsim_py-*.whl
-      # And `gsim-tools`, which `make-kernel-venv.mjs` installs only from a checkout beside
-      # this one, and there is none here. Without it the generator arm reported "generator did
-      # not run" on all five examples and the job stayed green -- so the one check holding a
-      # committed example to its own `build_*.py` had never actually run in CI, on this branch
-      # or on `main`. Installed from the repository, which is the route the README documents.
-      - name: add gsim-tools, which the generators author documents with
+      # The two packages a generator imports, and nothing else. `gsim-tools` comes from its
+      # repository, which is the route the README documents; without it the generator arm
+      # reported "generator did not run" on all five examples and the job stayed green -- so
+      # the one check holding a committed example to its own `build_*.py` had never actually
+      # run in CI.
+      - name: an environment the generators can run in
         run: |
-          "$RUNNER_TEMP/kernel-venv/bin/python" -m pip install --quiet \
+          python -m venv "$RUNNER_TEMP/generators"
+          "$RUNNER_TEMP/generators/bin/python" -m pip install --quiet --upgrade pip
+          "$RUNNER_TEMP/generators/bin/python" -m pip install --quiet /tmp/wheels/gsim_py-*.whl
+          "$RUNNER_TEMP/generators/bin/python" -m pip install --quiet \
             'gsim-tools @ git+https://github.com/GLODI-Engineering/gsim-tools'
       # The same command again, now with an interpreter that can run the generators, so the
       # last arm is real rather than reported-as-absent.
       - name: examples check, with the generators
         run: |
-          GSIM_PYTHON="$RUNNER_TEMP/kernel-venv/bin/python" node scripts/check-examples.mjs --check \
+          GSIM_PYTHON="$RUNNER_TEMP/generators/bin/python" node scripts/check-examples.mjs --check \
             | tee /tmp/examples.log
           # A run that reported "generator did not run" five times and exited 0 is the failure
           # this step exists to prevent, and it is indistinguishable from a pass without this.

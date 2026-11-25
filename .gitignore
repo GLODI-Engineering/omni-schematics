@@ -1,4 +1,6 @@
-# Python
+# Python. There is no Python package in this repository any more (#162); what
+# is left is `examples/build_*.py`, the generators that author the committed
+# example documents with `gsim-tools`, run from a venv of your own.
 __pycache__/
 *.py[cod]
 *$py.class
@@ -12,7 +14,6 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-uv.lock
 
 # Node / pnpm
 node_modules/
@@ -32,7 +33,6 @@ target/
 .DS_Store
 
 # Simulation output
-*.h5
 results/
 # ...but not these two, which are source. The pattern above matches a
 # directory named `results` at *any* depth, and it silently swallowed the

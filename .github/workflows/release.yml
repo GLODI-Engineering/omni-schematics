@@ -9,11 +9,12 @@
 # native code here is WebAssembly, which is built once and runs everywhere), so there is no
 # reason to spend Windows or macOS runner minutes to produce a file that would be identical.
 #
-# Two artifacts, because the .vsix is only half of an install. It carries the editor and no
-# kernel: simulation runs in a Python process the extension spawns. `omniSchematics.kernelPython`
-# (#134) lets that be an environment the user prepared, which is only a reasonable thing to ask
-# if the packages to put in it are downloadable -- hence the wheels job below. Built from the
-# same tag as the .vsix, so the pair cannot disagree about the protocol version they speak.
+# One artifact, because the .vsix is the whole install. It used to be half of one: a run went to
+# a Python process the extension spawned, so the release also carried the wheels to build that
+# process's environment from, and the two had to agree about the protocol version they spoke.
+# The extension runs the solver itself now (#159), compiles with `gsim-core` built to
+# WebAssembly inside the package (#158), and the sidecar is deleted (#162). What a user needs
+# besides this file is a `general-simulator` binary, which is another repository's release.
 #
 # The Marketplace is deliberately not published to. That needs the `gensim` publisher's
 # token, which is a decision and a credential belonging to the repository owner rather than
@@ -88,12 +89,70 @@ jobs:
           unzip -l omni-schematics.vsix | grep -E '\.wasm$'
 
       # And that it compiles. Every example, to the netlist recorded for it, byte for
-      # byte, through the bundle this .vsix was built from -- the gate that used to live
-      # in the `wheels` job below and run in Python, before the compiler moved into the
-      # editor. Cheaper and stricter: no venv, no wheel downloads, and a count of netlist
-      # lines replaced by the netlist.
-      - name: Every example compiles through the engine that shipped
-        run: node scripts/check-examples.mjs --check
+      # byte, through the bundle this .vsix was built from.
+      #
+      # ## What this replaces, and why it is not just `check-examples.mjs --check`
+      #
+      # The `wheels` job used to carry a gate that built nine wheels into a venv and
+      # compiled the shipped examples with the Python kernel in it. That gate existed
+      # because of #147: 0.7.0 shipped a release whose kernel started and could not
+      # compile, and nothing noticed. The kernel is gone (#162) and the compiler is in
+      # the package, so the question it asked is now asked of the package -- but the
+      # *reason* it existed has to survive the move, and a bare `--check` does not carry
+      # it. `check-examples.mjs` exits 0 when it finds nothing to check, and this
+      # repository has lost four gates to exactly that shape: `backend.yml` naming a
+      # deleted file, the examples' generator arm reporting "generator did not run" five
+      # times, the committed examples with no freshness check at all, and #202. A gate
+      # that cannot fail is not one.
+      #
+      # So three arms, each failing on its own:
+      #
+      #   1. `--check` itself -- a document that does not open, a block the engine
+      #      cannot compile, or a netlist that differs from the recorded one by a byte.
+      #   2. The count. Every `examples/*.gsim_sch` must have compiled, and there must
+      #      be at least the five the .vsix bundles (`check-bundled-examples.mjs` holds
+      #      the package to that same set). A run that compiled none is the failure
+      #      above wearing a tick.
+      #   3. No interpreter. `env -i` with a PATH holding `node` and nothing else, and
+      #      `GSIM_PYTHON` pointed at nothing, so the claim is enforced rather than
+      #      asserted -- the step fails outright if `python`, `python3` or `uv` can be
+      #      reached from it. The compile arm imports the committed WebAssembly bundle
+      #      and never spawns anything; an interpreter is only ever used by arm 6, the
+      #      generators, and it is deliberately denied one here. That arm is checked
+      #      *with* one in `ci.yml`'s `examples-still-work`, which is where it belongs.
+      - name: Every example compiles through the engine that shipped, with no interpreter anywhere
+        run: |
+          set -o pipefail
+          sandbox="$RUNNER_TEMP/no-interpreter"
+          mkdir -p "$sandbox"
+          ln -sf "$(command -v node)" "$sandbox/node"
+          for exe in python python3 uv; do
+            if env -i PATH="$sandbox" /bin/sh -c "command -v $exe" >/dev/null 2>&1; then
+              echo "::error::$exe is reachable from this step's PATH, so it cannot claim to compile without one"
+              exit 1
+            fi
+          done
+
+          expected=$(ls examples/*.gsim_sch | wc -l)
+          echo "examples/ holds $expected document(s)"
+          if [ "$expected" -lt 5 ]; then
+            echo "::error::only $expected example(s) in examples/, and the .vsix bundles five"
+            exit 1
+          fi
+
+          env -i PATH="$sandbox" HOME="$HOME" TMPDIR="$RUNNER_TEMP" GSIM_PYTHON=/nonexistent/no-interpreter \
+            node scripts/check-examples.mjs --check | tee "$RUNNER_TEMP/examples.log"
+
+          compiled=$(grep -c 'compiles to the recorded netlist, byte for byte' "$RUNNER_TEMP/examples.log" || true)
+          if [ "$compiled" -ne "$expected" ]; then
+            echo "::error::$compiled of $expected example(s) compiled through the committed engine"
+            exit 1
+          fi
+          if ! grep -q "check-examples: $expected example(s) OK." "$RUNNER_TEMP/examples.log"; then
+            echo "::error::check-examples did not report all $expected example(s) OK"
+            exit 1
+          fi
+          echo "$compiled of $expected example(s) compiled through the committed WebAssembly engine, with no interpreter reachable"
 
       # #153, kept, and asked of the thing that ships rather than of a download. The
       # install instructions name a gsim-core release; the editor compiles with whatever
@@ -146,136 +205,3 @@ jobs:
           || gh release upload "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber "${{ steps.name.outputs.path }}"
-
-  wheels:
-    name: Build the kernel wheels and attach them
-    runs-on: ubuntu-latest
-    # Serialised after `vsix` rather than run beside it: that job is the one that creates the
-    # release, and two jobs racing `gh release create` for the same tag is a flake waiting to
-    # happen. This one only ever uploads.
-    needs: vsix
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-
-      # The four workspace packages the kernel is assembled from. `--all-packages` builds
-      # every member of the uv workspace, which is exactly that set; naming them individually
-      # would be a second list to keep in step with `pyproject.toml`.
-      #
-      # It was seven until #155. Three of those seven -- `components`, `synthesis` and
-      # `kernel-core` -- contained no Python at all: every `.py` in them was an empty
-      # `__init__.py`, nothing imported them, and the work they were skeletons for landed
-      # in the Rust engine instead. They are gone, and so are three of the user's downloads.
-      #
-      # Deliberately *not* built here: `gsim_py` (a maturin build belonging to gsim-core,
-      # one wheel per platform and interpreter) and `gsim-tools` (another repository's
-      # package). Those two are what a user installs alongside, and the kernel starts
-      # without them -- a run then answers `SolverUnavailable` naming where to get them.
-      #
-      # This comment used to call gsim-tools "a private repository". It is public, MIT and
-      # pure Python, and that mistake is why the gate below only ever shook hands with the
-      # kernel instead of asking it to compile something: a check needing gsim-tools was
-      # believed impossible in CI. It is not, and the gate now does it (#147).
-      - name: Build the wheels
-        run: uv build --all-packages --out-dir dist
-
-      # A wheel per package, or the environment a user builds from these is incomplete in a
-      # way that only shows up as an ImportError at spawn time.
-      - name: All four packages built
-        run: |
-          missing=0
-          for pkg in schemas gsim_model simulator kernel_sidecar; do
-            if ls dist/"$pkg"-*.whl >/dev/null 2>&1; then
-              echo "ok: $(ls dist/"$pkg"-*.whl)"
-            else
-              echo "::error::no wheel built for $pkg"
-              missing=1
-            fi
-          done
-          exit $missing
-
-      # Proves the set is installable and the kernel starts from it, before anyone is told to
-      # install it. A wheel that builds and cannot be installed together with its siblings is
-      # one failure this is here to catch, and it costs one venv.
-      - name: A venv of nothing but these wheels starts the kernel
-        run: |
-          python3 -m venv /tmp/kernel-venv
-          /tmp/kernel-venv/bin/pip install --quiet dist/*.whl
-          set +e
-          timeout 90 /tmp/kernel-venv/bin/python -m kernel_sidecar \
-            --port 0 --token ci --connect-timeout 5 > /tmp/kernel.log 2>&1
-          set -e
-          cat /tmp/kernel.log
-          if ! grep -q "KERNEL_READY" /tmp/kernel.log; then
-            echo "::error::the kernel did not reach KERNEL_READY from a wheel-only venv"
-            exit 1
-          fi
-          # The host refuses an environment whose protocol it does not share (#134), so a
-          # release whose wheels announce nothing would be rejected by the .vsix beside it.
-          if ! grep -qE "KERNEL_READY .*protocol=[0-9]+" /tmp/kernel.log; then
-            echo "::error::KERNEL_READY carried no protocol= field"
-            exit 1
-          fi
-
-      # The step that used to be here compiled the shipped examples in a venv built from
-      # these wheels, because the kernel was what compiled a schematic. It is not any more
-      # (#158): the compiler is `gsim-core` in WebAssembly, inside the .vsix, and the
-      # `vsix` job above compiles every example with it and checks that the changelog
-      # names the same engine version. Keeping a Python copy of that gate would mean
-      # keeping a Python compiler to run it with, which is the thing that was removed.
-      #
-      # Its other purpose survives here. #147 shipped a release whose kernel started and
-      # could not compile, because `KERNEL_READY` is reached before any compiler is
-      # imported -- so the check above passed on an install that did not work. The gate
-      # built for that downloaded the two packages the install instructions name, which
-      # made it a gate on the instructions as well. The instructions still name them, so
-      # what is checked now is that both releases exist and carry what they promise.
-      # Without downloading either: the point is the link, and the bytes are no longer on
-      # the compile path.
-      - name: The releases the changelog names exist and carry what it promises
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Exactly one match per repository, for the reason #153 gives: zero means the
-          # instructions stopped naming a release, more than one means two links disagree
-          # and picking either is a guess.
-          tag_in_changelog() {
-            local repo="$1" found
-            found=$(grep -o "https://github.com/GLODI-Engineering/${repo}/releases/tag/v[0-9][0-9.]*" \
-                      CHANGELOG.md | sed 's|.*/tag/||' | sort -u)
-            if [ "$(printf '%s\n' "$found" | grep -c .)" -ne 1 ]; then
-              echo "::error::CHANGELOG.md must name exactly one ${repo} release; found: ${found:-none}" >&2
-              return 1
-            fi
-            printf '%s\n' "$found"
-          }
-
-          check_asset() {
-            local repo="$1" tag="$2" pattern="$3"
-            if ! gh release view "$tag" --repo "GLODI-Engineering/$repo" \
-                   --json assets --jq '.assets[].name' | grep -qE "$pattern"; then
-              echo "::error::${repo} ${tag} has no asset matching ${pattern}, and CHANGELOG.md sends the user there for one"
-              gh release view "$tag" --repo "GLODI-Engineering/$repo" --json assets --jq '.assets[].name' || true
-              exit 1
-            fi
-            echo "ok: ${repo} ${tag} carries ${pattern}"
-          }
-
-          GSIM_TOOLS_TAG="$(tag_in_changelog gsim-tools)"
-          GSIM_CORE_TAG="$(tag_in_changelog gsim-core)"
-          check_asset gsim-tools "$GSIM_TOOLS_TAG" 'gsim_tools-.*-py3-none-any\.whl'
-          check_asset gsim-core "$GSIM_CORE_TAG" 'gsim_py-.*cp312.*manylinux.*x86_64\.whl'
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: kernel-wheels
-          path: dist/*.whl
-
-      - name: Attach them to the release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --clobber dist/*.whl

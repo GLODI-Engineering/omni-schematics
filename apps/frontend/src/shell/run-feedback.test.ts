@@ -150,7 +150,7 @@ describe("a run the host refuses", () => {
 
   it("clears the busy state, so the Run button comes back", async () => {
     await triggerRun();
-    expect(useIpcStore.getState().simProgress).toBe(null);
+    expect(useIpcStore.getState().runStartedAt).toBe(null);
   });
 });
 
