@@ -24,8 +24,29 @@ export interface IpcStoreState {
   output: string[];
   problems: ProblemEntry[];
   activeEditorTabId: string;
+  /**
+   * The backend's own progress fraction, when something reports one.
+   *
+   * Nothing does, for a solver run. It was the kernel's heartbeat estimate,
+   * and since #159 a run goes to the extension host and the solver writes its
+   * container directly -- `general-simulator` prints nothing parseable as
+   * progress, so there is no fraction to report (#189). The kernel client
+   * still sets this from a `frac` frame, and that path goes with #162.
+   *
+   * Do not use it to drive a meter. A meter stuck at 0% for the length of a
+   * run reads as a hung solver, which is worse than showing no meter.
+   */
   simProgress: number | null;
   simMessage: string | null;
+  /**
+   * When the run in flight started, as `Date.now()`, or null when none is.
+   *
+   * Wall-clock, and deliberately not simulated time: simulated progress is
+   * the number a user wants and nothing can supply it, while elapsed time is
+   * something this process genuinely knows. It is also the busy marker a run
+   * sets on its way out of `triggerRun`.
+   */
+  runStartedAt: number | null;
   /** The exact netlist text last sent to the backend (schematic-generated or imported). */
   lastNetlist: string | null;
   /**
@@ -53,6 +74,7 @@ export interface IpcStoreState {
   setProblems: (problems: ProblemEntry[]) => void;
   setActiveEditorTab: (id: string) => void;
   setSimProgress: (frac: number | null, message?: string | null) => void;
+  setRunStartedAt: (at: number | null) => void;
   setLastNetlist: (netlist: string | null) => void;
   setImportedNetlist: (netlist: string | null) => void;
   /**
@@ -80,6 +102,7 @@ export const useIpcStore = create<IpcStoreState>((set, get) => ({
   activeEditorTabId: "core.schematic",
   simProgress: null,
   simMessage: null,
+  runStartedAt: null,
   lastNetlist: null,
   importedNetlist: null,
   setStatus: (status) => {
@@ -138,6 +161,9 @@ export const useIpcStore = create<IpcStoreState>((set, get) => ({
   },
   setSimProgress: (frac, message) => {
     set({ simProgress: frac, simMessage: message ?? null });
+  },
+  setRunStartedAt: (runStartedAt) => {
+    set({ runStartedAt });
   },
   setLastNetlist: (lastNetlist) => {
     set({ lastNetlist });

@@ -30,6 +30,7 @@ const mockSetProblems = vi.fn();
 const mockSetActiveEditorTab = vi.fn();
 const mockAppendOutput = vi.fn();
 const mockSetSimProgress = vi.fn();
+const mockSetRunStartedAt = vi.fn();
 const mockSetLastNetlist = vi.fn();
 const mockOpenDiagnostics = vi.fn();
 
@@ -76,6 +77,7 @@ vi.mock("../store", () => ({
       setActiveEditorTab: mockSetActiveEditorTab,
       appendOutput: mockAppendOutput,
       setSimProgress: mockSetSimProgress,
+      setRunStartedAt: mockSetRunStartedAt,
       setLastNetlist: mockSetLastNetlist,
       importedNetlist: null,
     }),
@@ -105,6 +107,7 @@ describe("Simulate flow", () => {
     mockSetActiveEditorTab.mockReset();
     mockAppendOutput.mockReset();
     mockSetSimProgress.mockReset();
+    mockSetRunStartedAt.mockReset();
     isModelValid = true;
   });
 
@@ -138,6 +141,21 @@ describe("Simulate flow", () => {
     const written = mockAppendOutput.mock.calls.map(([text]) => String(text));
     expect(written.some((text) => text.includes(completed.resultPath))).toBe(true);
     expect(written.some((text) => text.includes("20000 samples"))).toBe(true);
+  });
+
+  it("marks when the run started, and clears it when the reply lands", async () => {
+    // What drives the toolbar's elapsed time, and the only honest progress
+    // number this process has: the solver reports no fraction, so a meter
+    // stuck at 0% was removed in favour of this (#189).
+    await act(async () => {
+      await triggerRun();
+    });
+
+    const marks = mockSetRunStartedAt.mock.calls.map(([at]) => at);
+    expect(marks).toHaveLength(2);
+    expect(typeof marks[0]).toBe("number");
+    expect(marks[0]).toBeGreaterThan(0);
+    expect(marks[1]).toBeNull();
   });
 
   it("clears the busy state whatever the outcome, so the button comes back", async () => {

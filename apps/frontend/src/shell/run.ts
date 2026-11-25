@@ -218,12 +218,14 @@ async function runOnHost(request: RunRequest): Promise<void> {
   const ipc = useIpcStore.getState();
   ipc.appendOutput("── Running the solver… ────────────────────────────");
   ipc.setSimProgress(0, "Starting simulation…");
+  ipc.setRunStartedAt(Date.now());
   // The webview's own Output tab, which exists again (#170) and is the only
   // one a browser-hosted shell has.
   useUiStore.getState().focusBottomTab("core.output");
 
   const result: RunResult = await requestRun(request);
   useIpcStore.getState().setSimProgress(null);
+  useIpcStore.getState().setRunStartedAt(null);
 
   if (!result.ok) {
     reportRunFailure(result.summary, result.detail);
