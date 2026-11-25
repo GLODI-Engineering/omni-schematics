@@ -110,10 +110,45 @@ jobs:
       # builds a wheel itself for that.
       - name: build the kernel environment the suite will be pointed at
         run: node scripts/make-kernel-venv.mjs --out "$RUNNER_TEMP/kernel-venv" --force
+      # #159: the extension runs the solver itself, so the run test needs a real
+      # binary -- and it is fetched here rather than skipped, for the reason
+      # `engine-catalogue-drift` gives about `gsim_py`: a check that cannot fail
+      # is not one. Without this the suite prints "skipping the run suite" and
+      # the job goes green while nothing holds Run to reaching a result at all.
+      #
+      # A published release asset rather than a build from source, for two
+      # reasons. `general-simulator`'s workspace carries path dependencies on
+      # three sibling repositories -- `gs-waveform-measurements`, `general-mna`
+      # and `spice-lsp` -- so `git clone && cargo build` fails on a missing
+      # manifest, and cloning four default branches would make this gate a
+      # tripwire on four other repositories' HEADs. And it pins the version, so
+      # a red run here means this repository changed.
+      - name: fetch the solver the run test drives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.7.0 --repo GLODI-Engineering/general-simulator \
+            --pattern general-simulator-linux-x86_64.tar.gz --dir "$RUNNER_TEMP" --clobber
+          tar -xzf "$RUNNER_TEMP/general-simulator-linux-x86_64.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/general-simulator-linux-x86_64/general-simulator" --version
       - name: integration tests (real VS Code)
         env:
           GSIM_KERNEL_PYTHON: ${{ runner.temp }}/kernel-venv
-        run: xvfb-run -a pnpm --filter ./apps/vscode-extension test:integration
+          GSIM_GENERAL_SIMULATOR_PATH: ${{ runner.temp }}/general-simulator-linux-x86_64/general-simulator
+        run: |
+          # `pipefail` first: without it the exit status of the pipeline is
+          # `tee`'s, which is always 0, so a failing suite would go green --
+          # the pipe would hide exactly what it was added to report.
+          set -o pipefail
+          # The suite skips its run test without a binary and says so. A green
+          # job that skipped the one thing #159 is about is indistinguishable
+          # from a passing one, which is how the examples' generator arm went
+          # unnoticed for two releases -- so grep for the skip.
+          xvfb-run -a pnpm --filter ./apps/vscode-extension test:integration | tee /tmp/integration.log
+          if grep -q "skipping the run suite" /tmp/integration.log; then
+            echo "::error::the run suite skipped, so nothing checked that Run reaches a result"
+            exit 1
+          fi
 
   # ---------------------------------------------------------------------------
   # Rust (Tauri shell): fmt + clippy. Build is skipped here — Tauri builds happen

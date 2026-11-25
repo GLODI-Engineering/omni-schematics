@@ -72,6 +72,27 @@ export type HostBoundMessage =
   /** A simulation finished; carries the sim id the waveform panel should attach to. */
   | { type: "gsim/simulationFinished"; simId: string }
   /**
+   * Run this netlist (#159). The webview compiled it; the host runs the solver.
+   *
+   * The netlist travels **one way, already compiled, as a string**. Nothing is
+   * passed back into the webview to ask what a block means: the engine runs
+   * where it is already loaded (`engine/engine.ts`), and the host does what a
+   * webview cannot — resolve a binary, spawn it, read and write files, own an
+   * Output channel. That division is the decision recorded on #175, and the
+   * packaging reason behind it is in `apps/vscode-extension/src/protocol.ts`.
+   */
+  | { type: "gsim/runSimulation"; requestId: string; request: RunRequest }
+  /**
+   * Stop the run with this `requestId`.
+   *
+   * The Stop button used to close the kernel socket, which left the solver
+   * running as the sidecar's own child. The host holds the child process now,
+   * so stopping means signalling it — and `SIGTERM` rather than `SIGKILL`,
+   * because the container's footer is written last and a politely killed run
+   * leaves a file the reader reports as truncated rather than as rubbish.
+   */
+  | { type: "gsim/cancelRun"; requestId: string }
+  /**
    * Lines a run produced, for the VS Code Output panel (#139).
    *
    * The webview opens its own socket to the kernel, so the extension host sees
@@ -134,6 +155,107 @@ export interface RunOutputLine {
 }
 
 // ---------------------------------------------------------------------------
+// Running a simulation in the extension host (#159)
+// ---------------------------------------------------------------------------
+
+/**
+ * What the host needs to run one analysis, and nothing more.
+ *
+ * `transient` is the only member because `--mode dc|transient` is the whole of
+ * the solver's analysis surface and `solver-run.ts` builds a transient command
+ * line. An AC sweep, a DC sweep and an operating point have no route through
+ * this binary, so the editor refuses them in the webview with that as the
+ * reason rather than sending something the host would have to guess at.
+ */
+export interface RunRequest {
+  mode: "transient";
+  /** The netlist, as the engine compiled it. The host writes it to a file verbatim. */
+  netlist: string;
+  tEnd: number;
+  tStep: number;
+  /**
+   * URI of the `.gsim_sch` this came from, when it came from one.
+   *
+   * A URI rather than a path because that is what the webview has
+   * (`WebviewInit.documentUri`), and the host turns it into the
+   * workspace-relative path the result schema asks for. A webview cannot: it
+   * does not know where the workspace root is.
+   */
+  source?: string;
+  /** Analysis name recorded in the result document: `TRAN`, and what a reader shows. */
+  analysis: string;
+}
+
+/** Why a run did not produce a result. Each needs a different thing of the user. */
+export type RunFailureKind =
+  /** No `general-simulator` binary anywhere the host looked. */
+  | "solver-not-found"
+  /** A binary was found and the spawn itself failed. */
+  | "could-not-start"
+  /** It ran and exited non-zero, or was killed. */
+  | "failed"
+  /** It was still running when the host's limit expired. */
+  | "timed-out"
+  /** It exited 0 and wrote no readable container, which is a bug in it or in us. */
+  | "no-result";
+
+/**
+ * One rule event, as the webview needs it for the Problems panel.
+ *
+ * A narrowing of `event-log.ts`'s `RuleEvent`: the fields a list entry shows,
+ * with the solver-step fields left behind until something seeks to them.
+ */
+export interface RunEventSummary {
+  rule: string;
+  target: string;
+  severity: string;
+  /** Interpolated crossing time, in seconds. */
+  time: number;
+  value: number;
+  limit: number;
+  unit: string;
+  detail: string;
+}
+
+export type RunResult =
+  | {
+      ok: true;
+      /** Absolute path of the `.gsim_sim_result` document the host wrote. */
+      resultPath: string;
+      /** Absolute path of the `.gsim_samples` container it points at. */
+      samplesPath: string;
+      /** Bytes that container occupies, so a reply can be reported without a second read. */
+      samplesBytes: number;
+      /** Samples per signal, read from the container's own footer. */
+      rows: number;
+      /** Signal names the container holds, in its order. */
+      signals: string[];
+      /**
+       * Highest severity any rule event reached, or null when the run reported
+       * none. This, not the exit status, is what decides whether the user is
+       * told "finished" or "finished with errors": a run can exit 0 having
+       * found a rating exceeded.
+       */
+      worstSeverity: "info" | "warning" | "error" | "fatal" | null;
+      /** Every event the log held, capped; `eventsTotal` is the real count. */
+      events: RunEventSummary[];
+      eventsTotal: number;
+    }
+  | {
+      ok: false;
+      kind: RunFailureKind;
+      /** One line, for a toast. */
+      summary: string;
+      /**
+       * The rest, for the Problems panel and the Output channel. A
+       * `solver-not-found` carries everywhere the host looked and how to build
+       * a binary, which is always the user's next question and must not be
+       * flattened away.
+       */
+      detail?: string;
+    };
+
+// ---------------------------------------------------------------------------
 // extension host -> webview
 // ---------------------------------------------------------------------------
 
@@ -176,6 +298,15 @@ export type WebviewBoundMessage =
   | { type: "gsim/forwardedChord"; chord: string }
   /** Waveform panel should show the results of this sim id. */
   | { type: "gsim/showSimulation"; simId: string }
+  /**
+   * The answer to a `gsim/runSimulation` (#159), which always arrives.
+   *
+   * One reply per request, carrying an outcome rather than resolving or
+   * rejecting: every way a run can end is something the user needs told, and a
+   * Run click that produces no message at all is the failure mode this whole
+   * path exists to end (#130, #147).
+   */
+  | { type: "gsim/runResult"; requestId: string; result: RunResult }
   /** The workspace's user components changed — merge them into the catalog. */
   | { type: "gsim/userSymbols"; metadata: unknown[] }
   /** A component was written to disk; carries the file it landed in. */

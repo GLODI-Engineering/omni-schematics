@@ -1,38 +1,42 @@
 /**
- * FE-37: Simulate (Ctrl+T) flow tests
+ * Simulate (Ctrl+T): what Run asks for, and what it says about the answer.
  *
- * Acceptance:
- * - Ctrl+T on an invalid model surfaces the diagnostics panel and does not call IPC.
- * - Ctrl+T on a valid model issues exactly one execute call and renders the resulting waveform.
- * - Ctrl+Shift+T cancels the request.
+ * Rewritten by #159. These tests used to mock the kernel socket's `execute`
+ * and assert on the manifest it answered with; the solver runs in the
+ * extension host now, so what is mocked is the host request and what is
+ * asserted is the request's shape and the reporting of its outcome. The axes
+ * layout the old version checked through this path moved to
+ * `waveform/populate.test.ts` with `populateWaveformViewer`.
  */
 
 import { act, render } from "@testing-library/react";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useWaveformStore } from "../store/waveform";
 import { RunButton } from "./RunButton";
 import { triggerCancel, triggerRun } from "./run";
 
 // ---------------------------------------------------------------------------
-// Mock IPC store
+// The host, and the compiler
 // ---------------------------------------------------------------------------
-const mockExecute = vi.fn();
-const mockCancel = vi.fn();
+const mockRequestRun = vi.hoisted(() => vi.fn());
+const mockCancelRun = vi.hoisted(() => vi.fn());
+vi.mock("./run-host", () => ({
+  requestRun: mockRequestRun,
+  cancelRun: mockCancelRun,
+  runInFlight: () => null,
+}));
+
 const mockSetProblems = vi.fn();
-const mockSetLastManifest = vi.fn();
-const mockSetDcOpTable = vi.fn();
 const mockSetActiveEditorTab = vi.fn();
 const mockAppendOutput = vi.fn();
 const mockSetSimProgress = vi.fn();
 const mockSetLastNetlist = vi.fn();
+const mockOpenDiagnostics = vi.fn();
 
 // The compiler is in the editor now (#158), so Run goes through it before it
-// reaches the kernel. These tests are about the simulate flow, not about
-// compiling: a real WebAssembly instantiation in jsdom would be slower, and the
-// sheets they build are stand-ins with no block types for the engine to
-// recognise. `src/engine/engine.test.ts` is where the real engine compiles real
-// documents and is held to the netlist, byte for byte.
+// reaches the host. These tests are about the run flow, not about compiling:
+// `src/engine/engine.test.ts` is where the real engine compiles real documents
+// and is held to the netlist, byte for byte.
 const mockInitEngine = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const mockCompileSchematic = vi.hoisted(() =>
   vi.fn(() => ({ netlist: "* mocked\nr1 n1 0 1\n", notes: [], provenance: null })),
@@ -44,31 +48,16 @@ vi.mock("../engine/engine", () => ({
   engineVersion: () => "0.0.0-test",
 }));
 
-const mockReconnectKernel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-vi.mock("../ipc/transport", () => ({
-  getIpcClient: () => ({
-    execute: mockExecute,
-    cancel: mockCancel,
-  }),
-  // FE-154: ensureKernelConnected() only calls this when the kernel isn't
-  // already connected — most of these tests simulate an already-connected
-  // kernel (ipcStatus: "idle" below), so it should never be invoked there.
-  reconnectKernel: mockReconnectKernel,
-}));
-
-// Mock graph store — valid vs invalid model
 let isModelValid = true;
-let activeSimulator = "all";
-let ipcStatus = "idle";
 vi.mock("../store", () => ({
   useGraphStore: {
     getState: () => ({
       document: {
         model: {
-          // One block, because Run now refuses an empty sheet rather than
-          // sending a netlist with nothing in it. These tests are about the
-          // simulate flow, not about emptiness — the empty case has its own
-          // tests in run-feedback.test.ts.
+          name: "sheet",
+          // One block, because Run refuses an empty sheet rather than sending
+          // a netlist with nothing in it. The empty case has its own tests in
+          // run-feedback.test.ts.
           blocks: [{ id: "a" }],
           wires: isModelValid
             ? []
@@ -79,13 +68,11 @@ vi.mock("../store", () => ({
   },
   useIpcStore: {
     getState: () => ({
-      status: ipcStatus,
-      // Read by `publishCompilerNotes`, which Run calls on every compile so a
-      // note never outlives the edit that fixed it.
+      status: "idle",
+      // Read by `publishCompilerNotes` and `publishRunEvents`, which Run calls
+      // on every run so neither outlives the edit that fixed it.
       problems: [],
       setProblems: mockSetProblems,
-      setLastManifest: mockSetLastManifest,
-      setDcOpTable: mockSetDcOpTable,
       setActiveEditorTab: mockSetActiveEditorTab,
       appendOutput: mockAppendOutput,
       setSimProgress: mockSetSimProgress,
@@ -93,226 +80,134 @@ vi.mock("../store", () => ({
       importedNetlist: null,
     }),
   },
-  useLibraryStore: {
-    getState: () => ({
-      activeSimulator,
-    }),
-  },
-  useUiStore: {
-    getState: () => ({
-      focusBottomTab: mockOpenDiagnostics,
-    }),
-  },
+  useLibraryStore: { getState: () => ({ activeSimulator: "all" }) },
+  useUiStore: { getState: () => ({ focusBottomTab: mockOpenDiagnostics }) },
 }));
 
-// Mock problems store for diagnostics panel activation
-const mockOpenDiagnostics = vi.fn();
-describe("FE-37: Simulate flow", () => {
+const completed = {
+  ok: true as const,
+  resultPath: "/w/.gsim/runs/run-1/result.gsim_sim_result",
+  samplesPath: "/w/.gsim/runs/run-1/run.gsim_samples",
+  samplesBytes: 743648,
+  rows: 20000,
+  signals: ["V(out)", "I(l1)"],
+  worstSeverity: null,
+  events: [],
+  eventsTotal: 0,
+};
+
+describe("Simulate flow", () => {
   beforeEach(() => {
-    mockExecute.mockReset();
-    mockCancel.mockReset();
+    mockRequestRun.mockReset().mockResolvedValue(completed);
+    mockCancelRun.mockReset();
     mockOpenDiagnostics.mockReset();
     mockSetProblems.mockReset();
-    mockSetLastManifest.mockReset();
-    mockSetDcOpTable.mockReset();
     mockSetActiveEditorTab.mockReset();
     mockAppendOutput.mockReset();
-    mockReconnectKernel.mockReset().mockResolvedValue(undefined);
+    mockSetSimProgress.mockReset();
     isModelValid = true;
-    activeSimulator = "all";
-    ipcStatus = "idle";
-    useWaveformStore.setState(useWaveformStore.getInitialState());
   });
 
-  it("Ctrl+T on invalid model opens diagnostics and does NOT call IPC execute", async () => {
+  it("an invalid model opens diagnostics and never reaches the host", async () => {
     isModelValid = false;
     await act(async () => {
       await triggerRun();
     });
     expect(mockOpenDiagnostics).toHaveBeenCalled();
-    expect(mockExecute).not.toHaveBeenCalled();
+    expect(mockRequestRun).not.toHaveBeenCalled();
   });
 
-  it("Ctrl+T on valid model calls execute exactly once", async () => {
-    isModelValid = true;
-    mockExecute.mockResolvedValue({ manifest: { sim_id: "s1", signals: ["y"] } });
+  it("sends the compiled netlist to the host exactly once", async () => {
     await act(async () => {
       await triggerRun();
     });
-    expect(mockExecute).toHaveBeenCalledTimes(1);
-    const payload = mockExecute.mock.calls[0][0];
-    expect(payload).toMatchObject({ type: "simulate" });
+    expect(mockRequestRun).toHaveBeenCalledTimes(1);
+    const request = mockRequestRun.mock.calls[0][0];
+    // The netlist travels one way, already compiled, as a string (#175). The
+    // host is never handed a document to compile.
+    expect(request).toMatchObject({ mode: "transient", netlist: "* mocked\nr1 n1 0 1\n" });
+    expect(request).not.toHaveProperty("model");
+    expect(typeof request.tEnd).toBe("number");
+    expect(typeof request.tStep).toBe("number");
   });
 
-  it("Ctrl+T focuses the waveform editor after a successful run", async () => {
-    mockExecute.mockResolvedValue({ manifest: { sim_id: "s1", signals: ["y"] } });
-
+  it("says where the result landed, in words the user can act on", async () => {
     await act(async () => {
       await triggerRun();
     });
-
-    expect(mockSetActiveEditorTab).toHaveBeenCalledWith("core.waveform");
+    const written = mockAppendOutput.mock.calls.map(([text]) => String(text));
+    expect(written.some((text) => text.includes(completed.resultPath))).toBe(true);
+    expect(written.some((text) => text.includes("20000 samples"))).toBe(true);
   });
 
-  it("a run whose manifest reports zero signals still clears a previous run's stale traces from the axes", async () => {
-    // First run: populates a figure/axes with s1's signals — mirrors what a
-    // schematic-based run leaves on screen.
-    mockExecute.mockResolvedValue({ manifest: { sim_id: "s1", signals: ["y"] } });
+  it("clears the busy state whatever the outcome, so the button comes back", async () => {
     await act(async () => {
       await triggerRun();
     });
-    const figureId = [...useWaveformStore.getState().figures.keys()][0] as string;
-    const axesId = useWaveformStore.getState().figures.get(figureId)?.axesIds[0] as string;
-    expect(useWaveformStore.getState().axes.get(axesId)?.signals).toEqual([
-      expect.objectContaining({ simId: "s1", signalName: "y" }),
-    ]);
+    expect(mockSetSimProgress).toHaveBeenLastCalledWith(null);
 
-    // Second run (e.g. an imported netlist the backend reports no probeable
-    // nodes for): must not leave s1's traces on screen looking current.
-    mockExecute.mockResolvedValue({ manifest: { sim_id: "s2", signals: [] } });
+    mockRequestRun.mockResolvedValue({
+      ok: false,
+      kind: "failed",
+      summary: "The solver exited with status 1. See the Output panel.",
+    });
     await act(async () => {
       await triggerRun();
     });
-    expect(useWaveformStore.getState().axes.get(axesId)?.signals).toEqual([]);
+    expect(mockSetSimProgress).toHaveBeenLastCalledWith(null);
   });
 
-  it("FE-158: distributes a many-signal run across multiple axes instead of one overloaded axes", async () => {
-    const signals = [
-      ...Array.from({ length: 20 }, (_, i) => `v(n${i})`),
-      ...Array.from({ length: 4 }, (_, i) => `i(r${i})`),
-    ];
-    mockExecute.mockResolvedValue({ manifest: { sim_id: "s1", signals } });
-
+  it("a run that found an error says so, even though it exited cleanly", async () => {
+    // The exit status cannot be what decides this: a run can exit 0 having
+    // found a rating exceeded. `worstSeverity` over the event log is what
+    // does.
+    mockRequestRun.mockResolvedValue({
+      ...completed,
+      worstSeverity: "error",
+      eventsTotal: 3,
+      events: [
+        {
+          rule: "i_max",
+          target: "D1",
+          severity: "error",
+          time: 1.5e-6,
+          value: 12.3,
+          limit: 10,
+          unit: "A",
+          detail: "",
+        },
+      ],
+    });
     await act(async () => {
       await triggerRun();
     });
-
-    const figureId = [...useWaveformStore.getState().figures.keys()][0] as string;
-    const figure = useWaveformStore.getState().figures.get(figureId);
-    const axesList = (figure?.axesIds ?? []).map((id) => useWaveformStore.getState().axes.get(id));
-
-    // 20 voltages -> 3 axes (8+8+4), 4 currents -> 1 axes: 4 axes total.
-    expect(axesList.length).toBe(4);
-    for (const ax of axesList) {
-      expect(ax?.signals.length).toBeLessThanOrEqual(8);
-    }
-    // Every signal from the manifest is accounted for exactly once.
-    const allPlotted = axesList.flatMap((ax) => ax?.signals.map((s) => s.signalName) ?? []);
-    expect(allPlotted.sort()).toEqual([...signals].sort());
-  });
-
-  it("FE-158: a small single-quantity run still lands on exactly one axes (no behavior change)", async () => {
-    mockExecute.mockResolvedValue({
-      manifest: { sim_id: "s1", signals: ["v(a)", "v(b)", "v(c)"] },
-    });
-
-    await act(async () => {
-      await triggerRun();
-    });
-
-    const figureId = [...useWaveformStore.getState().figures.keys()][0] as string;
-    const figure = useWaveformStore.getState().figures.get(figureId);
-    expect(figure?.axesIds.length).toBe(1);
-    const axesId = figure?.axesIds[0] as string;
-    expect(
-      useWaveformStore
-        .getState()
-        .axes.get(axesId)
-        ?.signals.map((s) => s.signalName),
-    ).toEqual(["v(a)", "v(b)", "v(c)"]);
-  });
-
-  it("FE-158: re-running with the same single-axes layout reuses the axes id (preserves zoom/coupling state)", async () => {
-    mockExecute.mockResolvedValue({ manifest: { sim_id: "s1", signals: ["v(a)"] } });
-    await act(async () => {
-      await triggerRun();
-    });
-    const figureId = [...useWaveformStore.getState().figures.keys()][0] as string;
-    const firstAxesId = useWaveformStore.getState().figures.get(figureId)?.axesIds[0];
-
-    mockExecute.mockResolvedValue({ manifest: { sim_id: "s2", signals: ["v(a)"] } });
-    await act(async () => {
-      await triggerRun();
-    });
-    const secondAxesId = useWaveformStore.getState().figures.get(figureId)?.axesIds[0];
-
-    expect(secondAxesId).toBe(firstAxesId);
-  });
-
-  it("a backend that never answers times out instead of leaving the run stuck forever", async () => {
-    // Reported live: an imported netlist with an obsolete .model card hung
-    // the real backend — execute() never resolved or rejected, and with no
-    // client-side timeout the Run button stayed on "Stop" forever with no
-    // error, no completion, nothing in Output past "Sending to backend…".
-    vi.useFakeTimers();
-    try {
-      mockExecute.mockReturnValue(new Promise(() => {})); // never settles
-
-      const runPromise = triggerRun();
-      // Let the microtasks up to the execute() call flush before advancing
-      // the fake clock, so the timeout timer is actually armed.
-      await act(async () => {
-        await Promise.resolve();
-        await vi.advanceTimersByTimeAsync(120_000);
-      });
-      await act(async () => {
-        await runPromise;
-      });
-
-      expect(mockCancel).toHaveBeenCalled();
-      expect(mockSetSimProgress).toHaveBeenLastCalledWith(null);
-      expect(mockSetProblems).toHaveBeenCalledWith([expect.objectContaining({ id: "solver-1" })]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("Ctrl+Shift+T cancels the in-flight request", async () => {
-    isModelValid = true;
-    let resolveExecute!: (v: unknown) => void;
-    mockExecute.mockReturnValue(
-      new Promise((r) => {
-        resolveExecute = r;
-      }),
+    expect(mockSetProblems).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: "run-event:0", severity: "error" })]),
     );
+    expect(mockOpenDiagnostics).toHaveBeenCalledWith("core.problems");
+  });
 
+  it("a run that found nothing clears the last run's findings", async () => {
+    await act(async () => {
+      await triggerRun();
+    });
+    // `publishRunEvents([])` with nothing before and nothing now is a no-op by
+    // design, so what is asserted is that no stale `run-event:` entry is left.
+    for (const [problems] of mockSetProblems.mock.calls) {
+      expect(problems.some((p: { id: string }) => p.id.startsWith("run-event:"))).toBe(false);
+    }
+  });
+
+  it("Ctrl+Shift+T asks the host to stop the solver, not the socket to close", async () => {
     await act(async () => {
       void triggerRun();
       triggerCancel();
     });
-    expect(mockCancel).toHaveBeenCalled();
-    resolveExecute(null);
-  });
-
-  it("FE-154: Run while disconnected tells the user and reconnects before executing", async () => {
-    ipcStatus = "disconnected";
-    mockExecute.mockResolvedValue({ manifest: { sim_id: "s1", signals: ["y"] } });
-
-    await act(async () => {
-      await triggerRun();
-    });
-
-    expect(mockAppendOutput).toHaveBeenCalledWith(
-      expect.stringMatching(/disconnected.*connecting/i),
-    );
-    expect(mockReconnectKernel).toHaveBeenCalledTimes(1);
-    expect(mockExecute).toHaveBeenCalledTimes(1);
-  });
-
-  it("FE-154: Run while disconnected does not execute if reconnecting fails", async () => {
-    ipcStatus = "error";
-    mockReconnectKernel.mockRejectedValue(new Error("kernel sidecar failed to start"));
-
-    await act(async () => {
-      await triggerRun();
-    });
-
-    expect(mockReconnectKernel).toHaveBeenCalledTimes(1);
-    expect(mockExecute).not.toHaveBeenCalled();
+    expect(mockCancelRun).toHaveBeenCalled();
   });
 });
 
-describe("FE-37: RunButton", () => {
+describe("RunButton", () => {
   it("reflects idle status with run label", () => {
     render(React.createElement(RunButton, { status: "idle", onRun: () => {}, onCancel: () => {} }));
     expect(document.body.textContent).toMatch(/run|simulate/i);
@@ -327,7 +222,6 @@ describe("FE-37: RunButton", () => {
     const { container } = render(
       React.createElement(RunButton, { status: "error", onRun: () => {}, onCancel: () => {} }),
     );
-    // Presence of an error indicator (class, aria-label, or text)
     expect(
       container.querySelector("[data-status='error'], .error, [aria-label*='error' i]") ||
         document.body.textContent?.match(/error/i),

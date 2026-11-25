@@ -41,6 +41,11 @@ results/
 !apps/frontend/src/results/
 !packages/schemas/definitions/results/
 
+# Simulation runs the extension writes beside a schematic (#159). One directory
+# per Run click, each holding a netlist, a .gsim_samples container and the
+# result document that points at it -- a developer's own runs, not source.
+.gsim/runs/
+
 # Test artifacts
 playwright-report/
 test-results/

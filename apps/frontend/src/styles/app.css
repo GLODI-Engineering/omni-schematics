@@ -1687,6 +1687,24 @@ textarea:focus-visible {
   padding-top: 8px;
 }
 
+/* The bottom panel's Output tab (#170). Monospaced because what lands here
+   is netlist text and solver output, both of which are column-aligned. */
+.output-view {
+  display: grid;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.output-view__line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.output-view__empty {
+  color: #64748b;
+}
+
 .problems-view {
   display: grid;
   gap: 8px;

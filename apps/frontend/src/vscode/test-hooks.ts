@@ -13,7 +13,8 @@ import { getActiveDragBlock, setActiveDragBlock } from "../canvas/dnd";
 import { serialize } from "../file/serializer";
 import { getWebviewInit, postToHost, requestSource } from "../ipc/vscode-host";
 import { type RunOutputLine, reportRunOutput } from "../shell/run-output";
-import { useGraphStore, useLibraryStore } from "../store";
+import { useGraphStore, useIpcStore, useLibraryStore } from "../store";
+import { useToastStore } from "../store/toast";
 
 type Probe = (args: Record<string, unknown>) => unknown;
 
@@ -144,6 +145,36 @@ const PROBES: Record<string, Probe> = {
     const lines = Array.isArray(args.lines) ? (args.lines as RunOutputLine[]) : [];
     reportRunOutput(lines);
     return { sent: lines.length };
+  },
+
+  /**
+   * Press Run, for real, and report what the editor was left saying (#159).
+   *
+   * The production path, nothing stubbed: the engine compiles this webview's
+   * document to a netlist in WebAssembly, `gsim/runSimulation` crosses the
+   * real webview boundary, the extension host resolves the
+   * `general-simulator` binary and spawns it, and the reply comes back on
+   * `gsim/runResult`. Only a real VS Code has that boundary and only a real
+   * host can spawn a process, so this is the one place the whole of Run is
+   * exercised at once.
+   *
+   * What comes back is what a user would see: the toasts, the Output tab's
+   * lines and the Problems entries. The files the run left on disk are
+   * asserted by the test, from the workspace, which is the half a webview
+   * cannot see.
+   */
+  run: async () => {
+    useToastStore.setState({ toasts: [] });
+    const { triggerRun } = await import("../shell/run");
+    await triggerRun();
+    return {
+      toasts: useToastStore.getState().toasts.map((toast) => toast.message),
+      output: useIpcStore.getState().output,
+      problems: useIpcStore
+        .getState()
+        .problems.map((problem) => ({ severity: problem.severity, message: problem.message })),
+      netlist: useIpcStore.getState().lastNetlist,
+    };
   },
 
   /** Proof the React app actually mounted and painted inside this webview. */

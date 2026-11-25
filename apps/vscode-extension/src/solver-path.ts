@@ -77,7 +77,19 @@ export class SolverNotFound extends Error {
         "Set omniSchematics.generalSimulatorPath to the binary, or put it on PATH,",
         `or export ${envVar}.`,
         "",
-        "To build it: clone GLODI-Engineering/general-simulator and run",
+        // The download first, and that ordering is a correction rather than a
+        // preference: a bare `git clone` of general-simulator does not build.
+        // Its workspace carries path dependencies on three sibling
+        // repositories -- gs-waveform-measurements, general-mna and spice-lsp
+        // -- so cargo stops at "failed to load manifest for dependency"
+        // before compiling anything, and that is what this message used to
+        // send a stuck user to do first.
+        "To get one, download the build for your platform from",
+        "  https://github.com/GLODI-Engineering/general-simulator/releases",
+        "",
+        "Or from source, with GLODI-Engineering/general-simulator and its sibling",
+        "repositories gs-waveform-measurements, general-mna and spice-lsp cloned",
+        "next to each other:",
         "  cargo build --release -p general-simulator-cli",
         `which leaves the binary at target/release/general-simulator${
           platform === "win32" ? ".exe" : ""
