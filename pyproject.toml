@@ -4,6 +4,23 @@ version = "0.1.0"
 description = "Multi-level power electronics and control simulator — system level to physical SPICE level."
 requires-python = ">=3.11"
 
+[tool.uv]
+# fonttools 4.69.0 is unusable: it published wheels tagged `cp311` only, and no
+# source distribution, so there is nothing to install on any other Python. uv
+# says so and stops; pip happens to backtrack to 4.68.0, which is why every
+# pip-based job here stayed green while `uv sync` went red on CI's CPython 3.14
+# and on 3.12 and 3.13 alike.
+#
+# Nothing in this project asks for fonttools. It arrives under matplotlib,
+# which is a dependency of `kernel-sidecar` only because the in-editor Python
+# REPL pre-imports `plt` for the user's own code -- so #161, which removes that
+# REPL, removes this too. Until then an override is the whole fix: it is not a
+# pin of anything we use, it excludes one broken publish.
+#
+# Delete this when fonttools ships a release with wheels for the Pythons this
+# project supports, or when #161 lands, whichever comes first (#165).
+override-dependencies = ["fonttools!=4.69.0"]
+
 [tool.uv.workspace]
 members = [
     "apps/kernel-sidecar",
