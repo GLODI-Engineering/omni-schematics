@@ -2172,13 +2172,6 @@ textarea:focus-visible {
  * Playwright build see.
  */
 .gs-toolbar {
-  /* The symbol previews are drawn by canvas/nodes/BlockSymbol.tsx, which inks
-   * them in a fixed near-black on white. Until that symbol renderer takes its
-   * colours from the theme, the plate under a symbol has to stay light in both
-   * themes or the symbol disappears into it — so this is a token with one
-   * value rather than a theme colour pretending to be one. */
-  --gs-symbol-plate: #f8fafc;
-
   display: flex;
   align-items: center;
   gap: 2px;
@@ -2491,26 +2484,45 @@ textarea:focus-visible {
 /* ── Component preview buttons ── */
 
 /* 56x44 before #210 — the single widest group on the row, and the one the
- * Block Library's sidebar pushed off the right edge mid-glyph. */
+ * Block Library's sidebar pushed off the right edge mid-glyph.
+ *
+ * These were a white plate with near-black artwork on it, because
+ * `symbol-drawing.tsx` inked every symbol in fixed colours and a dark plate
+ * would have hidden it. #219 made that ink a pair of variables, so the same
+ * two lines the library panel sets give a symbol drawn in the toolbar's own
+ * foreground on the toolbar's own background — the same contrast as the icons
+ * beside it, in any theme, with no plate at all. */
 .schematic-toolbar__component {
+  /* The fallbacks are the row's own, not the canvas's: outside VS Code — the
+   * Vite harness, the Playwright build — `--vscode-*` resolves to nothing, and
+   * a near-black symbol on a plate of white would sit on a bar that has fallen
+   * back to `#0f172a`. Ink and paper have to fall back to the same pair the
+   * bar and its icons do, or the previews vanish in the one place they are
+   * easiest to look at. */
+  --schematic-ink: var(--vscode-icon-foreground, var(--vscode-foreground, #cbd5e1));
+  --schematic-paper: var(--vscode-editorGroupHeader-tabsBackground, #0f172a);
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 34px;
   height: 24px;
-  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #1e293b));
+  border: 1px solid transparent;
   border-radius: 4px;
-  background: var(--gs-symbol-plate, #f8fafc);
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground, #cbd5e1));
   cursor: pointer;
   flex-shrink: 0;
   padding: 1px;
-  transition: border-color 80ms, box-shadow 80ms;
+  transition: border-color 80ms, background 80ms;
   overflow: hidden;
 }
 
 .schematic-toolbar__component:hover {
-  border-color: var(--vscode-focusBorder, #3b82f6);
-  box-shadow: 0 0 0 1px var(--vscode-focusBorder, #3b82f6);
+  --schematic-ink: var(--vscode-foreground, #e2e8f0);
+
+  background: var(--vscode-toolbar-hoverBackground, #1e293b);
+  border-color: var(--vscode-contrastBorder, transparent);
 }
 
 .schematic-toolbar__component:focus-visible {
@@ -2518,9 +2530,6 @@ textarea:focus-visible {
   outline-offset: 1px;
 }
 
-/* The plate the schematic symbol is drawn on. See the note on
- * `--gs-symbol-plate` at the top of this section for why it is not a theme
- * colour. */
 .schematic-toolbar__component-preview {
   display: flex;
   align-items: center;
@@ -2528,7 +2537,6 @@ textarea:focus-visible {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--gs-symbol-plate, #f8fafc);
   border-radius: 3px;
 }
 
@@ -2561,7 +2569,7 @@ textarea:focus-visible {
   font-size: 11px;
   font-weight: 700;
   font-family: ui-monospace, "JetBrains Mono", monospace;
-  color: #64748b;
+  color: var(--vscode-descriptionForeground, #64748b);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
