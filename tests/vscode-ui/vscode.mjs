@@ -34,19 +34,27 @@ export async function launchVSCode({ S, REPO, file, recordVideo, profile = "pw" 
     w.setPosition(0, 0);
     w.focus();
   });
-  // The Copilot sign-in dialog can appear late; keep dismissing for a while.
-  for (let i = 0; i < 12; i++) {
+  // A fresh profile shows two modals, each of which blocks everything behind it
+  // and appears a few seconds in: the Copilot sign-in, and "Make It Yours". A
+  // screenshot taken without dismissing them is a picture of VS Code's welcome,
+  // not of this extension. Keep looking for both for a while rather than once.
+  const dismissals = [/Continue without Signing In/i, /^Get Started$/i, /^Mark Done$/i];
+  for (let i = 0; i < 14; i++) {
     await win.waitForTimeout(2000);
-    const btn = win.getByRole("button", { name: /Continue without Signing In/i }).first();
-    if (await btn.count().catch(() => 0)) {
-      await btn.click({ timeout: 4000 }).catch(() => {});
-      break;
+    let clicked = false;
+    for (const name of dismissals) {
+      const btn = win.getByRole("button", { name }).first();
+      if (await btn.count().catch(() => 0)) {
+        await btn.click({ timeout: 4000 }).catch(() => {});
+        clicked = true;
+        await win.waitForTimeout(1200);
+      }
     }
-    const alt = win.locator("a,div,span", { hasText: /^Continue without Signing In$/i }).first();
-    if (await alt.count().catch(() => 0)) {
-      await alt.click({ timeout: 4000 }).catch(() => {});
-      break;
-    }
+    const open = await win
+      .locator(".monaco-dialog-box, .welcome-view-content")
+      .count()
+      .catch(() => 0);
+    if (!clicked && !open) break;
   }
   await win.waitForTimeout(2000);
   return { app, win };
