@@ -25,7 +25,7 @@
  * are copied verbatim, so the exact question -- "is this the same file?" --
  * is cheap to ask and cannot be fooled by a touch.
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -96,7 +96,9 @@ for (const name of bundled) {
 }
 
 if (problems.length > 0) {
-  console.error("check-bundled-examples: the examples a user opens are not the examples CI checks.");
+  console.error(
+    "check-bundled-examples: the examples a user opens are not the examples CI checks.",
+  );
   for (const problem of problems) {
     console.error(`  ${problem}`);
   }

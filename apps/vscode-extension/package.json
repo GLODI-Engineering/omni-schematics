@@ -8,15 +8,9 @@
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": [
-    "Visualization",
-    "Data Science",
-    "Other"
-  ],
+  "categories": ["Visualization", "Data Science", "Other"],
   "main": "./out/extension.js",
-  "activationEvents": [
-    "onStartupFinished"
-  ],
+  "activationEvents": ["onStartupFinished"],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -84,12 +78,12 @@
       },
       {
         "command": "omniSchematics.openExample",
-        "title": "Open Example Schematic\u2026",
+        "title": "Open Example Schematic…",
         "category": "Omni Schematics"
       },
       {
         "command": "omniSchematics.openSchematic",
-        "title": "Open Schematic\u2026",
+        "title": "Open Schematic…",
         "category": "Omni Schematics"
       },
       {
@@ -127,7 +121,7 @@
         "omniSchematics.kernelPython": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Path to the Python environment that runs the simulation kernel \u2014 either a virtualenv directory or a Python executable inside one.\n\n**This is required.** Nothing simulates until it is set: the editor starts the kernel from the environment you name and never builds, syncs or discovers one.\n\nThat environment needs the `kernel_sidecar`, `simulator`, `gsim-model` and `schemas` packages and their scientific dependencies (`numpy`, `scipy`, `sympy`, `websockets`, `h5py`).\n\nIt does **not** need `gsim_py` or `gsim-tools`. Those were how the kernel compiled a schematic; the editor compiles its own, with `gsim-core` built to WebAssembly, and hands the kernel the netlist. Install them in that environment only if you also want to script a document from Python.\n\nTwo ways to get one:\n\n- in a checkout of this repository, `node scripts/make-kernel-venv.mjs`, which builds it and prints the path to paste here;\n- or `pip install` the wheels attached to a release into a virtualenv of your own.\n\nThe editor does not care which; it only runs what is there.",
+          "markdownDescription": "Path to the Python environment that runs the simulation kernel — either a virtualenv directory or a Python executable inside one.\n\n**This is required.** Nothing simulates until it is set: the editor starts the kernel from the environment you name and never builds, syncs or discovers one.\n\nThat environment needs the `kernel_sidecar`, `simulator`, `gsim-model` and `schemas` packages and their scientific dependencies (`numpy`, `scipy`, `sympy`, `websockets`, `h5py`).\n\nIt does **not** need `gsim_py` or `gsim-tools`. Those were how the kernel compiled a schematic; the editor compiles its own, with `gsim-core` built to WebAssembly, and hands the kernel the netlist. Install them in that environment only if you also want to script a document from Python.\n\nTwo ways to get one:\n\n- in a checkout of this repository, `node scripts/make-kernel-venv.mjs`, which builds it and prints the path to paste here;\n- or `pip install` the wheels attached to a release into a virtualenv of your own.\n\nThe editor does not care which; it only runs what is there.",
           "description": "Required. Path to the Python environment (virtualenv directory or interpreter) that runs the simulation kernel. Nothing simulates until this is set. Build one with `node scripts/make-kernel-venv.mjs`, or pip install a release's wheels into a virtualenv."
         },
         "omniSchematics.autoStartKernel": {
@@ -139,13 +133,13 @@
         "omniSchematics.generalSimulatorPath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Absolute path to the `general-simulator` binary \u2014 the engine that does the numerical work.\n\nThis is handed to the simulation kernel **after** the kernel has started, so it cannot start one by itself: if `#omniSchematics.kernelPython#` is unset, the kernel never starts and nothing here is ever read. Set that one first.\n\nLeave empty to search, in order: this setting, `GENSIM_GENERAL_SIMULATOR_PATH`, then `PATH`, then a sibling `general-simulator` checkout beside the workspace. Build it with `cargo build --release -p general-simulator-cli` and point here at `target/release/general-simulator`.",
+          "markdownDescription": "Absolute path to the `general-simulator` binary — the engine that does the numerical work.\n\nThis is handed to the simulation kernel **after** the kernel has started, so it cannot start one by itself: if `#omniSchematics.kernelPython#` is unset, the kernel never starts and nothing here is ever read. Set that one first.\n\nLeave empty to search, in order: this setting, `GENSIM_GENERAL_SIMULATOR_PATH`, then `PATH`, then a sibling `general-simulator` checkout beside the workspace. Build it with `cargo build --release -p general-simulator-cli` and point here at `target/release/general-simulator`.",
           "scope": "machine-overridable"
         },
         "omniSchematics.octaveCliPath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Absolute path to the `octave-cli` binary, for `octfunc` / `octblock` code blocks.\n\nThe engine looks this up on `PATH` only \u2014 it has no flag for it \u2014 so setting this puts its directory at the front of the `PATH` the simulation process inherits.",
+          "markdownDescription": "Absolute path to the `octave-cli` binary, for `octfunc` / `octblock` code blocks.\n\nThe engine looks this up on `PATH` only — it has no flag for it — so setting this puts its directory at the front of the `PATH` the simulation process inherits.",
           "scope": "machine-overridable"
         },
         "omniSchematics.pythonPath": {
@@ -154,7 +148,7 @@
             "type": "string"
           },
           "default": [],
-          "markdownDescription": "Extra directories to put on `PYTHONPATH` for `pyblock` / `pyfunc` code blocks, so a block can import your own modules.\n\nRelative entries resolve against the workspace folder. This does not change which interpreter runs \u2014 the engine embeds the one it was built against.",
+          "markdownDescription": "Extra directories to put on `PYTHONPATH` for `pyblock` / `pyfunc` code blocks, so a block can import your own modules.\n\nRelative entries resolve against the workspace folder. This does not change which interpreter runs — the engine embeds the one it was built against.",
           "scope": "machine-overridable"
         },
         "omniSchematics.environment": {
@@ -169,7 +163,7 @@
         "omniSchematics.overrideVsCodeKeybindings": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "While a schematic is the active editor, let the schematic's keyboard shortcuts override VS Code's. **On by default.**\n\nThe schematic binds 28 chords that VS Code also claims at the workbench level \u2014 `Ctrl+R` rotates the selection here and opens VS Code's recent-files list there \u2014 and without this VS Code wins every one of them, because a webview only sees a keystroke the workbench did not take first.\n\nTurn this off to give those chords back to VS Code. The schematic then loses them; the rest of its shortcuts keep working. See `docs/keyboard-conflicts.md` for the full list.\n\nThis only ever applies while a schematic tab is focused. A source file, the explorer and the terminal are untouched either way."
+          "markdownDescription": "While a schematic is the active editor, let the schematic's keyboard shortcuts override VS Code's. **On by default.**\n\nThe schematic binds 28 chords that VS Code also claims at the workbench level — `Ctrl+R` rotates the selection here and opens VS Code's recent-files list there — and without this VS Code wins every one of them, because a webview only sees a keystroke the workbench did not take first.\n\nTurn this off to give those chords back to VS Code. The schematic then loses them; the rest of its shortcuts keep working. See `docs/keyboard-conflicts.md` for the full list.\n\nThis only ever applies while a schematic tab is focused. A source file, the explorer and the terminal are untouched either way."
         }
       }
     },
