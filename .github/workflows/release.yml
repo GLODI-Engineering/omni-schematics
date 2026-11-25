@@ -182,13 +182,44 @@ jobs:
           # and `schemas`, which belong to other people on PyPI. Installed one at a time, a
           # sibling's requirement resolves from the index and pulls down a stranger.
           /tmp/compile-venv/bin/pip install --quiet dist/*.whl
-          /tmp/compile-venv/bin/pip install --quiet \
-            "git+https://github.com/GLODI-Engineering/gsim-tools@master"
 
-          gh release download --repo GLODI-Engineering/gsim-core \
+          # The two engine packages come from the releases `CHANGELOG.md` names, not from
+          # whatever is newest and not from a branch. They used to come from `@master` and
+          # from an untagged `gh release download`, which takes the latest release -- so the
+          # gate and the install instructions were two independent sources of the same two
+          # version numbers, free to drift (#153).
+          #
+          # The drift is silent in the direction that matters. If the engine publishes a
+          # release that fixes a compile error, the gate picks it up and goes green while the
+          # changelog still points at the broken one: a release that passes its own gate and
+          # works on nobody's machine, which is exactly how 0.7.0 shipped. Reading the tag
+          # out of the file the user reads makes the thing tested the thing they are told to
+          # install, so a stale link fails here instead of on their laptop.
+          tag_in_changelog() {
+            # $1: the repository the link points at. Exactly one match, or the gate stops:
+            # zero means the instructions stopped naming a release and nothing would be
+            # pinned; more than one means two links disagree and picking either is a guess.
+            local repo="$1" found
+            found=$(grep -o "https://github.com/GLODI-Engineering/${repo}/releases/tag/v[0-9][0-9.]*" \
+                      CHANGELOG.md | sed 's|.*/tag/||' | sort -u)
+            if [ "$(printf '%s\n' "$found" | grep -c .)" -ne 1 ]; then
+              echo "::error::CHANGELOG.md must name exactly one ${repo} release; found: ${found:-none}" >&2
+              return 1
+            fi
+            printf '%s\n' "$found"
+          }
+
+          GSIM_TOOLS_TAG="$(tag_in_changelog gsim-tools)"
+          GSIM_CORE_TAG="$(tag_in_changelog gsim-core)"
+          echo "CHANGELOG.md sends the user to gsim-tools ${GSIM_TOOLS_TAG} and gsim-core ${GSIM_CORE_TAG}"
+
+          gh release download "$GSIM_TOOLS_TAG" --repo GLODI-Engineering/gsim-tools \
+            --pattern 'gsim_tools-*-py3-none-any.whl' --dir /tmp/gsim-tools --clobber
+          gh release download "$GSIM_CORE_TAG" --repo GLODI-Engineering/gsim-core \
             --pattern 'gsim_py-*-cp312-cp312-manylinux*x86_64.whl' --dir /tmp/gsim-py --clobber
-          ls -la /tmp/gsim-py
-          /tmp/compile-venv/bin/pip install --quiet /tmp/gsim-py/gsim_py-*.whl
+          ls -la /tmp/gsim-tools /tmp/gsim-py
+          /tmp/compile-venv/bin/pip install --quiet \
+            /tmp/gsim-tools/gsim_tools-*.whl /tmp/gsim-py/gsim_py-*.whl
 
           # The product's own compiler, on the documents the release ships, by the call the
           # `simulate` handler makes. Not a reimplementation of it: the point of this gate is

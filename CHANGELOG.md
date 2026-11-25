@@ -17,7 +17,7 @@ install started the kernel and then failed every run.
 * seven `.whl` files on this release — the kernel packages.
 * [`gsim_tools-0.1.0-py3-none-any.whl`](https://github.com/GLODI-Engineering/gsim-tools/releases/tag/v0.1.0)
   — pure Python, works on any platform and any CPython from 3.11.
-* a [`gsim_py`](https://github.com/GLODI-Engineering/gsim-core/releases/tag/v0.5.0)
+* a [`gsim_py`](https://github.com/GLODI-Engineering/gsim-core/releases/tag/v0.6.0)
   wheel matching your platform *and* your Python version — it is a compiled
   extension, so `cp312` and `cp313` are different files.
 
