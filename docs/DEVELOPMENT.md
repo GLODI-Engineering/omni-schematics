@@ -164,9 +164,9 @@ apps/kernel-sidecar/src/kernel_sidecar/
 │   ├── handshake.py       Token verification (hmac.compare_digest)
 │   └── handlers/
 │       └── simulate.py    Full pipeline orchestration (background task)
-└── waveform/
-    ├── manifest.py        manifest.json reader
-    └── slice_server.py    aiohttp HTTP server co-located on WS port
+                           (waveform/ is gone -- #157: the viewer reads the solver's
+                           .gsim_samples container through the extension host, so the
+                           sidecar serves no LOD frames and has no HTTP surface at all)
 
 packages/simulator/src/simulator/
 ├── compiler/              Empty of compiling since #158 -- see its __init__.py. What is
@@ -342,8 +342,7 @@ apps/frontend/src/
 │   ├── WaveformTab.tsx      uPlot host; auto-opens on simulate_result
 │   ├── SignalLegend.tsx     Trace legend; toggle visibility
 │   ├── cursor.ts            Crosshair cursor; instantaneous value readout
-│   ├── lod-client.ts        getSlice(); LRU cache; cache-miss → HTTP GET
-│   ├── prefetch.ts          Adjacent-window prefetch in idle callback
+│   ├── decimator.ts         crates/waveform-store in WebAssembly: the one decimator
 │   └── register.ts          Registers core.waveform in BottomTabRegistry
 ├── output/
 │   ├── OutputTab.tsx        Streams execute_stream chunks from IPC store
@@ -569,7 +568,6 @@ runtime — no registration needed on the Python side.
 | `test_scipy_compiler.py` | BE-14 | 6 | dx shape, gain/integrator numerics, determinism |
 | `test_scipy_solver.py` | BE-15 | 4 | LP step-response, rtol/atol override, cancel |
 | `test_result_writer.py` | BE-16 | 8 | Round-trip npy, manifest schema, duplicate guard |
-| `test_slice_server.py` | BE-17 | 5 | manifest GET, signal GET, path-traversal 400, no-token 401 |
 | `test_simulate.py` | BE-18 | 3 | Happy path, algebraic-loop error, cancel mid-solve |
 | `test_solver_selection.py` | BE-21 | 5 | Control → ScipySolver, circuit → NotImplementedError |
 | `test_path_discovery.py` | BE-22 | 6 | env-var, settings-file, PATH, not-found error |
@@ -630,8 +628,7 @@ runtime — no registration needed on the Python side.
 | `ipc/stub/stub-kernel.test.ts` | FE-32 | 3 |
 | `waveform/WaveformTab.test.tsx` | FE-35 | 2 |
 | `output/register.test.tsx` | #170 | 3 |
-| `waveform/lod-client.test.ts` | FE-36 | 2 |
-| `waveform/prefetch.test.ts` | FE-36 | 1 |
+| `results/samples-source.test.ts` | #157 | 7 |
 | `shell/run.test.tsx` | FE-37 | 7 |
 | `shell/run-host.test.ts` | #159 | 6 |
 | `problems/run-events.test.ts` | #159 | 8 |

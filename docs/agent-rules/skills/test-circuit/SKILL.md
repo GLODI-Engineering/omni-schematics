@@ -760,7 +760,7 @@ Do not import matplotlib in test files — plots are for documentation only.
 | `packages/simulator/src/simulator/parsers/spice/ngspice_raw.py` | ngspice binary raw parser |
 | `packages/simulator/src/simulator/parsers/spice/xyce_prn.py` | Xyce .prn parser |
 | `apps/kernel-sidecar/src/kernel_sidecar/ipc/handlers/simulate.py` | IPC simulate handler |
-| `apps/kernel-sidecar/src/kernel_sidecar/waveform/slice_server.py` | HTTP waveform server |
+| `crates/waveform-store/src/samples.rs` | reads a `.gsim_samples` container |
 | `apps/kernel-sidecar/src/kernel_sidecar/ipc/envelope.py` | WS message envelope |
 | `tests/backend/conftest.py` | `e2e_server` fixture |
 | `tests/backend/e2e/test_rc_circuit_per_solver.py` | Reference e2e test |
