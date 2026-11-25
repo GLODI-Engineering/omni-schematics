@@ -1,4 +1,3 @@
-import { publishCompilerNotes } from "../problems/compiler-notes";
 import { useIpcStore } from "../store/ipc";
 import { CancelledError, type ExecuteResult, type IpcClient, type WaveformSlice } from "./types";
 import { decodeWaveformChunkFrame } from "./waveform-chunk-frame";
@@ -320,12 +319,15 @@ export function createIPCClient({
           value?: number;
           unit?: string;
         }>;
-        compiler_notes?: string[];
       };
 
-      // Published before the error branch so a failed run still clears the
-      // previous run's notes rather than leaving them to look current.
-      publishCompilerNotes(payload.compiler_notes ?? []);
+      // The compiler's notes do not come back here any more: the editor
+      // compiles the document itself (#158), so `shell/run.ts` publishes them
+      // at compile time — before the solve, and whether or not it succeeds.
+      // Reading a `compiler_notes` field off `simulate_result` and publishing
+      // it would be worse than useless now: the kernel never sends one, so
+      // every result would publish an empty list and wipe the notes the
+      // compile had just put in the panel.
 
       if (payload.status === "error") {
         p.resolve({

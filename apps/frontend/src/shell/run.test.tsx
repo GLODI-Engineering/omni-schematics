@@ -27,6 +27,23 @@ const mockAppendOutput = vi.fn();
 const mockSetSimProgress = vi.fn();
 const mockSetLastNetlist = vi.fn();
 
+// The compiler is in the editor now (#158), so Run goes through it before it
+// reaches the kernel. These tests are about the simulate flow, not about
+// compiling: a real WebAssembly instantiation in jsdom would be slower, and the
+// sheets they build are stand-ins with no block types for the engine to
+// recognise. `src/engine/engine.test.ts` is where the real engine compiles real
+// documents and is held to the netlist, byte for byte.
+const mockInitEngine = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const mockCompileSchematic = vi.hoisted(() =>
+  vi.fn(() => ({ netlist: "* mocked\nr1 n1 0 1\n", notes: [], provenance: null })),
+);
+vi.mock("../engine/engine", () => ({
+  initEngine: mockInitEngine,
+  compileSchematic: mockCompileSchematic,
+  resetEngineForTests: () => {},
+  engineVersion: () => "0.0.0-test",
+}));
+
 const mockReconnectKernel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock("../ipc/transport", () => ({
   getIpcClient: () => ({
@@ -63,6 +80,9 @@ vi.mock("../store", () => ({
   useIpcStore: {
     getState: () => ({
       status: ipcStatus,
+      // Read by `publishCompilerNotes`, which Run calls on every compile so a
+      // note never outlives the edit that fixed it.
+      problems: [],
       setProblems: mockSetProblems,
       setLastManifest: mockSetLastManifest,
       setDcOpTable: mockSetDcOpTable,

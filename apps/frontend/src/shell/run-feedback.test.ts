@@ -5,6 +5,23 @@ import { useGraphStore, useIpcStore, useUiStore } from "../store";
 import { useToastStore } from "../store/toast";
 import { hasAnythingToSimulate, triggerRun } from "./run";
 
+// The compiler is in the editor now (#158), so Run goes through it before it
+// reaches the kernel. These tests are about the simulate flow, not about
+// compiling: a real WebAssembly instantiation in jsdom would be slower, and the
+// sheets they build are stand-ins with no block types for the engine to
+// recognise. `src/engine/engine.test.ts` is where the real engine compiles real
+// documents and is held to the netlist, byte for byte.
+const mockInitEngine = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const mockCompileSchematic = vi.hoisted(() =>
+  vi.fn(() => ({ netlist: "* mocked\nr1 n1 0 1\n", notes: [], provenance: null })),
+);
+vi.mock("../engine/engine", () => ({
+  initEngine: mockInitEngine,
+  compileSchematic: mockCompileSchematic,
+  resetEngineForTests: () => {},
+  engineVersion: () => "0.0.0-test",
+}));
+
 /**
  * Clicking Run used to be able to do nothing visible at all — twice over.
  * The kernel-disconnected path returned bare, with its reason written only

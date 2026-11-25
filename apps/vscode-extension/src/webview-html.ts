@@ -43,6 +43,23 @@ const ASSET_REF = /(\s(?:src|href)=")(\.?\/?assets\/[^"]+)(")/g;
  * than degrade, and the fix is to precompile or replace it, never to loosen
  * this directive. `apps/frontend` is checked for `new Function`/`eval(` after
  * every build for exactly this reason.
+ *
+ * ## `'wasm-unsafe-eval'`, which is not that
+ *
+ * The editor compiles schematics with `gsim-core` built to WebAssembly (#158),
+ * and `WebAssembly.instantiate` is gated by `script-src` like any other code
+ * loader. Without a directive it fails with
+ * `CompileError: WebAssembly.instantiate(): Wasm code generation disallowed by
+ * embedder`, and Run stops before the engine exists.
+ *
+ * `'wasm-unsafe-eval'` is the narrow grant for exactly that and nothing else:
+ * it permits compiling and instantiating a WebAssembly module and does **not**
+ * re-enable `eval` or `new Function`. (The two are independent in CSP3: a
+ * policy with `'wasm-unsafe-eval'` and without `'unsafe-eval'` still blocks
+ * every JavaScript string evaluation.) So the rule above is unchanged — the
+ * bundle still generates no JavaScript at runtime, and `check-no-eval.mjs`
+ * still holds it to that. If a future change wants `'unsafe-eval'`, that is a
+ * different request and the answer is still no.
  */
 
 export interface RewriteOptions {
@@ -88,9 +105,10 @@ export function rewriteWebviewHtml(html: string, options: RewriteOptions): strin
     `font-src ${cspSource} data:`,
     // React and uPlot both set inline styles; Vite also inlines small CSS.
     `style-src ${cspSource} 'unsafe-inline'`,
-    // No 'unsafe-eval': the bundle generates no code at runtime. See above
-    // before adding a dependency that would.
-    `script-src 'nonce-${nonce}' ${cspSource}`,
+    // No 'unsafe-eval': the bundle generates no JavaScript at runtime. See
+    // above before adding a dependency that would. 'wasm-unsafe-eval' is the
+    // separate, narrow grant the WebAssembly engine needs and is not that.
+    `script-src 'nonce-${nonce}' 'wasm-unsafe-eval' ${cspSource}`,
     `worker-src ${cspSource} blob:`,
     `connect-src ${connect}`,
   ].join("; ");
