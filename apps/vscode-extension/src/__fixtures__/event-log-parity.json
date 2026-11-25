@@ -1,0 +1,355 @@
+{
+  "a_normal_run": {
+    "text": "{\"record\": \"event\", \"rule\": \"i_max\", \"target\": \"D1\", \"kind\": \"enter\", \"severity\": \"warning\", \"action\": \"report\", \"time\": 1.5e-06, \"step\": 42, \"step_time\": 1.6e-06, \"value\": 12.3, \"limit\": 10.0, \"unit\": \"A\", \"detail\": \"D1,L1\"}\n{\"record\": \"event\", \"rule\": \"i_max\", \"target\": \"D1\", \"kind\": \"leave\", \"severity\": \"warning\", \"action\": \"report\", \"time\": 3e-06, \"step\": 81, \"step_time\": 3.1e-06, \"value\": 9.1, \"limit\": 10.0, \"unit\": \"A\", \"duration\": 1.5e-06, \"peak\": 14.2, \"peak_time\": 2.2e-06}\n{\"record\": \"event\", \"rule\": \"deadtime\", \"target\": \"lega\", \"kind\": \"instant\", \"severity\": \"error\", \"action\": \"stop\", \"time\": 5e-06, \"step\": 130, \"step_time\": 5e-06, \"value\": 2e-09, \"limit\": 5e-08, \"unit\": \"s\", \"truncated\": true}\n{\"record\": \"summary\", \"rule\": \"i_max\", \"target\": \"D1\", \"entries\": 1, \"filtered\": 0, \"suppressed\": 0, \"instants\": 0, \"missing_samples\": 0, \"total_time\": 1.5e-06, \"worst_value\": 14.2, \"worst_time\": 2.2e-06, \"severity\": \"warning\"}",
+    "expected": {
+      "events": [
+        {
+          "rule": "i_max",
+          "target": "D1",
+          "kind": "enter",
+          "severity": "warning",
+          "action": "report",
+          "time": 1.5e-6,
+          "step": 42,
+          "stepTime": 1.6e-6,
+          "value": 12.3,
+          "limit": 10.0,
+          "unit": "A",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": false,
+          "detail": "D1,L1"
+        },
+        {
+          "rule": "i_max",
+          "target": "D1",
+          "kind": "leave",
+          "severity": "warning",
+          "action": "report",
+          "time": 3e-6,
+          "step": 81,
+          "stepTime": 3.1e-6,
+          "value": 9.1,
+          "limit": 10.0,
+          "unit": "A",
+          "duration": 1.5e-6,
+          "peak": 14.2,
+          "peakTime": 2.2e-6,
+          "truncated": false,
+          "detail": ""
+        },
+        {
+          "rule": "deadtime",
+          "target": "lega",
+          "kind": "instant",
+          "severity": "error",
+          "action": "stop",
+          "time": 5e-6,
+          "step": 130,
+          "stepTime": 5e-6,
+          "value": 2e-9,
+          "limit": 5e-8,
+          "unit": "s",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": true,
+          "detail": ""
+        }
+      ],
+      "summaries": [
+        {
+          "rule": "i_max",
+          "target": "D1",
+          "entries": 1,
+          "filtered": 0,
+          "suppressed": 0,
+          "instants": 0,
+          "missingSamples": 0,
+          "totalTime": 1.5e-6,
+          "worstValue": 14.2,
+          "worstTime": 2.2e-6,
+          "shortestDeadtime": null,
+          "severity": "warning"
+        }
+      ],
+      "unreadableLines": 0,
+      "worstSeverity": "error",
+      "isEmpty": false
+    }
+  },
+  "three_kinds_of_quiet": {
+    "text": "{\"record\": \"summary\", \"rule\": \"quiet\", \"entries\": 0}\n{\"record\": \"summary\", \"rule\": \"blind\", \"entries\": 0, \"missing_samples\": 1200}\n{\"record\": \"summary\", \"rule\": \"held\", \"entries\": 0, \"filtered\": 7, \"suppressed\": 3}",
+    "expected": {
+      "events": [],
+      "summaries": [
+        {
+          "rule": "quiet",
+          "target": "",
+          "entries": 0,
+          "filtered": 0,
+          "suppressed": 0,
+          "instants": 0,
+          "missingSamples": 0,
+          "totalTime": 0.0,
+          "worstValue": null,
+          "worstTime": null,
+          "shortestDeadtime": null,
+          "severity": ""
+        },
+        {
+          "rule": "blind",
+          "target": "",
+          "entries": 0,
+          "filtered": 0,
+          "suppressed": 0,
+          "instants": 0,
+          "missingSamples": 1200,
+          "totalTime": 0.0,
+          "worstValue": null,
+          "worstTime": null,
+          "shortestDeadtime": null,
+          "severity": ""
+        },
+        {
+          "rule": "held",
+          "target": "",
+          "entries": 0,
+          "filtered": 7,
+          "suppressed": 3,
+          "instants": 0,
+          "missingSamples": 0,
+          "totalTime": 0.0,
+          "worstValue": null,
+          "worstTime": null,
+          "shortestDeadtime": null,
+          "severity": ""
+        }
+      ],
+      "unreadableLines": 0,
+      "worstSeverity": null,
+      "isEmpty": false
+    }
+  },
+  "lines_that_cannot_be_read": {
+    "text": "not json at all\n[1, 2, 3]\n\"a bare string\"\n42\n{\"record\": \"telemetry\", \"what\": \"a future shape\"}\n{\"no_record_field\": true}\n\n   \n{\"record\": \"event\", \"rule\": \"ok\", \"target\": \"t\", \"kind\": \"instant\", \"severity\": \"info\", \"action\": \"report\", \"time\": 1.0, \"step\": 1, \"step_time\": 1.0, \"value\": 1.0, \"limit\": 2.0}",
+    "expected": {
+      "events": [
+        {
+          "rule": "ok",
+          "target": "t",
+          "kind": "instant",
+          "severity": "info",
+          "action": "report",
+          "time": 1.0,
+          "step": 1,
+          "stepTime": 1.0,
+          "value": 1.0,
+          "limit": 2.0,
+          "unit": "",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": false,
+          "detail": ""
+        }
+      ],
+      "summaries": [],
+      "unreadableLines": 6,
+      "worstSeverity": "info",
+      "isEmpty": false
+    }
+  },
+  "odd_field_types": {
+    "text": "{\"record\": \"event\", \"rule\": \"r\", \"target\": \"t\", \"kind\": \"enter\", \"severity\": \"info\", \"action\": \"report\", \"time\": \"1.5\", \"step\": \"3.7\", \"step_time\": null, \"value\": true, \"limit\": \"not a number\", \"unit\": null, \"duration\": 0.0, \"peak\": null, \"peak_time\": \"\", \"truncated\": \"no\", \"detail\": null}\n{\"record\": \"event\", \"rule\": \"r\", \"target\": \"t\", \"kind\": \"leave\", \"severity\": \"info\", \"action\": \"report\", \"time\": -0.0, \"step\": -3.7, \"step_time\": 2, \"value\": \"1e3\", \"limit\": [1], \"duration\": null, \"truncated\": 0}\n{\"record\": \"event\", \"rule\": \"r\", \"target\": \"t\", \"kind\": \"leave\", \"severity\": \"info\", \"action\": \"report\", \"time\": 0, \"step\": 0, \"step_time\": 0, \"value\": 0, \"limit\": 0, \"truncated\": []}\n{\"record\": \"event\", \"rule\": \"r\", \"target\": \"t\", \"kind\": \"leave\", \"severity\": \"info\", \"action\": \"report\", \"time\": 0, \"step\": 0, \"step_time\": 0, \"value\": 0, \"limit\": 0, \"truncated\": {}}\n{\"record\": \"summary\", \"rule\": \"s\", \"entries\": \"2.9\", \"missing_samples\": null, \"total_time\": \"x\", \"worst_value\": null, \"shortest_deadtime\": \"4e-9\"}",
+    "expected": {
+      "events": [
+        {
+          "rule": "r",
+          "target": "t",
+          "kind": "enter",
+          "severity": "info",
+          "action": "report",
+          "time": 1.5,
+          "step": 3,
+          "stepTime": 0.0,
+          "value": 0.0,
+          "limit": 0.0,
+          "unit": "None",
+          "duration": 0.0,
+          "peak": null,
+          "peakTime": null,
+          "truncated": true,
+          "detail": "None"
+        },
+        {
+          "rule": "r",
+          "target": "t",
+          "kind": "leave",
+          "severity": "info",
+          "action": "report",
+          "time": -0.0,
+          "step": -3,
+          "stepTime": 2.0,
+          "value": 1000.0,
+          "limit": 0.0,
+          "unit": "",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": false,
+          "detail": ""
+        },
+        {
+          "rule": "r",
+          "target": "t",
+          "kind": "leave",
+          "severity": "info",
+          "action": "report",
+          "time": 0.0,
+          "step": 0,
+          "stepTime": 0.0,
+          "value": 0.0,
+          "limit": 0.0,
+          "unit": "",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": false,
+          "detail": ""
+        },
+        {
+          "rule": "r",
+          "target": "t",
+          "kind": "leave",
+          "severity": "info",
+          "action": "report",
+          "time": 0.0,
+          "step": 0,
+          "stepTime": 0.0,
+          "value": 0.0,
+          "limit": 0.0,
+          "unit": "",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": false,
+          "detail": ""
+        }
+      ],
+      "summaries": [
+        {
+          "rule": "s",
+          "target": "",
+          "entries": 2,
+          "filtered": 0,
+          "suppressed": 0,
+          "instants": 0,
+          "missingSamples": 0,
+          "totalTime": 0.0,
+          "worstValue": null,
+          "worstTime": null,
+          "shortestDeadtime": 4e-9,
+          "severity": ""
+        }
+      ],
+      "unreadableLines": 0,
+      "worstSeverity": "info",
+      "isEmpty": false
+    }
+  },
+  "worst_severity_picks_the_highest": {
+    "text": "{\"record\": \"event\", \"rule\": \"a\", \"target\": \"t\", \"kind\": \"instant\", \"severity\": \"info\", \"action\": \"report\", \"time\": 0, \"step\": 0, \"step_time\": 0, \"value\": 0, \"limit\": 0}\n{\"record\": \"event\", \"rule\": \"b\", \"target\": \"t\", \"kind\": \"instant\", \"severity\": \"fatal\", \"action\": \"stop\", \"time\": 0, \"step\": 0, \"step_time\": 0, \"value\": 0, \"limit\": 0}\n{\"record\": \"event\", \"rule\": \"c\", \"target\": \"t\", \"kind\": \"instant\", \"severity\": \"warning\", \"action\": \"report\", \"time\": 0, \"step\": 0, \"step_time\": 0, \"value\": 0, \"limit\": 0}\n{\"record\": \"event\", \"rule\": \"d\", \"target\": \"t\", \"kind\": \"instant\", \"severity\": \"nonsense\", \"action\": \"report\", \"time\": 0, \"step\": 0, \"step_time\": 0, \"value\": 0, \"limit\": 0}",
+    "expected": {
+      "events": [
+        {
+          "rule": "a",
+          "target": "t",
+          "kind": "instant",
+          "severity": "info",
+          "action": "report",
+          "time": 0.0,
+          "step": 0,
+          "stepTime": 0.0,
+          "value": 0.0,
+          "limit": 0.0,
+          "unit": "",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": false,
+          "detail": ""
+        },
+        {
+          "rule": "b",
+          "target": "t",
+          "kind": "instant",
+          "severity": "fatal",
+          "action": "stop",
+          "time": 0.0,
+          "step": 0,
+          "stepTime": 0.0,
+          "value": 0.0,
+          "limit": 0.0,
+          "unit": "",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": false,
+          "detail": ""
+        },
+        {
+          "rule": "c",
+          "target": "t",
+          "kind": "instant",
+          "severity": "warning",
+          "action": "report",
+          "time": 0.0,
+          "step": 0,
+          "stepTime": 0.0,
+          "value": 0.0,
+          "limit": 0.0,
+          "unit": "",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": false,
+          "detail": ""
+        },
+        {
+          "rule": "d",
+          "target": "t",
+          "kind": "instant",
+          "severity": "nonsense",
+          "action": "report",
+          "time": 0.0,
+          "step": 0,
+          "stepTime": 0.0,
+          "value": 0.0,
+          "limit": 0.0,
+          "unit": "",
+          "duration": null,
+          "peak": null,
+          "peakTime": null,
+          "truncated": false,
+          "detail": ""
+        }
+      ],
+      "summaries": [],
+      "unreadableLines": 0,
+      "worstSeverity": "fatal",
+      "isEmpty": false
+    }
+  },
+  "empty": {
+    "text": "",
+    "expected": {
+      "events": [],
+      "summaries": [],
+      "unreadableLines": 0,
+      "worstSeverity": null,
+      "isEmpty": true
+    }
+  }
+}
