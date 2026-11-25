@@ -182,7 +182,16 @@ function handleAction(actionId: string, event?: KeyboardEvent): void {
     return;
   }
   switch (actionId) {
+    // Both spellings, because `keymap.ts` declares both: `Ctrl+.` and the
+    // AZERTY alias `Ctrl+Shift+.`, where `.` needs Shift. Only
+    // `palette.command` was handled, so the alias was a chord the keymap
+    // declared, the dispatcher resolved and this switch then dropped — on an
+    // AZERTY keyboard the command palette had no shortcut at all, and because
+    // the alias is also the prefix of `palette.quick-insert-azerty`, a single
+    // press armed the pending sequence, waited out its 700 ms and opened
+    // nothing. The quick-insert cases below always listed both.
     case "palette.command":
+    case "palette.command-azerty":
       ui.pushModal("command-palette");
       break;
     case "palette.quick-insert":
