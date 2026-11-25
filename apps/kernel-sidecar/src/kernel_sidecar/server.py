@@ -136,41 +136,19 @@ async def run_server(
     ctx = _KernelContext(token=token, workdir=workdir)
     dispatcher = _build_dispatcher(ctx)
     connected: list[bool] = [False]
-    results_root = pathlib.Path(workdir) / "results"
-
-    from kernel_sidecar.waveform.slice_server import handle_http
-
-    async def process_request(connection: Any, request: Any) -> Any:
-        """Intercept plain HTTP requests for waveform slice serving."""
-        try:
-            path = request.path
-            headers = request.headers
-        except AttributeError:
-            # Legacy websockets API.
-            path = connection
-            headers = request
-        result = await handle_http(path, headers, results_root, token, ctx)
-        if result is None:
-            return None  # Fall through to WebSocket upgrade.
-        status, resp_headers, body = result
-        # Build an HTTP response using the websockets Response type.
-        import http
-
-        from websockets.asyncio.server import (
-            Response,
-        )
-        from websockets.http11 import Headers
-
-        http_status = http.HTTPStatus(status)
-        # Add Connection: close so urllib.request / httpx don't keep the socket open.
-        resp_headers = [*list(resp_headers), ("Connection", "close")]
-        rh = Headers(resp_headers)
-        return Response(http_status, http_status.phrase, rh, body)
+    # No HTTP surface. The sidecar used to intercept plain HTTP requests here
+    # and serve `/results/<sim_id>/lod` and `/results/<sim_id>/<signal>.npy`
+    # out of an HDF5 file, which was the only way a viewer could see a window
+    # of a long run. It is not any more: the solver writes a `.gsim_samples`
+    # container, the viewer reads byte ranges of it through the extension host
+    # and decimates them with `crates/waveform-store` compiled to WebAssembly
+    # (#157). Binary LOD frames therefore leave this file along with the three
+    # Python implementations of the decimation behind them.
 
     async def handler(ws: Any) -> None:
         await _connection_handler(ws, ctx, dispatcher, connected)
 
-    async with _ws_serve(handler, _BIND_HOST, port, process_request=process_request) as server:
+    async with _ws_serve(handler, _BIND_HOST, port) as server:
         bound_port = server.sockets[0].getsockname()[1]
         # Print the KERNEL_READY signal for the host to parse. `protocol` lets a
         # host reject an environment prepared for a different release (#134); a

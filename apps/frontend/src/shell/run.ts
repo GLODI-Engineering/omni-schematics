@@ -28,10 +28,11 @@
  * cannot find the solver, and here is everywhere I looked".
  */
 import { compileSchematic, initEngine } from "../engine/engine";
-import { getWebviewInit } from "../ipc/vscode-host";
+import { getWebviewInit, postToHost } from "../ipc/vscode-host";
 import { detectAnalysisTypeFromNetlist } from "../netlist/generate";
 import { publishCompilerNotes } from "../problems/compiler-notes";
 import { publishRunEvents } from "../problems/run-events";
+import { plotRunContainer } from "../results/container-plot";
 import { useGraphStore, useIpcStore, useUiStore } from "../store";
 import { useSimSettingsStore } from "../store/sim-settings";
 import { useToastStore } from "../store/toast";
@@ -208,6 +209,63 @@ function reportRunFailure(
 }
 
 /**
+ * Draw the container a finished run wrote (#157), where it can be seen.
+ *
+ * ## Which webview plots
+ *
+ * Inside VS Code the schematic webview hosts exactly one surface — the
+ * schematic — and the viewer is a *separate* panel with its own store (see
+ * `App.tsx`, which pins `surfaceId` for that reason). So a schematic webview
+ * that read the container would fetch its bytes, reduce them and draw a chart
+ * nobody can reach. It asks for the panel instead; the host broadcasts
+ * `gsim/runResult` to every webview and replays it to a panel that opens
+ * afterwards, so `vscode/waveform-main.tsx` is what reads the container there.
+ *
+ * Outside VS Code — the browser harness, the desktop shell — the waveform tab
+ * is in this same shell, so this is the only thing that can plot and it does.
+ *
+ * A failure to read the container is reported and nothing else: the run itself
+ * succeeded, the result is on disk and its path has already been printed, so
+ * telling the user the simulation failed would be false.
+ */
+async function plotRunResult(result: Extract<RunResult, { ok: true }>): Promise<void> {
+  const ipc = useIpcStore.getState();
+
+  if (getWebviewInit()?.role === "schematic") {
+    postToHost({ type: "gsim/showWaveforms" });
+    ipc.appendOutput("Opening the waveform viewer…");
+    return;
+  }
+
+  try {
+    const report = await plotRunContainer(result);
+    ipc.appendOutput(samplesReadLine(report));
+    useIpcStore.getState().setActiveEditorTab("core.waveform");
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    ipc.appendOutput(`Could not read the result's samples: ${detail}`);
+    reportRunLine("solver", "error", `could not read ${result.samplesPath}: ${detail}`);
+    useToastStore
+      .getState()
+      .pushToast(`The run finished, but its samples could not be read — ${detail}`, 8000);
+  }
+}
+
+/** What the read cost, which is the claim the container format is making. */
+export function samplesReadLine(report: {
+  signals: string[];
+  points: number;
+  bytesFetched: number;
+  size: number;
+}): string {
+  const ratio = report.size > 0 ? (100 * report.bytesFetched) / report.size : 0;
+  return (
+    `Plotted ${report.signals.length} signals at ${report.points} points — ` +
+    `${report.bytesFetched} of ${report.size} bytes read (${ratio.toFixed(1)}%)`
+  );
+}
+
+/**
  * Send one request to the host and report whatever comes back.
  *
  * The only place a run's outcome is turned into words, so `triggerRun` and
@@ -246,6 +304,11 @@ async function runOnHost(request: RunRequest): Promise<void> {
     store.appendOutput(text);
   }
   reportRunLine("solver", "info", `result written to ${result.resultPath}`);
+
+  // The container, on screen (#157). A completed run used to stop here: the
+  // samples were in a file the webview could not open, so the result said
+  // where it was and nothing drew it.
+  await plotRunResult(result);
 
   const bad = result.worstSeverity === "error" || result.worstSeverity === "fatal";
   const findings =

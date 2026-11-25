@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
+import { requestContainerWindow } from "../results/container-plot";
+import { reportRunLine } from "../shell/run-output";
 import { useToastStore } from "../store/toast";
 import { useWaveformStore } from "../store/waveform";
 import { AxesLegend } from "./AxesLegend";
@@ -27,6 +29,7 @@ import type { SpineSpec } from "./axes-config";
 import { buildBodeAnnotations } from "./bode-annotations";
 import type { AnnotationSpec, BodeMargins, MarginBadgeSpec } from "./bode-annotations";
 import { copyText } from "./copy-text";
+import { decimatorLoaded, initDecimator } from "./decimator";
 import { axesExportSubject } from "./export-subjects";
 import { withHistory } from "./history";
 import { type PointReading, formatReading, pickNearestTrace } from "./point-reading";
@@ -251,18 +254,34 @@ export function Axes({ axesId, width, height, onZoomChange, bodeMargins }: AxesP
    * autoscaling back out — the window is the reason this ran.
    */
   const refineForView = useCallback(() => {
+    const { refs: liveRefs } = latestRef.current;
+    const budget = budgetFor(sizeRef.current.width);
+
+    // A container-backed run reads the window from the file first (#157). The
+    // points for a window the viewer has never shown are not in the page at
+    // all — that is the whole point of the format: a plan, a fetch of the few
+    // ranges it names, and a reduction, all proportional to what is on screen
+    // rather than to the run's length. The reply lands in the signal cache,
+    // which re-renders this chart through the effect below.
+    //
+    // Fire and forget, and ignored when no container backs these refs, so an
+    // inline result and a replayed capture take the path they always did.
+    void requestContainerWindow(liveRefs, viewRef.current, budget).catch((error: unknown) => {
+      // Reported once, not swallowed: a view that silently stops refining
+      // looks like a plot that has frozen. The previous window stays drawn.
+      reportRunLine(
+        "editor",
+        "warning",
+        `could not read that window of the result: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+
     const u = uplotRef.current;
     if (!u) return;
-    const { refs: liveRefs, signalCache: liveCache } = latestRef.current;
-    u.setData(
-      buildAlignedData(
-        liveRefs,
-        liveCache,
-        viewRef.current ?? undefined,
-        budgetFor(sizeRef.current.width),
-      ),
-      false,
-    );
+    const { signalCache: liveCache } = latestRef.current;
+    u.setData(buildAlignedData(liveRefs, liveCache, viewRef.current ?? undefined, budget), false);
   }, []);
 
   const scheduleRefine = useCallback(() => {
@@ -279,6 +298,23 @@ export function Axes({ axesId, width, height, onZoomChange, bodeMargins }: AxesP
     },
     [],
   );
+
+  // The decimator, in the page (#157). It is `crates/waveform-store` compiled
+  // to WebAssembly, so instantiating it is asynchronous while reducing an
+  // array is not — awaited once here, then called synchronously on every
+  // refine. Until it lands `reduceToBudget` hands samples back whole, which
+  // draws the same picture more slowly, so this schedules a refine rather than
+  // blocking the first paint on a fetch.
+  useEffect(() => {
+    if (decimatorLoaded()) return;
+    let live = true;
+    void initDecimator().then(() => {
+      if (live) scheduleRefine();
+    });
+    return () => {
+      live = false;
+    };
+  }, [scheduleRefine]);
 
   // Keep `measured` in step with the cell the chart sits in. ResizeObserver
   // rather than a window resize listener: the panel is resized by dragging

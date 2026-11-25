@@ -36,6 +36,7 @@ simulation kernel is a child process the extension owns.
 | Parameter inspector, including Level-1 device models taken from ngspice 46's own model set and a raw `.MODEL` fallback for BSIM/PSP/HICUM-class compact models | `apps/frontend/src/inspector/` |
 | Waveform viewer — multi-axes figures, cursors, per-signal colour, decimation, PDF export | `apps/frontend/src/waveform/` |
 | Compiling a sheet to a netlist — `gsim-core` itself, built to WebAssembly, in the webview | `apps/frontend/src/engine/`, `packages/gsim-wasm/` |
+| Reading a run's samples — one decimator, in Rust, built to WebAssembly, called by the viewer | `crates/waveform-store/`, `packages/waveform-wasm/` |
 | Hierarchy: subsystems, `.SUBCKT` definitions and instances, Goto/From routing | `apps/frontend/src/canvas/` |
 
 Signal-flow and physical-electrical blocks coexist in one sheet: a control
@@ -122,6 +123,35 @@ files, own an Output channel.
 The webviews still talk to the sidecar over a loopback WebSocket for what is
 left of it. The extension host owns the process and tells the webviews which
 port and token to use.
+
+### The decimator is in the viewer, and the bytes come from the host
+
+A run writes a `.gsim_samples` container: signal-major, fixed-stride, with a
+min/max pyramid over it, so a window of any run is a small read whatever the
+run's length. Drawing one needs two things that live on opposite sides of the
+webview boundary — WebAssembly, which only the webview can run, and a file,
+which only the extension host can open.
+
+So the webview plans and the host fetches. `crates/waveform-store`, committed
+as WebAssembly in [`packages/waveform-wasm`](./packages/waveform-wasm), works
+out which byte ranges a window needs from the stripe directory alone; the
+webview asks for them over `gsim/readSamples`; the host answers with exactly
+those bytes; the same crate reduces them to what the plot can show. No sample
+value takes part in deciding which bytes to read, which is what lets the
+reader ask twice — once recording, once for real — and get the same answer.
+
+That is also the only decimator left. There were three — a Rust crate imported
+by nothing, a hand-maintained TypeScript copy of it in the viewer, and two
+Python implementations behind a slice server — and a trace could change shape
+depending on which one drew it
+([#157](https://github.com/GLODI-Engineering/omni-schematics/issues/157)).
+`scripts/check-waveform-wasm-fresh.mjs` holds the committed bundle to the
+crate's own sources, and the frontend's whole test suite runs its reduction
+assertions through that bundle.
+
+The same packaging constraint as above decides the split: the host cannot load
+the decimator either, because `vsce package --no-dependencies` ships no
+`node_modules`. It reads bytes at offsets and does no arithmetic of its own.
 
 ### One host, on purpose
 

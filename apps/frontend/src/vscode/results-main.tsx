@@ -13,7 +13,8 @@ import ReactDOM from "react-dom/client";
 
 import { getWebviewInit, onHostMessage, postToHost } from "../ipc/vscode-host";
 import { followVsCodeTheme } from "../ipc/vscode-theme";
-import { GsimSimResultError, parseGsimSimResult } from "../results/document";
+import { FIRST_WINDOW_POINTS, plotContainer } from "../results/container-plot";
+import { GsimSimResultError, readGsimSimResult } from "../results/document";
 import { applyResult } from "../results/load";
 import { ErrorBoundary } from "../shell/ErrorBoundary";
 import { WaveformTab } from "../waveform/WaveformTab";
@@ -30,7 +31,41 @@ function showLoadError(root: HTMLElement, message: string): void {
 
 function load(text: string, root: HTMLElement, render: () => void): void {
   try {
-    applyResult(parseGsimSimResult(text));
+    const parsed = readGsimSimResult(text);
+    if (parsed.kind === "samples") {
+      // The samples are in a `.gsim_samples` beside this document, and this
+      // webview cannot open a file. So the figure layout the document carries
+      // goes up first and `plotContainer` reads windows of the container
+      // through the extension host (#157) — the axes are labelled from its
+      // prologue and the traces land with the first window.
+      //
+      // The path is resolved by the host against this document's URI, which is
+      // the only side that knows where the document is on disk.
+      applyResult({
+        run: parsed.external.run,
+        sweep: new Float64Array(0),
+        sweepDomain: "time",
+        signals: [],
+        layout: parsed.external.layout,
+      });
+      render();
+      void plotContainer({
+        simId: parsed.external.run.id,
+        target: {
+          path: parsed.external.samplesPath,
+          relativeTo: getWebviewInit()?.documentUri ?? "",
+        },
+        maxPoints: FIRST_WINDOW_POINTS,
+      }).catch((error: unknown) => {
+        const message =
+          `This result's samples are in "${parsed.external.samplesPath}", ` +
+          `which could not be read.\n\n${error instanceof Error ? error.message : String(error)}`;
+        showLoadError(root, message);
+        postToHost({ type: "gsim/log", level: "error", message });
+      });
+      return;
+    }
+    applyResult(parsed.result);
     render();
   } catch (error) {
     // A results file is often machine-written, so the useful thing to show

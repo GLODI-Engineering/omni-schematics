@@ -1,0 +1,22 @@
+{
+  "name": "@gensim/waveform-wasm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "crates/waveform-store, built to WebAssembly. The one decimator, and the only thing in this repository that can read a .gsim_samples container. The crate version this bundle was built from is in provenance.json, not here — one place for it.",
+  "main": "./pkg/waveform_store.js",
+  "types": "./pkg/waveform_store.d.ts",
+  "exports": {
+    ".": {
+      "types": "./pkg/waveform_store.d.ts",
+      "default": "./pkg/waveform_store.js"
+    },
+    "./wasm": "./pkg/waveform_store_bg.wasm",
+    "./provenance.json": "./provenance.json"
+  },
+  "files": ["pkg", "provenance.json"],
+  "scripts": {
+    "build": "node ../../scripts/build-waveform-wasm.mjs",
+    "check": "node ../../scripts/check-waveform-wasm-fresh.mjs --check"
+  }
+}

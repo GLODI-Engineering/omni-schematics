@@ -79,3 +79,33 @@ if (typeof globalThis.Path2D === "undefined") {
     roundRect = noop;
   } as unknown as typeof Path2D;
 }
+
+/**
+ * The decimator, instantiated for the whole suite (#157).
+ *
+ * Every assertion in this repository about envelopes, budgets and surviving
+ * peaks goes through `waveform/axes-config.ts`, which since #157 reduces with
+ * `crates/waveform-store` compiled to WebAssembly rather than with a
+ * TypeScript copy of it. Loading the bundle here is what makes those
+ * assertions hold the *Rust* decimator to its behaviour — the alternative,
+ * letting `reduceToBudget` pass samples through un-reduced because the module
+ * never landed, would leave the entire suite green while checking nothing
+ * about the reduction at all.
+ *
+ * The bytes are read rather than fetched for the reason `engine.test.ts`
+ * gives: the bundle is `wasm-pack --target web` output whose loader fetches a
+ * URL, and under jsdom `?url` resolves to an `/@fs/...` path that `fetch`
+ * refuses.
+ */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { initDecimator } from "./waveform/decimator";
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+await initDecimator(
+  new Uint8Array(
+    readFileSync(join(REPO_ROOT, "packages", "waveform-wasm", "pkg", "waveform_store_bg.wasm")),
+  ),
+);

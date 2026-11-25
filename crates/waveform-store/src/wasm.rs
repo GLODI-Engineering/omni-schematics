@@ -326,3 +326,54 @@ fn window_of(from: Option<f64>, to: Option<f64>) -> Option<(f64, f64)> {
         _ => None,
     }
 }
+
+/// Reduce samples already in the page to a point budget, peak-preserving.
+///
+/// ## Why this is here as well as [`SamplesFile::slice`]
+///
+/// A container is not the only way samples reach the viewer. A
+/// `kind: "inline"` result carries them in the document, a capture replayed
+/// from a file is read by the editor, and a previous run kept for an overlay
+/// is already in memory. All of those still have to be reduced to what a plot
+/// can show, and before this they were reduced by a hand-maintained
+/// TypeScript copy of [`crate::decimate::minmax_envelope`] whose own comment
+/// said so (#157). One algorithm means one of them, and the one that survives
+/// is the one the writer and the server already agree with.
+///
+/// Flat in and flat out, for the reason a slice is flat: `columns` is
+/// `column_count` runs of `time.len()` values laid end to end, and the result
+/// is `[time…, column0…, column1…, …]` over however many points the budget
+/// left. The caller knows both counts, so it can subarray one buffer at no
+/// cost instead of paying for an object per column at the boundary.
+#[wasm_bindgen(js_name = minmaxEnvelope)]
+pub fn minmax_envelope_flat(
+    time: &[f64],
+    columns: &[f64],
+    column_count: usize,
+    max_points: usize,
+) -> Result<Float64Array, JsError> {
+    let rows = time.len();
+    if columns.len() != rows * column_count {
+        // Caught here rather than read past the end of a column: the two
+        // lengths are the whole contract of a flat boundary, and a caller
+        // that got them wrong would otherwise be handed a plausible-looking
+        // reduction of somebody else's samples.
+        return Err(JsError::new(&format!(
+            "{column_count} columns of {rows} samples is {} values, but {} were given",
+            rows * column_count,
+            columns.len()
+        )));
+    }
+
+    let borrowed: Vec<&[f64]> = (0..column_count)
+        .map(|index| &columns[index * rows..(index + 1) * rows])
+        .collect();
+    let (out_time, out_columns) = crate::decimate::minmax_envelope(time, &borrowed, max_points);
+
+    let mut flat = Vec::with_capacity(out_time.len() * (1 + column_count));
+    flat.extend_from_slice(&out_time);
+    for column in &out_columns {
+        flat.extend_from_slice(column);
+    }
+    Ok(Float64Array::from(&flat[..]))
+}

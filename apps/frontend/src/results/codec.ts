@@ -79,10 +79,17 @@ export function decodeSamples(vector: GsimSimResultVector): Float64Array {
   if (encoding === undefined || data === undefined) {
     // A vector with no samples is not a parse failure to be reported at the
     // byte level — it means the document said its data lives elsewhere, and
-    // whoever opened it did not supply that. Say which.
+    // whoever opened it took the inline-only door. Say which.
+    //
+    // This is where reading an external result used to stop altogether. It no
+    // longer does: `readGsimSimResult` hands a `kind: "samples"` document back
+    // as the path to its container, and `results/container-plot.ts` reads
+    // windows of it through the ranged-read channel (#157). So reaching here
+    // means a document that declares no storage mode this reader knows, or a
+    // caller that chose `parseGsimSimResult` for a container-backed file.
     throw new Error(
-      `"${name}" carries no inline samples. Its document stores data externally; ` +
-        "open it through a source that can read that file.",
+      `"${name}" carries no inline samples. Its document stores them in a separate file; ` +
+        "read it with readGsimSimResult, which says where.",
     );
   }
 

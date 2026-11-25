@@ -26,7 +26,8 @@
     "uplot": "^1.6.31",
     "zustand": "^4.5.5",
     "@gensim/webview-protocol": "workspace:*",
-    "@gensim/gsim-wasm": "workspace:*"
+    "@gensim/gsim-wasm": "workspace:*",
+    "@gensim/waveform-wasm": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
