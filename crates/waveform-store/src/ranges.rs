@@ -117,7 +117,7 @@ impl Bytes for &RecordingBytes {
         }
         // Not recorded when it is already in hand: the caller has these and
         // asking for them again would be a round trip for bytes it is holding.
-        if let Ok(bytes) = (&self.known).read_at(offset, len) {
+        if let Ok(bytes) = self.known.read_at(offset, len) {
             return Ok(bytes);
         }
         self.spans.borrow_mut().push(Span { offset, len });
@@ -130,7 +130,7 @@ impl Bytes for &RecordingBytes {
 }
 
 /// Serves ranges that were fetched after a recording pass.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PrefetchedBytes {
     size: u64,
     /// Sorted by offset, so a read can binary-search for its region.
@@ -158,6 +158,24 @@ impl PrefetchedBytes {
 
     pub fn is_empty(&self) -> bool {
         self.chunks.is_empty()
+    }
+
+    /// Both sets of chunks in one source.
+    ///
+    /// The prologue is held once and every window read needs it alongside
+    /// whatever that window fetched, so the two are joined here rather than
+    /// having the caller re-send the prologue with each request.
+    pub fn merged(&self, other: &PrefetchedBytes) -> PrefetchedBytes {
+        let mut joined = self.clone();
+        for (offset, bytes) in &other.chunks {
+            joined.add(*offset, bytes.clone());
+        }
+        joined
+    }
+
+    /// Bytes held, for a caller reporting what a read cost.
+    pub fn bytes_held(&self) -> usize {
+        self.chunks.iter().map(|(_, bytes)| bytes.len()).sum()
     }
 }
 
@@ -253,6 +271,33 @@ pub fn prologue_spans(footer_json: &str) -> SamplesResult<Vec<Span>> {
             len: stripes * index.signals.len() * 8,
         },
     ])
+}
+
+/// Owned as well as borrowed.
+///
+/// `Bytes` only needs `&self`, so a source can be held either way, and which
+/// one a caller wants depends on where it lives: a test keeps the recorder to
+/// read its spans afterwards and so passes a reference, while a store that
+/// owns its bytes for the lifetime of an open file passes the value. Both impls
+/// delegate to the one piece of logic.
+impl Bytes for PrefetchedBytes {
+    fn read_at(&self, offset: u64, len: usize) -> SamplesResult<Vec<u8>> {
+        (&self).read_at(offset, len)
+    }
+
+    fn size(&self) -> u64 {
+        (&self).size()
+    }
+}
+
+impl Bytes for RecordingBytes {
+    fn read_at(&self, offset: u64, len: usize) -> SamplesResult<Vec<u8>> {
+        (&self).read_at(offset, len)
+    }
+
+    fn size(&self) -> u64 {
+        (&self).size()
+    }
 }
 
 #[cfg(test)]
@@ -396,11 +441,98 @@ mod tests {
     }
 
     #[test]
+    fn the_sequence_the_wasm_surface_exposes_works_end_to_end() {
+        // `wasm.rs` is `cfg(target_arch = "wasm32")`, so the sequence it
+        // offers a viewer cannot be unit-tested there. This walks the same
+        // steps with the same functions, natively: three small reads whose
+        // locations are arithmetic, then open, then plan, then slice.
+        let bytes = run(gsim_samples::STRIPE_ROWS as usize * 8, 6);
+        let size = bytes.len() as u64;
+        let read =
+            |span: Span| bytes[span.offset as usize..span.offset as usize + span.len].to_vec();
+
+        // 1. the tail, at a location that needs nothing read first
+        let tail = tail_span(size);
+        assert_eq!(tail.len, 16);
+        let tail_bytes = read(tail);
+
+        // 2. the footer, located by the tail
+        let footer = footer_span(size, &tail_bytes).expect("a footer span");
+        let footer_bytes = read(footer);
+        let footer_json = std::str::from_utf8(&footer_bytes).expect("utf-8");
+
+        // 3. the header, directory and summary, located by the footer
+        let spans = prologue_spans(footer_json).expect("prologue spans");
+        assert_eq!(spans.len(), 3, "header, directory, summary");
+        let mut prologue = PrefetchedBytes::new(size)
+            .with(tail.offset, tail_bytes)
+            .with(footer.offset, footer_bytes);
+        for span in &spans {
+            prologue.add(span.offset, read(*span));
+        }
+
+        // The prologue alone answers what a viewer needs to label a plot,
+        // before a single sample is fetched.
+        let opened = SamplesSource::open(prologue.clone()).expect("opens on the prologue alone");
+        assert_eq!(opened.signals().len(), 6);
+        assert_eq!(opened.signals()[0].name, "V(n0)");
+        assert_eq!(opened.rows(), gsim_samples::STRIPE_ROWS as u64 * 8);
+        assert!(opened.extent().is_some());
+
+        // 4. plan, 5. fetch, 6. slice
+        let names = vec!["V(n1)".to_string(), "V(n4)".to_string()];
+        let recorder = RecordingBytes::seeded(size, prologue.clone());
+        SamplesSource::open(&recorder)
+            .expect("opens")
+            .slice(&names, None, 1_500)
+            .expect("a planning slice");
+        let planned = recorder.spans();
+
+        let mut fetched = PrefetchedBytes::new(size);
+        for span in &planned {
+            fetched.add(span.offset, read(*span));
+        }
+        let got = SamplesSource::open(prologue.merged(&fetched))
+            .expect("opens")
+            .slice(&names, None, 1_500)
+            .expect("a slice");
+
+        let want = SamplesSource::open(bytes.clone())
+            .expect("opens")
+            .slice(&names, None, 1_500)
+            .expect("a slice");
+        assert_eq!(got.sweep, want.sweep);
+        assert_eq!(got.values, want.values);
+        assert_eq!(got.values.len(), 2);
+
+        // What it cost, which is the claim the format is for.
+        let fetched_bytes = fetched.bytes_held() + prologue.bytes_held();
+        assert!(
+            (fetched_bytes as u64) * 4 < size,
+            "held {fetched_bytes} of {size} bytes"
+        );
+    }
+
+    #[test]
+    fn a_truncated_file_is_refused_at_the_prologue_not_at_the_first_plot() {
+        // A viewer should learn a run never finished writing when it opens the
+        // file, not when a window comes back short.
+        let bytes = run(2_000, 2);
+        let size = bytes.len() as u64;
+        let mut tail = bytes[(size - 16) as usize..].to_vec();
+        tail[8] = b'X';
+        assert!(
+            footer_span(size, &tail).is_err(),
+            "a broken magic must not plan"
+        );
+    }
+
+    #[test]
     fn a_range_that_was_never_fetched_says_so_instead_of_serving_zeros() {
         // Otherwise a plumbing bug in the caller draws a flat line and looks
         // like a simulation result.
         let served = PrefetchedBytes::new(1_000).with(0, vec![1u8; 100]);
-        let error = (&served).read_at(500, 10).expect_err("not fetched");
+        let error = served.read_at(500, 10).expect_err("not fetched");
         assert!(error.to_string().contains("never fetched"), "{error}");
     }
 
