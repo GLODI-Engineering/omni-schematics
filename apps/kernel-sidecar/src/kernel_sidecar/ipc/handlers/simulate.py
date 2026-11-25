@@ -40,8 +40,9 @@ def _missing_compiler_message(reason: str) -> str:
     The constraint that shapes this: the reader may have no checkout. They may have
     installed the extension from the Marketplace, built a virtualenv from the wheels
     on a release, and pointed `omniSchematics.kernelPython` at it -- which is the
-    documented way to do it, and which leaves them with seven of the nine packages
-    the kernel needs. Advice phrased as "see the root pyproject.toml" or
+    documented way to do it, and which leaves them with four of the six packages
+    the kernel needs (it was seven of nine until #155 deleted three empty ones).
+    Advice phrased as "see the root pyproject.toml" or
     "uv pip install -e <sibling-repos-root>/gsim-tools" is unfollowable for them,
     and that was the whole content of this message before #147.
 

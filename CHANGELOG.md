@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+### The install is six downloads, not nine
+
+Three of the seven wheels this repository published contained no Python at all.
+Every `.py` file in `components` (5 files), `synthesis` (6 files) and
+`kernel-core` (1 file) was an empty `__init__.py` — 0 lines of code between the
+twelve of them — and nothing in the tree imported any of the three. They were
+directory skeletons for netlist emission and a component library that were
+planned in Python and then landed in Rust instead, which is the whole point of
+the engine being Rust.
+
+They were not inert while they sat there. They declared dependencies of their
+own (`components` → sympy, pyyaml; `synthesis` → components, sympy, jinja2;
+`kernel-core` → websockets, numpy), `simulator` required `components`,
+`kernel-sidecar` required `kernel-core`, and the release gate asserted that all
+seven wheels were built. So an install was three downloads and three pip
+resolutions longer than the kernel needed, for nothing.
+
+All three are deleted, with every declaration that named them:
+
+```sh
+python -m venv gsim-venv
+gsim-venv/bin/pip install <all six wheels, in one command>
+```
+
+Four wheels from this repository — `schemas`, `gsim_model`, `simulator`,
+`kernel_sidecar` — plus `gsim_tools` and a `gsim_py` matching your platform and
+Python version.
+
+Still one command, for a smaller reason than before. `components` and `schemas`
+are both names owned by other people on PyPI, and installing the set one wheel
+at a time let pip resolve a sibling's requirement from the index and fetch a
+stranger's package. Deleting `components` retires one of those two collisions;
+`schemas` is the last one, so the single `pip install` stays.
+
+Nothing a user can see changes, and nothing imports differently — which is the
+evidence that the three packages were as empty as they look.
+
+Also gone: the `no-piecewise-templates` architectural invariant, whose grep
+pointed at `packages/components/src/components/templates`. A grep over a
+directory that does not exist cannot fail, so it was a check reporting a tick it
+had not earned. The rule it encoded is the engine's to hold now, and
+`docs/agent-rules/architecture-invariants.md#smooth-models` says so where the
+section used to be.
+
 ## 2026-11-24 — Omni Schematics (0.8.0)
 
 **0.7.0 could not open any example, and could not simulate on any machine.** Both

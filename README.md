@@ -101,7 +101,7 @@ Preparing that environment once, from a checkout of this repo:
 node scripts/make-kernel-venv.mjs            # ~/.omni-schematics/kernel-venv
 ```
 
-It installs the seven kernel packages and their dependencies, adds `gsim_py` and
+It installs the four kernel packages and their dependencies, adds `gsim_py` and
 `gsim-tools` if it finds them beside this checkout, starts the kernel to check
 the result, and prints the path to paste into the setting. `--out <dir>` puts it
 somewhere else and `--python <exe>` picks the base interpreter.
@@ -110,12 +110,17 @@ Without a checkout, the same thing by hand from a release's wheels:
 
 ```sh
 python -m venv gsim-venv
-gsim-venv/bin/pip install <wheels>/*.whl   # the seven kernel packages
+gsim-venv/bin/pip install <wheels>/*.whl   # the four kernel packages
 ```
+
+One command, not four. One of these packages is named `schemas`, which belongs
+to somebody else on PyPI; installed one at a time, pip resolves a sibling's
+requirement from the index and fetches a stranger's package instead of the file
+beside it.
 
 `numpy`, `scipy`, `sympy`, `websockets` and `h5py` are declared by those wheels,
 so pip resolves them — you do not list them yourself. Verified: a venv holding
-nothing but the seven wheels starts the kernel and prints its `KERNEL_READY`
+nothing but the four wheels starts the kernel and prints its `KERNEL_READY`
 line.
 
 `matplotlib` and `pandas` used to be on that list, and are not any more: they

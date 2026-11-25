@@ -5,7 +5,6 @@ description = "Simulation pipeline — compiler, IR, symbolic processor, solver 
 requires-python = ">=3.11"
 dependencies = [
     "schemas",
-    "components",
     # `gsim-tools` is deliberately *not* declared here. It is published to no
     # index -- a public repository, but 404 on PyPI -- so there is no version to
     # depend on, and an optional extra does not help: uv locks every extra, so a

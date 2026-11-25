@@ -103,9 +103,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
 
-      # The seven workspace packages the kernel is assembled from. `--all-packages` builds
+      # The four workspace packages the kernel is assembled from. `--all-packages` builds
       # every member of the uv workspace, which is exactly that set; naming them individually
       # would be a second list to keep in step with `pyproject.toml`.
+      #
+      # It was seven until #155. Three of those seven -- `components`, `synthesis` and
+      # `kernel-core` -- contained no Python at all: every `.py` in them was an empty
+      # `__init__.py`, nothing imported them, and the work they were skeletons for landed
+      # in the Rust engine instead. They are gone, and so are three of the user's downloads.
       #
       # Deliberately *not* built here: `gsim_py` (a maturin build belonging to gsim-core,
       # one wheel per platform and interpreter) and `gsim-tools` (another repository's
@@ -121,10 +126,10 @@ jobs:
 
       # A wheel per package, or the environment a user builds from these is incomplete in a
       # way that only shows up as an ImportError at spawn time.
-      - name: All seven packages built
+      - name: All four packages built
         run: |
           missing=0
-          for pkg in kernel_core schemas components synthesis gsim_model simulator kernel_sidecar; do
+          for pkg in schemas gsim_model simulator kernel_sidecar; do
             if ls dist/"$pkg"-*.whl >/dev/null 2>&1; then
               echo "ok: $(ls dist/"$pkg"-*.whl)"
             else
@@ -178,9 +183,11 @@ jobs:
         run: |
           python3.12 -m venv /tmp/compile-venv
           /tmp/compile-venv/bin/pip install --quiet --upgrade pip
-          # One pip install for the local set: two of these packages are named `components`
-          # and `schemas`, which belong to other people on PyPI. Installed one at a time, a
-          # sibling's requirement resolves from the index and pulls down a stranger.
+          # One pip install for the local set: one of these packages is named `schemas`,
+          # which belongs to someone else on PyPI. Installed one at a time, a sibling's
+          # requirement resolves from the index and pulls down a stranger. There were two
+          # such names until #155 deleted the empty `components` package; `schemas` is the
+          # last one, and while it is here this stays a single command.
           /tmp/compile-venv/bin/pip install --quiet dist/*.whl
 
           # The two engine packages come from the releases `CHANGELOG.md` names, not from
