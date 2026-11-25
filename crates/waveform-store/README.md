@@ -14,6 +14,13 @@ and one in TypeScript (`axes-config.ts`) — so a trace could change shape
 depending on which produced it, and a difference between the browser's view
 and the server's was indistinguishable from a bug in the simulation.
 
+There is one now, and it is this (#157). The TypeScript copy and both Python
+ones are deleted; the viewer calls this crate directly, built to WebAssembly
+and committed in `packages/waveform-wasm`, and the frontend's whole test
+suite runs its reduction assertions through that bundle. The one piece of
+Python decimation left is private to `hdf5_store.py`, which is the legacy
+HDF5 writer #156 removes.
+
 It also makes a hosted deployment affordable. A plot 1500 px wide can
 distinguish about 3000 points: two per pixel, one for the top of each column
 and one for the bottom. Everything past that is paid for and not seen. On a
