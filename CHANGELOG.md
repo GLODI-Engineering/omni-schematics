@@ -2,7 +2,43 @@
 
 ## Unreleased
 
-### The install is six downloads, not nine
+### The editor compiles its own schematic — **breaking**
+
+Pressing Run used to send the whole document to the Python kernel, which
+compiled it there. The kernel is handed netlist text now: `gsim-core`'s own
+`crates/gsim-wasm` is built to WebAssembly and ships inside the `.vsix`, so the
+editor compiles with the engine itself (#158).
+
+**What changes for an install.** The kernel environment no longer needs a
+`gsim_py` wheel or `gsim-tools`. Those two were how it compiled a schematic, and
+they are what the 0.7.0 and 0.8.0 notes told you to download alongside the seven
+kernel wheels; the seven are now enough. Keep them in that environment only if
+you also want to script a document from Python, which still uses them and is
+unchanged.
+
+**What changes while you work.** A document that does not compile says so
+immediately, with the engine's own message — `floating-port` naming the wire,
+`unknown-type` naming the block — before any kernel is started, instead of
+arriving as a `CompileError` from a process that may not have had a compiler at
+all. The compiler's notes, including the DC references it adds for nodes nothing
+else ties down, appear whether or not the solve succeeds. The netlist goes to
+the Output panel for every run, not only for an imported one.
+
+**Why.** There were two compilers. About 1,600 lines of Python reimplemented
+the engine's expression evaluator, Goto/From resolution, subcircuit flattening
+and document I/O, and the two drifted twice that anyone noticed — once leaving
+every example reporting `floating-port` at Run time while the gate said five
+examples were fine, once letting a release gate and these install instructions
+name different engine versions. There is one now, and
+`examples/expected-netlists/` holds every shipped example to the netlist the
+Python compiler last produced, byte for byte.
+
+Gone with it: `simulator.compiler`'s `param_expression`, `goto_from_resolve`,
+`gsim_sch_flatten`, `gsim_sch_loader`, `gsim_sch_writer`, `gsim_py_netlist`,
+`compile_input` and `gsim_loader`, and `gsim_model`'s Python document model.
+`gsim_model`'s `.gsim_sym` component authoring stays.
+
+### The install is four downloads, not nine
 
 Three of the seven wheels this repository published contained no Python at all.
 Every `.py` file in `components` (5 files), `synthesis` (6 files) and
@@ -23,12 +59,15 @@ All three are deleted, with every declaration that named them:
 
 ```sh
 python -m venv gsim-venv
-gsim-venv/bin/pip install <all six wheels, in one command>
+gsim-venv/bin/pip install <all four wheels, in one command>
 ```
 
 Four wheels from this repository — `schemas`, `gsim_model`, `simulator`,
-`kernel_sidecar` — plus `gsim_tools` and a `gsim_py` matching your platform and
-Python version.
+`kernel_sidecar` — and that is the whole list. Six became four when the editor
+took the compiler: `gsim_tools` and a `gsim_py` matching your platform and
+Python version were the two the kernel compiled with, and they are not needed
+to open, edit or simulate a schematic any more. Install them anyway if you want
+to script a document from Python.
 
 Still one command, for a smaller reason than before. `components` and `schemas`
 are both names owned by other people on PyPI, and installing the set one wheel

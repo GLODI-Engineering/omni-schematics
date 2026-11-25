@@ -1,10 +1,23 @@
 """BE-23 — End-to-end smoke test.
 
-Spins up the kernel-sidecar in-process, performs the full simulate pipeline
-for the canonical step → pid → integrator → scope model, and asserts the
-result waveform matches the precomputed reference within rtol=1e-4, atol=1e-6.
+Spins up the kernel-sidecar in-process and drives the whole simulate pipeline:
+handshake, simulate, progress frames, result, manifest over HTTP, each signal
+slice fetched back.
 
-This is the backend v1 acceptance gate (progress.backend.yaml BE-23).
+**What it sends is netlist text** (#158). It used to send the canonical
+step → pid → integrator → scope `.gsim` fixture as a `model` payload and
+compare the result against `reference/step_pid_integrator_scope.npz` — the
+backend v1 acceptance gate. That fixture is `schema_version: 1`, which the
+engine's `load_document` rejects outright, so the comparison had already
+stopped happening the moment the kernel started compiling through gsim-core;
+and the kernel does not compile at all now. The netlist comes from
+`examples/expected-netlists/`, which is a real netlist that a gate holds to a
+byte, so this test needs neither an engine binding nor a fixture of its own.
+
+The reference comparison is not reinstated here — a new reference has to be
+generated for whatever circuit replaces the v1 fixture, which is its own job.
+What is asserted is the pipeline: progress arrives, the result is ok, the
+manifest is fetchable, and every signal it lists can be read back as an array.
 """
 
 from __future__ import annotations
@@ -21,11 +34,8 @@ from tests.backend.e2e._ws_helpers import recv_json
 
 pytestmark = pytest.mark.asyncio
 
-FIXTURES = pathlib.Path(__file__).parent.parent / "fixtures"
-MODELS_DIR = FIXTURES / "models"
-REF_DIR = FIXTURES / "reference"
-GSIM_FILE = MODELS_DIR / "step_pid_integrator_scope.gsim"
-REF_FILE = REF_DIR / "step_pid_integrator_scope.npz"
+REPO_ROOT = pathlib.Path(__file__).parents[3]
+NETLIST_FILE = REPO_ROOT / "examples" / "expected-netlists" / "buck_converter.net"
 
 
 # ---------------------------------------------------------------------------
@@ -33,15 +43,14 @@ REF_FILE = REF_DIR / "step_pid_integrator_scope.npz"
 # ---------------------------------------------------------------------------
 
 
-async def test_smoke_e2e(e2e_server: dict, requires_gsim_solve_path: None) -> None:
+async def test_smoke_e2e(e2e_server: dict, requires_general_simulator: None) -> None:
     """
     Full pipeline:
     1. Connect + handshake.
-    2. Send simulate with the canonical fixture model.
+    2. Send simulate with netlist text.
     3. Collect simulate_progress + simulate_result.
     4. Fetch manifest over HTTP.
-    5. Fetch each signal slice.
-    6. Compare against reference within rtol=1e-4, atol=1e-6.
+    5. Fetch each signal slice and read it back as an array.
     """
     import websockets
 
@@ -49,11 +58,7 @@ async def test_smoke_e2e(e2e_server: dict, requires_gsim_solve_path: None) -> No
     token = e2e_server["token"]
     http_base = e2e_server["http_base"]
 
-    # Load the .gsim fixture
-    if not GSIM_FILE.exists():
-        pytest.skip(f"Fixture model not found: {GSIM_FILE}")
-
-    model_doc = json.loads(GSIM_FILE.read_text(encoding="utf-8"))
+    netlist = NETLIST_FILE.read_text(encoding="utf-8")
 
     async with websockets.connect(uri) as ws:
         # Handshake
@@ -69,8 +74,8 @@ async def test_smoke_e2e(e2e_server: dict, requires_gsim_solve_path: None) -> No
                     "id": "smoke-sim",
                     "type": "simulate",
                     "payload": {
-                        "model": model_doc,
-                        "options": {"t_start": 0.0, "t_end": 10.0, "n_samples": 3000},
+                        "netlist": netlist,
+                        "options": {"t_start": 0.0, "t_end": 1e-3, "n_samples": 3000},
                     },
                 }
             )
@@ -109,14 +114,8 @@ async def test_smoke_e2e(e2e_server: dict, requires_gsim_solve_path: None) -> No
     assert manifest["sim_id"] == sim_id
     assert manifest["status"] == "ok"
 
-    # Fetch each signal slice and compare to reference
-    if not REF_FILE.exists():
-        pytest.skip(
-            f"Reference file not found: {REF_FILE} — generate with scripts/gen_reference.py"
-        )
-
-    reference = np.load(str(REF_FILE))
-
+    # Every signal the manifest lists is fetchable and parses as an array. Not a
+    # numerical gate -- see the module doc on the reference that is not here.
     for sig in manifest["signals"]:
         sig_url = f"{http_base}{sig['url']}?token={token}"
         with urllib.request.urlopen(sig_url, timeout=10) as resp:
@@ -125,28 +124,18 @@ async def test_smoke_e2e(e2e_server: dict, requires_gsim_solve_path: None) -> No
         import io
 
         actual = np.load(io.BytesIO(raw_bytes))
-
-        ref_key = sig["name"]
-        if ref_key in reference:
-            np.testing.assert_allclose(
-                actual,
-                reference[ref_key],
-                rtol=1e-4,
-                atol=1e-6,
-                err_msg=f"Signal {ref_key!r} differs from reference",
-            )
+        assert actual.size > 0, f"signal {sig['name']!r} came back empty"
 
 
-async def test_smoke_completes_under_30s(e2e_server: dict) -> None:
+async def test_smoke_completes_under_30s(
+    e2e_server: dict, requires_general_simulator: None
+) -> None:
     """The full smoke test must run in under 30 s wall time."""
     import time
 
     import websockets
 
-    if not GSIM_FILE.exists():
-        pytest.skip(f"Fixture model not found: {GSIM_FILE}")
-
-    model_doc = json.loads(GSIM_FILE.read_text(encoding="utf-8"))
+    netlist = NETLIST_FILE.read_text(encoding="utf-8")
     uri = e2e_server["ws_uri"]
     token = e2e_server["token"]
 
@@ -161,8 +150,8 @@ async def test_smoke_completes_under_30s(e2e_server: dict) -> None:
                     "id": "perf-sim",
                     "type": "simulate",
                     "payload": {
-                        "model": model_doc,
-                        "options": {"t_start": 0.0, "t_end": 10.0, "n_samples": 3000},
+                        "netlist": netlist,
+                        "options": {"t_start": 0.0, "t_end": 1e-3, "n_samples": 3000},
                     },
                 }
             )

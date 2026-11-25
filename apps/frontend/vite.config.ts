@@ -10,6 +10,15 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
+  // The engine bundle is `wasm-pack --target web` output: plain ESM whose
+  // loader resolves its `.wasm` relative to `import.meta.url`. esbuild's
+  // dependency pre-bundling rewrites that into something that no longer points
+  // at the emitted asset, so the package is left alone and Rollup handles it
+  // as source — which is also what makes `?url` resolve to the hashed file in
+  // `dist/assets`.
+  optimizeDeps: {
+    exclude: ["@gensim/gsim-wasm"],
+  },
   // Relative asset URLs: the built HTML is re-served by the VS Code extension
   // host from a `vscode-webview://` origin, which has no meaningful site root.
   base: "./",

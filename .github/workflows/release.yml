@@ -64,6 +64,51 @@ jobs:
           fi
           echo "version $manifest"
 
+      # The .vsix carries the schematic compiler now (#158): `gsim-core` built to
+      # WebAssembly, bundled into the webview by Vite. A release whose package lost it
+      # would install, open a sheet, and fail every Run with "the schematic compiler did
+      # not load" -- 0.7.0's failure mode exactly, one layer over.
+      - name: The .vsix carries the schematic compiler
+        run: |
+          if ! unzip -l omni-schematics.vsix | grep -qE '\.wasm$'; then
+            echo "::error::the packaged .vsix has no .wasm — the webview has no compiler"
+            unzip -l omni-schematics.vsix | tail -40
+            exit 1
+          fi
+          unzip -l omni-schematics.vsix | grep -E '\.wasm$'
+
+      # And that it compiles. Every example, to the netlist recorded for it, byte for
+      # byte, through the bundle this .vsix was built from -- the gate that used to live
+      # in the `wheels` job below and run in Python, before the compiler moved into the
+      # editor. Cheaper and stricter: no venv, no wheel downloads, and a count of netlist
+      # lines replaced by the netlist.
+      - name: Every example compiles through the engine that shipped
+        run: node scripts/check-examples.mjs --check
+
+      # #153, kept, and asked of the thing that ships rather than of a download. The
+      # install instructions name a gsim-core release; the editor compiles with whatever
+      # commit `provenance.json` records. Two independent sources of one version number,
+      # free to drift -- and silent in the direction that matters, since a changelog
+      # pointing at an engine older than the one in the package is a release that works
+      # and documents something else.
+      - name: The engine in the package is the engine the changelog names
+        run: |
+          # Exactly one match, or the gate stops: zero means the instructions stopped
+          # naming a release and nothing would be pinned; more than one means two links
+          # disagree and picking either is a guess.
+          found=$(grep -o "https://github.com/GLODI-Engineering/gsim-core/releases/tag/v[0-9][0-9.]*" \
+                    CHANGELOG.md | sed 's|.*/tag/v||' | sort -u)
+          if [ "$(printf '%s\n' "$found" | grep -c .)" -ne 1 ]; then
+            echo "::error::CHANGELOG.md must name exactly one gsim-core release; found: ${found:-none}"
+            exit 1
+          fi
+          shipped=$(node -p "require('./packages/gsim-wasm/provenance.json').engine.version")
+          echo "CHANGELOG.md names gsim-core $found; the package compiles with $shipped"
+          if [ "$found" != "$shipped" ]; then
+            echo "::error::CHANGELOG.md names gsim-core $found but packages/gsim-wasm was built from $shipped"
+            exit 1
+          fi
+
       - name: Name it for the version
         id: name
         run: |
@@ -162,50 +207,29 @@ jobs:
             exit 1
           fi
 
-      # And the step that was missing. `KERNEL_READY` is reached with no compiler at all,
-      # because `gsim_py_netlist` is imported on the first `simulate` rather than at startup
-      # -- so the check above passed for 0.7.0, whose wheels cannot compile anything, and the
-      # release shipped. A user who did everything right got a green kernel and a dead Run
-      # button (#147).
+      # The step that used to be here compiled the shipped examples in a venv built from
+      # these wheels, because the kernel was what compiled a schematic. It is not any more
+      # (#158): the compiler is `gsim-core` in WebAssembly, inside the .vsix, and the
+      # `vsix` job above compiles every example with it and checks that the changelog
+      # names the same engine version. Keeping a Python copy of that gate would mean
+      # keeping a Python compiler to run it with, which is the thing that was removed.
       #
-      # The compile path needs the two packages this job does not build, so it fetches them:
-      # `gsim-tools` from its repository (public, pure Python), and a `gsim_py` wheel matching
-      # this runner from gsim-core's own release assets. If either is unobtainable, that is
-      # itself worth failing a release for -- it is exactly the position the user is left in.
-      - uses: actions/setup-python@v5
-        with:
-          # Pinned because the `gsim_py` wheel is interpreter-specific and this step has to
-          # ask for one by tag. 3.12 is the version every piece has a wheel for.
-          python-version: "3.12"
-      - name: The kernel can compile a schematic, not just start
+      # Its other purpose survives here. #147 shipped a release whose kernel started and
+      # could not compile, because `KERNEL_READY` is reached before any compiler is
+      # imported -- so the check above passed on an install that did not work. The gate
+      # built for that downloaded the two packages the install instructions name, which
+      # made it a gate on the instructions as well. The instructions still name them, so
+      # what is checked now is that both releases exist and carry what they promise.
+      # Without downloading either: the point is the link, and the bytes are no longer on
+      # the compile path.
+      - name: The releases the changelog names exist and carry what it promises
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3.12 -m venv /tmp/compile-venv
-          /tmp/compile-venv/bin/pip install --quiet --upgrade pip
-          # One pip install for the local set: one of these packages is named `schemas`,
-          # which belongs to someone else on PyPI. Installed one at a time, a sibling's
-          # requirement resolves from the index and pulls down a stranger. There were two
-          # such names until #155 deleted the empty `components` package; `schemas` is the
-          # last one, and while it is here this stays a single command.
-          /tmp/compile-venv/bin/pip install --quiet dist/*.whl
-
-          # The two engine packages come from the releases `CHANGELOG.md` names, not from
-          # whatever is newest and not from a branch. They used to come from `@master` and
-          # from an untagged `gh release download`, which takes the latest release -- so the
-          # gate and the install instructions were two independent sources of the same two
-          # version numbers, free to drift (#153).
-          #
-          # The drift is silent in the direction that matters. If the engine publishes a
-          # release that fixes a compile error, the gate picks it up and goes green while the
-          # changelog still points at the broken one: a release that passes its own gate and
-          # works on nobody's machine, which is exactly how 0.7.0 shipped. Reading the tag
-          # out of the file the user reads makes the thing tested the thing they are told to
-          # install, so a stale link fails here instead of on their laptop.
+          # Exactly one match per repository, for the reason #153 gives: zero means the
+          # instructions stopped naming a release, more than one means two links disagree
+          # and picking either is a guess.
           tag_in_changelog() {
-            # $1: the repository the link points at. Exactly one match, or the gate stops:
-            # zero means the instructions stopped naming a release and nothing would be
-            # pinned; more than one means two links disagree and picking either is a guess.
             local repo="$1" found
             found=$(grep -o "https://github.com/GLODI-Engineering/${repo}/releases/tag/v[0-9][0-9.]*" \
                       CHANGELOG.md | sed 's|.*/tag/||' | sort -u)
@@ -216,36 +240,21 @@ jobs:
             printf '%s\n' "$found"
           }
 
+          check_asset() {
+            local repo="$1" tag="$2" pattern="$3"
+            if ! gh release view "$tag" --repo "GLODI-Engineering/$repo" \
+                   --json assets --jq '.assets[].name' | grep -qE "$pattern"; then
+              echo "::error::${repo} ${tag} has no asset matching ${pattern}, and CHANGELOG.md sends the user there for one"
+              gh release view "$tag" --repo "GLODI-Engineering/$repo" --json assets --jq '.assets[].name' || true
+              exit 1
+            fi
+            echo "ok: ${repo} ${tag} carries ${pattern}"
+          }
+
           GSIM_TOOLS_TAG="$(tag_in_changelog gsim-tools)"
           GSIM_CORE_TAG="$(tag_in_changelog gsim-core)"
-          echo "CHANGELOG.md sends the user to gsim-tools ${GSIM_TOOLS_TAG} and gsim-core ${GSIM_CORE_TAG}"
-
-          gh release download "$GSIM_TOOLS_TAG" --repo GLODI-Engineering/gsim-tools \
-            --pattern 'gsim_tools-*-py3-none-any.whl' --dir /tmp/gsim-tools --clobber
-          gh release download "$GSIM_CORE_TAG" --repo GLODI-Engineering/gsim-core \
-            --pattern 'gsim_py-*-cp312-cp312-manylinux*x86_64.whl' --dir /tmp/gsim-py --clobber
-          ls -la /tmp/gsim-tools /tmp/gsim-py
-          /tmp/compile-venv/bin/pip install --quiet \
-            /tmp/gsim-tools/gsim_tools-*.whl /tmp/gsim-py/gsim_py-*.whl
-
-          # The product's own compiler, on the documents the release ships, by the call the
-          # `simulate` handler makes. Not a reimplementation of it: the point of this gate is
-          # that the route under test is the route the user takes.
-          /tmp/compile-venv/bin/python - <<'PY'
-          import glob, json, pathlib, sys
-          from simulator.compiler.gsim_py_netlist import compile_gsim_document_full
-
-          docs = sorted(glob.glob("examples/*.gsim_sch"))
-          if not docs:
-              sys.exit("::error::no examples to compile")
-          for path in docs:
-              netlist, notes = compile_gsim_document_full(pathlib.Path(path).read_text())
-              lines = [ln for ln in netlist.splitlines() if ln.strip()]
-              if not lines:
-                  sys.exit(f"::error::{path} compiled to an empty netlist")
-              print(f"ok: {path} -> {len(lines)} netlist lines, {len(notes)} notes")
-          print(f"{len(docs)} documents compiled through the product's own path")
-          PY
+          check_asset gsim-tools "$GSIM_TOOLS_TAG" 'gsim_tools-.*-py3-none-any\.whl'
+          check_asset gsim-core "$GSIM_CORE_TAG" 'gsim_py-.*cp312.*manylinux.*x86_64\.whl'
 
       - uses: actions/upload-artifact@v4
         with:

@@ -1,6 +1,20 @@
 """simulate IPC handler (BE-18).
 
-Orchestrates: validate gsim → compile → solve → write → emit result.
+Orchestrates: solve → write → emit result.
+
+**The kernel does not compile** (#158). It is handed netlist text and it runs
+it. Compiling a `.gsim_sch` document used to happen here, through
+`simulator.compiler.gsim_py_netlist` -- a Python route into `gsim-core` that
+sat on top of a Python reimplementation of what `gsim-core` already does:
+expression evaluation, Goto/From resolution, subcircuit flattening, document
+loading and writing. The editor holds `gsim-core` itself now, built to
+WebAssembly, so it compiles its own document and sends the result. Two
+implementations became one, and this process stopped needing a compiler at all
+-- which is also the end of `SolverUnavailable` answers that were really
+"nobody installed the compiler in your kernel environment" (#147).
+
+What that leaves here: a `netlist` field, always, and an error naming it when
+it is absent.
 
 handle_simulate returns immediately after registering the cancel token and
 spawning a background task.  This keeps the message-receive loop free so
@@ -28,45 +42,6 @@ from simulator.postprocess.event_log import EventLog
 
 logger = logging.getLogger(__name__)
 
-# Where a reader can get the two packages that are not on PyPI. Named here rather
-# than inline so there is one copy to correct when they are published.
-_GSIM_TOOLS_RELEASES = "https://github.com/GLODI-Engineering/gsim-tools/releases"
-_GSIM_CORE_RELEASES = "https://github.com/GLODI-Engineering/gsim-core/releases"
-
-
-def _missing_compiler_message(reason: str) -> str:
-    """What to tell someone whose kernel cannot import its own compiler.
-
-    The constraint that shapes this: the reader may have no checkout. They may have
-    installed the extension from the Marketplace, built a virtualenv from the wheels
-    on a release, and pointed `omniSchematics.kernelPython` at it -- which is the
-    documented way to do it, and which leaves them with four of the six packages
-    the kernel needs (it was seven of nine until #155 deleted three empty ones).
-    Advice phrased as "see the root pyproject.toml" or
-    "uv pip install -e <sibling-repos-root>/gsim-tools" is unfollowable for them,
-    and that was the whole content of this message before #147.
-
-    `sys.executable` is the one path that is always right: it is the interpreter
-    that just failed the import, so it is by definition where the package has to
-    end up. Quoting it makes the first line something the reader can paste.
-    """
-    import sys
-
-    missing = "gsim_tools" if "gsim_tools" in reason else "a package"
-    where = _GSIM_TOOLS_RELEASES if "gsim_tools" in reason else _GSIM_CORE_RELEASES
-    return (
-        f"The general-simulator compile path is unavailable: {reason}.\n\n"
-        f"The simulation kernel needs {missing} to turn a schematic into a netlist, "
-        "and it is not installed in the environment the kernel is running in:\n\n"
-        f"    {sys.executable}\n\n"
-        "Download the wheel and install it there:\n\n"
-        f"    {where}\n"
-        f'    "{sys.executable}" -m pip install <the wheel you downloaded>\n\n'
-        "In a checkout of omni-schematics, `uv pip install -e ../gsim-tools` does the "
-        "same thing. Either way a later `uv sync` prunes it again, because neither "
-        "package is locked -- see the root pyproject.toml under [tool.uv.sources]."
-    )
-
 
 async def handle_simulate(ws: Any, msg: Message, ctx: Any) -> None:
     """Register cancel token and spawn the simulation as a background task."""
@@ -74,9 +49,8 @@ async def handle_simulate(ws: Any, msg: Message, ctx: Any) -> None:
     payload = msg.payload
     logger.debug("handle_simulate entry — request_id=%s", request_id)
 
-    gsim_doc = payload.get("model")
-    if gsim_doc is None:
-        await _emit_error(ws, request_id, "MissingModel", "Payload missing 'model' key.")
+    if not payload.get("netlist"):
+        await _emit_error(ws, request_id, "MissingNetlist", "Payload missing 'netlist' key.")
         return
 
     from simulator.solvers.protocol import CancelToken
@@ -99,25 +73,23 @@ async def _do_simulate(ws: Any, msg: Message, ctx: Any, cancel_token: Any) -> No
     request_id = msg.id
     payload = msg.payload
     options_raw = _extract_options(payload)
-    gsim_doc = payload.get("model")
+    netlist = payload.get("netlist")
 
     logger.info(
-        "simulate request %s — model=%s, netlist=%d chars, solver=%s",
+        "simulate request %s — netlist=%d chars",
         request_id,
-        "yes" if gsim_doc else "no",
+        len(netlist) if isinstance(netlist, str) else -1,
     )
 
-    if gsim_doc is None:
-        logger.warning("simulate %s — missing model and netlist", request_id)
-        await _emit_error(
-            ws, request_id, "MissingModel", "Payload missing 'model' or 'netlist' key."
-        )
+    if not isinstance(netlist, str) or not netlist.strip():
+        logger.warning("simulate %s — missing netlist", request_id)
+        await _emit_error(ws, request_id, "MissingNetlist", "Payload missing 'netlist' key.")
         return
 
     import time as _time
 
     ctx.sim_progress = 0.0
-    ctx.sim_message = "Compiling…"
+    ctx.sim_message = "Solving…"
     ctx.sim_started_at = _time.time()
 
     await ws.send(
@@ -128,49 +100,11 @@ async def _do_simulate(ws: Any, msg: Message, ctx: Any, cancel_token: Any) -> No
         ).to_json()
     )
 
-    compiler_notes: list[str] = []
     try:
-        try:
-            from simulator.compiler.gsim_py_netlist import (
-                GsimPyNotAvailable,
-                compile_gsim_document_full,
-            )
-        except ImportError as exc:
-            # `gsim_tools` is hand-installed rather than locked (see the root
-            # pyproject.toml's note), so on an environment without it this import
-            # fails rather than the lazy `import gsim_py` inside it. Without this
-            # branch the failure left the handler by the `finally` below and the
-            # dispatcher answered on the `execute_error` channel, which nothing
-            # awaiting a `simulate_result` ever reads: pressing Run hung forever
-            # instead of saying why.
-            #
-            # The advice used to be `uv pip install -e <sibling-repos-root>/gsim-tools`
-            # and a pointer to "the repository's root pyproject.toml". Both name
-            # things that only exist in a checkout, and the person most likely to
-            # see this message installed the extension from a release and has
-            # neither (#147). So the instruction is built from `sys.executable`,
-            # which is always the interpreter that just failed to import, and is
-            # therefore the one place the package has to end up. A reader with a
-            # checkout still gets their shorter route, named second.
-            await _emit_error(
-                ws,
-                request_id,
-                "SolverUnavailable",
-                _missing_compiler_message(str(exc)),
-            )
-            return
         from simulator.postprocess import result_writer
         from simulator.solvers.general_simulator_solver import GeneralSimulatorSolver
         from simulator.solvers.protocol import SimulationError, SolverOptions
 
-        # The old ir1/ir2/spice_netlist_writer/scipy_compiler pipeline (targets ngspice/
-        # Xyce/SciPy, a different block taxonomy maintained by hand in
-        # spice_netlist_writer.BLOCK_TO_SPICE) is bypassed entirely for a `model` payload.
-        # gsim-core's own compile registry is the real, single source of truth for what a
-        # general-simulator-only catalogue document compiles to — see
-        # simulator.compiler.gsim_py_netlist's own module doc comment. The three old
-        # solvers stay reachable, but only via an *explicit* `solver=` request (kept for
-        # side-by-side comparison / debugging, not the default path a real user takes).
         t_start = float(options_raw.get("t_start", 0.0))
         t_end = float(options_raw.get("t_end", 10.0))
         n_samples = _resolve_n_samples(options_raw, t_start, t_end)
@@ -293,10 +227,9 @@ async def _do_simulate(ws: Any, msg: Message, ctx: Any, cancel_token: Any) -> No
         try:
             backend: Any
             node_domains: dict[str, str] | None = None
-            # The backend is general-simulator. A document is compiled by
-            # gsim-core's own compile registry -- the single source of truth for
-            # what a block compiles to -- and solved by the real
-            # `general-simulator` binary.
+            # The backend is general-simulator, and the netlist it is given was
+            # compiled by `gsim-core` in the editor (#158). Nothing is compiled
+            # here: a `.gsim_sch` document never reaches this process.
             #
             # Three other dispatch branches used to live here: a raw-netlist path
             # into ngspice/Xyce, a `spice_netlist_writer` path, and an
@@ -304,19 +237,6 @@ async def _do_simulate(ws: Any, msg: Message, ctx: Any, cancel_token: Any) -> No
             # They targeted a second block taxonomy maintained by hand, which is
             # the design this project moved off. They are gone, not disabled, so
             # there is no second description of a block left to drift.
-            try:
-                # `_full` so the compiler's info-level notes survive to the UI. They
-                # carry the DC references it added for nodes nothing else ties down,
-                # and that decision has to be visible: an unreferenced node does not
-                # fail the solve, it quietly changes the answer.
-                netlist, compiler_notes = compile_gsim_document_full(gsim_doc)
-            except GsimPyNotAvailable as exc:
-                await _emit_error(ws, request_id, "SolverUnavailable", str(exc))
-                return
-            except Exception as exc:  # gsim-tools' own typed compile errors
-                await _emit_error(ws, request_id, "CompileError", str(exc))
-                return
-
             backend = GeneralSimulatorSolver.from_discovery()
             if backend is None:
                 raise SimulationError(
@@ -444,8 +364,9 @@ async def _do_simulate(ws: Any, msg: Message, ctx: Any, cancel_token: Any) -> No
             ],
             "status": "ok",
         }
-        if compiler_notes:
-            simulate_result_payload["compiler_notes"] = compiler_notes
+        # No `compiler_notes` here any more: whatever the compiler decided for
+        # the user was decided in the editor, before this request was sent, and
+        # `apps/frontend/src/problems/compiler-notes.ts` already has it.
         if dc_op_payload is not None:
             simulate_result_payload["dc_op_table"] = dc_op_payload
 

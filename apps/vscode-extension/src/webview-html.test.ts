@@ -61,9 +61,24 @@ describe("rewriteWebviewHtml", () => {
     // param expressions with a real parser, so nothing in it generates code at
     // runtime. Re-adding this directive would be a silent loss of the property
     // those two pieces of work exist to provide.
+    //
+    // Asserted as "no bare 'unsafe-eval' token" rather than "the string
+    // unsafe-eval does not occur", because 'wasm-unsafe-eval' contains it and
+    // is a different, narrower grant (see webview-html.ts).
     const out = render();
-    expect(out).not.toContain("unsafe-eval");
-    expect(out).toContain(`script-src 'nonce-TESTNONCE' vscode-webview-resource:;`);
+    expect(out).not.toMatch(/(?<!wasm-)'unsafe-eval'/);
+  });
+
+  it("allows WebAssembly, and only WebAssembly, to be compiled", () => {
+    // The editor's schematic compiler is gsim-core built to WebAssembly
+    // (#158). Without this directive `WebAssembly.instantiate` throws
+    // "Wasm code generation disallowed by embedder" and Run dies before the
+    // engine exists -- a failure the integration suite catches and inspection
+    // does not, exactly as with 'unsafe-eval' before it.
+    const out = render();
+    expect(out).toContain(
+      `script-src 'nonce-TESTNONCE' 'wasm-unsafe-eval' vscode-webview-resource:;`,
+    );
   });
 
   it("keeps the rest of the CSP strict", () => {

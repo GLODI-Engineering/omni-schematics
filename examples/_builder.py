@@ -40,7 +40,7 @@ _PLACEMENT_KEYS = ("paradigm", "domain")
 
 #: The document schema, which is the contract a `.gsim_sch` file has to satisfy.
 #: Reached by path because it is a sibling package's data file rather than
-#: something importable, the same way `simulator.compiler.gsim_sch_loader` finds it.
+#: something importable.
 _SCHEMA_PATH = (
     pathlib.Path(__file__).resolve().parent.parent
     / "packages"

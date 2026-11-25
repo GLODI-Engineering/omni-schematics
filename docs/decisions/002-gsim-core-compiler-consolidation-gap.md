@@ -15,10 +15,20 @@ An accepted decision record that is false is worse than a missing one, which is 
 is here rather than a quiet edit of the body: the measurements below were true when they were
 taken and are kept as that.
 
+**And then closed** (2026-11-25, #158). The thing this document was written to argue about has
+happened: the editor compiles with `gsim-core` itself, built to WebAssembly and committed in
+`packages/gsim-wasm`, and the Python modules named below — `param_expression`,
+`goto_from_resolve`, `gsim_sch_flatten`, `gsim_sch_loader`, `gsim_sch_writer`,
+`gsim_py_netlist`, `compile_input`, and `gsim_model`'s document model — are deleted. Every
+shipped example compiles to the netlist the Python compiler last produced, byte for byte;
+`examples/expected-netlists/` is that record and `scripts/check-examples.mjs` enforces it.
+
+`scripts/gsim-py-parity-probe.py`, which regenerated the measurements below, is deleted with
+them. It existed to measure the distance to this change, and the distance is zero.
+
 **Companion:** the same document is filed in the sibling repo as
 `gsim-core/docs/decisions/0003-general-simulator-gui-pipeline-parity.md`, because the gaps it
-names are `gsim-core`'s to close. Regenerate its measurements with
-[`scripts/gsim-py-parity-probe.py`](../../scripts/gsim-py-parity-probe.py).
+names were `gsim-core`'s to close.
 
 ## Context
 
@@ -286,8 +296,10 @@ through `gsim_py.compile()`, and none was.
 
 ## Method
 
-Reproducible from this repo plus a checkout of `gsim-core`, via
-[`scripts/gsim-py-parity-probe.py`](../../scripts/gsim-py-parity-probe.py):
+Measured with `scripts/gsim-py-parity-probe.py`, deleted in #158 along with the Python compiler
+it was comparing against. Reading the numbers below does not need it; reproducing them needs the
+script out of this file's own history (`git log --diff-filter=D -- scripts/gsim-py-parity-probe.py`)
+and a checkout of `gsim-core`:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate

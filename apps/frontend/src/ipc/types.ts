@@ -85,8 +85,16 @@ export interface ExecuteResult {
 
 export interface SimulateRequest {
   type: "simulate";
-  model?: unknown;
-  netlist?: string;
+  /**
+   * Netlist text, always — the kernel does not compile (#158).
+   *
+   * There used to be a `model` field here carrying the whole document, and the
+   * kernel compiled it with a Python reimplementation of `gsim-core`. The
+   * editor holds the engine itself now, so what crosses the wire is the
+   * engine's own output. A kernel asked to simulate without a netlist answers
+   * `MissingNetlist` rather than reaching for a compiler it no longer has.
+   */
+  netlist: string;
   solver?: string;
   analysis_type?: "TRAN" | "AC" | "DC" | "OP" | "NOISE";
   t_end?: number;

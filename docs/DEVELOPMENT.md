@@ -80,8 +80,8 @@ The workspace root is `pyproject.toml`. Members:
 | Member | Path | Purpose |
 |--------|------|---------|
 | `kernel-sidecar` | `apps/kernel-sidecar/` | IPC server process |
-| `simulator` | `packages/simulator/` | Compiler + postprocess |
-| `gsim-model` | `packages/gsim-model/` | The Python document model |
+| `simulator` | `packages/simulator/` | Solver adapters + postprocess. **Not a compiler** since #158: the editor compiles with `gsim-core` in WebAssembly (`packages/gsim-wasm`) and this process is handed netlist text. |
+| `gsim-model` | `packages/gsim-model/` | `.gsim_sym` component authoring. Its Python document model went with #158; the engine declares the document. |
 | `schemas` | `packages/schemas/` | (reserved for Python schema gen) |
 
 Read from `pyproject.toml`'s `[tool.uv.workspace] members` on 2026-11-25. Five rows this table
@@ -169,12 +169,9 @@ apps/kernel-sidecar/src/kernel_sidecar/
     └── slice_server.py    aiohttp HTTP server co-located on WS port
 
 packages/simulator/src/simulator/
-├── compiler/
-│   ├── gsim_loader.py     .gsim JSON → validated dict (jsonschema optional)
-│   ├── ir1_builder.py     dict → IR1Graph (topology)
-│   ├── ir2_lowering.py    IR1Graph → IR2 (flat state vector, topo sort, loop detection)
-│   ├── scipy_compiler.py  IR2 → CompiledModel (f(t,x)→dx/dt closure)
-│   └── codegen_state.py   CompiledModel dataclass; observation hooks
+├── compiler/              Empty of compiling since #158 -- see its __init__.py. What is
+│                          left is `simulation_extract`, which belongs to the old ir1
+│                          pipeline and is reached by nothing in the product.
 ├── ir/
 │   ├── ir1.py             IR1 dataclasses (IR1Block, IR1Connection, IR1Graph)
 │   └── ir2.py             IR2 dataclasses (state_layout, output_layout, eval_order)
@@ -198,18 +195,24 @@ packages/simulator/src/simulator/
 #### Simulation pipeline
 
 ```
+the webview (apps/frontend/src/shell/run.ts)
+  ├─ initEngine()                      → gsim-core, as WebAssembly
+  ├─ compileSchematic(engine, model)   → netlist text + the compiler's notes
+  └─ execute({type: "simulate", netlist, ...})
+       │
+       ▼
 handle_simulate (IPC handler)
   │ spawns background task
   ▼
 _do_simulate
-  ├─ gsim_loader.load(gsim_doc)     → dict
-  ├─ ir1_builder.build(doc)         → IR1Graph
-  ├─ ir2_lowering.lower(ir1)        → IR2
-  ├─ scipy_compiler.compile(ir2)    → CompiledModel
-  ├─ select_backend(ir2)            → ScipySolver
-  ├─ solver.solve(compiled, opts)   → ResultBundle
-  └─ result_writer.write(bundle)    → manifest.json + npy files
+  ├─ GeneralSimulatorSolver.from_discovery()
+  ├─ backend.solve(netlist, opts)   → ResultBundle
+  └─ result_writer.write(bundle)    → the result container + manifest
 ```
+
+Nothing between the document and the compiler, on either side: that is the point
+of #158, and the reason `scripts/check-examples.mjs` imports
+`packages/gsim-wasm/compile.js` rather than reimplementing the route.
 
 #### There is no execute path
 

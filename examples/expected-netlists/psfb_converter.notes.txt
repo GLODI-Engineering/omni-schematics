@@ -1,0 +1,3 @@
+node 'n_a_hi_s' has no DC path to ground; added a 1e15 ohm reference so its potential is defined. Without one the solve still returns an answer, but a different one.
+node 'n_b_hi_s' has no DC path to ground; added a 1e15 ohm reference so its potential is defined. Without one the solve still returns an answer, but a different one.
+node 'n_ds1_a' has no DC path to ground; added a 1e15 ohm reference so its potential is defined. Without one the solve still returns an answer, but a different one.

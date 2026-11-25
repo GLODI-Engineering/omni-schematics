@@ -1,171 +1,36 @@
 """BE-18 — simulate IPC handler tests.
 
+What a `simulate` request carries is netlist text (#158): the editor compiles its
+own document with `gsim-core` in WebAssembly, and this process solves what it is
+given. The two fixtures that used to live here were `schema_version: 1` models of
+a signal-flow chain and an algebraic loop, sent as `model` payloads for the kernel
+to compile -- neither of which any reader accepts, so both had been producing a
+compile error rather than the behaviour they were named after.
+
+The netlist comes from `examples/expected-netlists/`, which
+`scripts/check-examples.mjs` holds to the byte, so these tests need no engine
+binding. They do need the `general-simulator` binary to get past "Solving…";
+without it the reply is an error, and the one test here that cares says so.
+
 Covers:
-- Happy path: step → pid → integrator → scope completes, manifest produced.
-- Algebraic-loop fixture → simulate_result status="error" with useful message; no manifest.
 - Cancel mid-solve: status="error" with type="Cancelled"; no manifest.
+- A request with no netlist is answered, and named.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import pathlib
 
 import pytest
 
 pytestmark = pytest.mark.asyncio
 
-
-def _step_pid_integrator_scope() -> dict:  # type: ignore[type-arg]
-    return {
-        "schema_version": 1,
-        "model": {
-            "id": "sps-model",
-            "name": "Step-PID-Integrator-Scope",
-            "grid": 10,
-            "blocks": [
-                {
-                    "id": "b-step",
-                    "type": "signal.step",
-                    "position": [0, 0],
-                    "rotation": 0,
-                    "mirror": "none",
-                    "params": {"amplitude": 1.0, "t_step": 0.0},
-                },
-                {
-                    "id": "b-sum",
-                    "type": "control.sum",
-                    "position": [80, 0],
-                    "rotation": 0,
-                    "mirror": "none",
-                    "params": {"signs": "+-"},
-                },
-                {
-                    "id": "b-pid",
-                    "type": "control.pid",
-                    "position": [160, 0],
-                    "rotation": 0,
-                    "mirror": "none",
-                    "params": {"kp": 1.0, "ki": 0.5, "kd": 0.1, "anti_windup": False},
-                },
-                {
-                    "id": "b-integ",
-                    "type": "control.integrator",
-                    "position": [240, 0],
-                    "rotation": 0,
-                    "mirror": "none",
-                    "params": {"lo": -1e9, "hi": 1e9},
-                },
-                {
-                    "id": "b-scope",
-                    "type": "sinks.scope",
-                    "position": [320, 0],
-                    "rotation": 0,
-                    "mirror": "none",
-                    "params": {},
-                },
-            ],
-            "wires": [
-                {
-                    "id": "w1",
-                    "from": {"block": "b-step", "port": "out"},
-                    "to": {"block": "b-sum", "port": "in0"},
-                    "waypoints": [],
-                    "pinned": False,
-                },
-                {
-                    "id": "w2",
-                    "from": {"block": "b-integ", "port": "out"},
-                    "to": {"block": "b-sum", "port": "in1"},
-                    "waypoints": [],
-                    "pinned": False,
-                },
-                {
-                    "id": "w3",
-                    "from": {"block": "b-sum", "port": "out"},
-                    "to": {"block": "b-pid", "port": "in"},
-                    "waypoints": [],
-                    "pinned": False,
-                },
-                {
-                    "id": "w4",
-                    "from": {"block": "b-pid", "port": "out"},
-                    "to": {"block": "b-integ", "port": "in"},
-                    "waypoints": [],
-                    "pinned": False,
-                },
-                {
-                    "id": "w5",
-                    "from": {"block": "b-integ", "port": "out"},
-                    "to": {"block": "b-scope", "port": "in"},
-                    "waypoints": [],
-                    "pinned": False,
-                },
-            ],
-            "metadata": {},
-        },
-    }
-
-
-def _algebraic_loop_model() -> dict:  # type: ignore[type-arg]
-    return {
-        "schema_version": 1,
-        "model": {
-            "id": "alg-loop",
-            "name": "Algebraic loop",
-            "grid": 10,
-            "blocks": [
-                {
-                    "id": "b-step",
-                    "type": "signal.step",
-                    "position": [0, 0],
-                    "rotation": 0,
-                    "mirror": "none",
-                    "params": {"amplitude": 1.0, "t_step": 0.0},
-                },
-                {
-                    "id": "b-sum",
-                    "type": "control.sum",
-                    "position": [100, 0],
-                    "rotation": 0,
-                    "mirror": "none",
-                    "params": {"signs": "+-"},
-                },
-                {
-                    "id": "b-gain",
-                    "type": "control.gain",
-                    "position": [200, 0],
-                    "rotation": 0,
-                    "mirror": "none",
-                    "params": {"k": 0.5},
-                },
-            ],
-            "wires": [
-                {
-                    "id": "w1",
-                    "from": {"block": "b-step", "port": "out"},
-                    "to": {"block": "b-sum", "port": "in0"},
-                    "waypoints": [],
-                    "pinned": False,
-                },
-                {
-                    "id": "w2",
-                    "from": {"block": "b-sum", "port": "out"},
-                    "to": {"block": "b-gain", "port": "in"},
-                    "waypoints": [],
-                    "pinned": False,
-                },
-                {
-                    "id": "w3",
-                    "from": {"block": "b-gain", "port": "out"},
-                    "to": {"block": "b-sum", "port": "in1"},
-                    "waypoints": [],
-                    "pinned": False,
-                },
-            ],
-            "metadata": {},
-        },
-    }
+REPO_ROOT = pathlib.Path(__file__).parents[3]
+NETLIST = (REPO_ROOT / "examples" / "expected-netlists" / "buck_converter.net").read_text(
+    encoding="utf-8"
+)
 
 
 async def _collect_simulate_messages(ws, timeout: float = 30.0) -> list[dict]:  # type: ignore[no-untyped-def]
@@ -216,8 +81,8 @@ async def test_cancel_mid_solve(live_server: dict) -> None:
                     "id": "sim-long",
                     "type": "simulate",
                     "payload": {
-                        "model": _step_pid_integrator_scope(),
-                        "options": {"t_start": 0.0, "t_end": 1000.0, "n_samples": 3000},
+                        "netlist": NETLIST,
+                        "options": {"t_start": 0.0, "t_end": 1.0, "n_samples": 2000000},
                     },
                 }
             )
@@ -245,3 +110,39 @@ async def test_cancel_mid_solve(live_server: dict) -> None:
         assert result["type"] == "simulate_result"
         assert result["payload"]["status"] == "error"
         assert "Cancelled" in json.dumps(result["payload"])
+
+
+# ---------------------------------------------------------------------------
+# A request the handler cannot act on
+# ---------------------------------------------------------------------------
+
+
+async def test_a_simulate_with_no_netlist_is_answered(live_server: dict) -> None:
+    """Named, on the channel the caller is waiting on.
+
+    The handler used to require a `model`, and a payload carrying only a
+    `netlist` was refused with "Payload missing 'model' key." -- while the
+    editor's own imported-netlist path sent exactly that. The field is the other
+    way round now (#158), and what matters either way is that the reply arrives
+    as a `simulate_result`: an error that leaves by any other channel is a Run
+    button that spins forever, which is how #147 presented.
+    """
+    import websockets
+
+    uri = live_server["uri"]
+    token = live_server["token"]
+
+    async with websockets.connect(uri) as ws:
+        await ws.send(json.dumps({"id": "hs", "type": "handshake", "payload": {"token": token}}))
+        await ws.recv()
+
+        await ws.send(
+            json.dumps({"id": "sim-empty", "type": "simulate", "payload": {"options": {}}})
+        )
+
+        messages = await _collect_simulate_messages(ws, timeout=10.0)
+
+    result = messages[-1]
+    assert result["type"] == "simulate_result"
+    assert result["payload"]["status"] == "error"
+    assert "netlist" in json.dumps(result["payload"])

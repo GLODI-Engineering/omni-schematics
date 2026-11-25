@@ -1,9 +1,11 @@
+import { compileSchematic, initEngine } from "../engine/engine";
 import { translateError } from "../ipc/error-map";
 import { getIpcClient, reconnectKernel } from "../ipc/transport";
 import type { ExecuteResult, SignalDetail, SimulateRequest } from "../ipc/types";
 import { detectAnalysisTypeFromNetlist } from "../netlist/generate";
+import { publishCompilerNotes } from "../problems/compiler-notes";
 import { toAnalysisPayload } from "../simulation/SimSettings";
-import { useGraphStore, useIpcStore, useLibraryStore, useUiStore } from "../store";
+import { useGraphStore, useIpcStore, useUiStore } from "../store";
 import { analysisToPayload } from "../store/model";
 import { useSimSettingsStore } from "../store/sim-settings";
 import { useToastStore } from "../store/toast";
@@ -50,6 +52,82 @@ function executeWithTimeout(payload: SimulateRequest): Promise<ExecuteResult> {
         reject(error);
       });
   });
+}
+
+/**
+ * Turn the sheet into netlist text, here, with the engine.
+ *
+ * #158. This used to be a field on the `simulate` payload: the editor posted
+ * `model` and the kernel compiled it, through a Python reimplementation of
+ * work `gsim-core` already did in Rust. The editor now holds the engine itself
+ * (`../engine/engine.ts`), so the thing that goes over the wire is a netlist —
+ * and the compile the editor performs is literally the compile `gsim_tools`
+ * performs, rather than a second program that agrees with it until it does
+ * not.
+ *
+ * Three consequences worth stating, because each was a reported failure:
+ *
+ *   - a document that does not compile says so **before** a kernel is
+ *     involved, with the engine's own message (`floating-port`,
+ *     `unknown-type`), instead of arriving as a `CompileError` from a process
+ *     that may not even have the compiler installed (#147);
+ *   - the compiler's notes — the DC references it adds for nodes nothing else
+ *     ties down — are in hand at compile time rather than riding back on
+ *     `simulate_result`, so they are shown whether or not the solve succeeds;
+ *   - the netlist is in the Output panel for every run, not only for an
+ *     imported one.
+ *
+ * Returns `null` when the document does not compile, having already reported
+ * why. The caller stops.
+ */
+async function netlistForRun(): Promise<string | null> {
+  const model = useGraphStore.getState().document.model;
+  const ipc = useIpcStore.getState();
+
+  let engine: Awaited<ReturnType<typeof initEngine>>;
+  try {
+    engine = await initEngine();
+  } catch (error) {
+    // A webview whose CSP forbids WebAssembly, or a .vsix packaged without the
+    // module. Named as its own failure because the fix is nothing to do with
+    // the document or the kernel.
+    reportRunFailure(
+      "The schematic compiler did not load",
+      error instanceof Error ? error.message : String(error),
+      "compile",
+    );
+    return null;
+  }
+
+  try {
+    const { netlist, notes } = compileSchematic(engine, model);
+    publishCompilerNotes(notes);
+    ipc.appendOutput("── Netlist ────────────────────────────────────────");
+    for (const line of netlist.split("\n")) {
+      ipc.appendOutput(line);
+    }
+    ipc.appendOutput("");
+    ipc.setLastNetlist(netlist);
+    reportRunOutput([
+      {
+        source: "compile",
+        severity: "info",
+        text: `compiled ${netlist.split("\n").filter((line) => line.trim()).length} netlist lines`,
+      },
+      ...notes.map((text) => ({ source: "compile" as const, severity: "info" as const, text })),
+    ]);
+    return netlist;
+  } catch (error) {
+    // The engine's own message, which names the block and the port. Reported
+    // as a compile failure rather than a solver one: nothing was solved.
+    publishCompilerNotes([]);
+    reportRunFailure(
+      "The schematic did not compile",
+      error instanceof Error ? error.message : String(error),
+      "compile",
+    );
+    return null;
+  }
 }
 
 function directNetlistFromMetadata(): string | null {
@@ -198,13 +276,6 @@ export async function triggerRun(): Promise<void> {
     return;
   }
 
-  const connection = await ensureKernelConnected();
-  if (!connection.ok) {
-    // The host's own diagnosis, in the toast, where the click happened.
-    reportRunFailure("Could not start the simulation kernel", connection.reason, "kernel");
-    return;
-  }
-
   if (!importedNetlist && hasValidationErrors()) {
     useUiStore.getState().focusBottomTab("core.problems");
     useIpcStore
@@ -213,13 +284,18 @@ export async function triggerRun(): Promise<void> {
     return;
   }
 
-  const model = useGraphStore.getState().document.model;
   const settings = useSimSettingsStore.getState().settings;
 
   const ipc = useIpcStore.getState();
 
   let payload: SimulateRequest;
 
+  // Compiled before the kernel is touched, and this ordering is the point of
+  // #158. The compiler is in the editor now, so a document that cannot
+  // compile is answered by the editor — instantly, with the engine's own
+  // message — rather than by starting a Python process, sending the document
+  // to it and waiting to be told that the process has no compiler installed
+  // (#147's failure, and the longest route to the shortest answer).
   if (importedNetlist) {
     // File > Import SPICE netlist… — send the file verbatim. Its own
     // .TRAN/.AC/.DC/.control cards govern execution; analysis_type/t_end/
@@ -235,7 +311,6 @@ export async function triggerRun(): Promise<void> {
     ipc.appendOutput("");
     ipc.setLastNetlist(importedNetlist);
 
-    const activeSimulator = useLibraryStore.getState().activeSimulator;
     payload = {
       type: "simulate",
       netlist: importedNetlist,
@@ -250,21 +325,29 @@ export async function triggerRun(): Promise<void> {
       t_step: settings.tStep,
     };
   } else {
-    // The ordinary case: send the raw document and let the backend compile
-    // it — gsim-core's own compile registry via
-    // simulator.compiler.gsim_py_netlist, not this file's own client-side
-    // generateNetlist() (a separate, older, ngspice-only writer that
-    // predates the general-simulator-only catalogue and reports every
-    // general-simulator block type as "UNSUPPORTED"). triggerRunAnalysis()
-    // below already does this the right way; this mirrors it.
-    const activeSimulator = useLibraryStore.getState().activeSimulator;
+    // The ordinary case: compile here, with the engine, and send the netlist.
+    // Not this file's own older `generateNetlist()` — a separate, ngspice-only
+    // writer that predates the general-simulator catalogue and reports every
+    // general-simulator block type as "UNSUPPORTED" — but `gsim-core` itself,
+    // compiled to WebAssembly (#158).
+    const netlist = await netlistForRun();
+    if (netlist === null) {
+      return;
+    }
     payload = {
       type: "simulate",
-      model,
+      netlist,
       analysis_type: settings.analysisType as SimulateRequest["analysis_type"],
       t_end: settings.tEnd,
       t_step: settings.tStep,
     };
+  }
+
+  const connection = await ensureKernelConnected();
+  if (!connection.ok) {
+    // The host's own diagnosis, in the toast, where the click happened.
+    reportRunFailure("Could not start the simulation kernel", connection.reason, "kernel");
+    return;
   }
 
   useUiStore.getState().focusBottomTab("core.output");
@@ -331,13 +414,6 @@ export async function triggerRunAnalysis(analysisId: string): Promise<void> {
     return;
   }
 
-  const connection = await ensureKernelConnected();
-  if (!connection.ok) {
-    // The host's own diagnosis, in the toast, where the click happened.
-    reportRunFailure("Could not start the simulation kernel", connection.reason, "kernel");
-    return;
-  }
-
   if (hasValidationErrors()) {
     useUiStore.getState().focusBottomTab("core.problems");
     useIpcStore
@@ -346,14 +422,27 @@ export async function triggerRunAnalysis(analysisId: string): Promise<void> {
     return;
   }
 
+  // Compiled before the kernel, same as `triggerRun` and for the same reason.
+  // `metadata.spice_netlist` still wins when it is there: a document carrying
+  // one is an imported deck whose own analysis cards govern the run, and there
+  // is nothing for the engine to compile.
+  const directNetlist = directNetlistFromMetadata();
+  const netlist = directNetlist ?? (await netlistForRun());
+  if (netlist === null) {
+    return;
+  }
+
+  const connection = await ensureKernelConnected();
+  if (!connection.ok) {
+    // The host's own diagnosis, in the toast, where the click happened.
+    reportRunFailure("Could not start the simulation kernel", connection.reason, "kernel");
+    return;
+  }
+
   try {
-    const activeSimulator = useLibraryStore.getState().activeSimulator;
-    const directNetlist = directNetlistFromMetadata();
     const payload: SimulateRequest = {
       type: "simulate",
-      ...(directNetlist
-        ? { netlist: directNetlist }
-        : { model: useGraphStore.getState().document.model }),
+      netlist,
       ...buildAnalysisPayload(analysisId),
     };
 
