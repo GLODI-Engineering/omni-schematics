@@ -106,12 +106,20 @@ beforeAll(async () => {
  *
  * This list is why `file/serializer.ts` still exists. See #200.
  */
-const ENGINE_DOES_NOT_MODEL = [
-  { pointer: "model.blocks[].subsystem", what: "an entire nested subsystem model (spec §11)" },
-  { pointer: "model.subckt_defs[].body", what: "a netlist-only .SUBCKT's SPICE text" },
-  { pointer: "model.ports", what: "a subsystem's boundary ports (spec §11.3)" },
-  { pointer: "model.parent_param_aliases", what: "parent-param aliases (spec §11.5)" },
-];
+/**
+ * The fields the engine's writer used to drop. The list is empty, and the tests
+ * below are what keeps it honest.
+ *
+ * It held four entries until gsim-core 0.6.1: `model.blocks[].subsystem`,
+ * `model.subckt_defs[].body`, `model.ports` and `model.parent_param_aliases`.
+ * The engine did not learn to *interpret* them — hierarchy flattening is still
+ * out of its scope — it learned to carry what it does not model, which is a
+ * different and smaller promise. gsim-core#78 has the reasoning.
+ *
+ * An entry coming back here means the engine has started dropping something
+ * again, and that `file/serializer.ts` cannot be retired after all.
+ */
+const ENGINE_DOES_NOT_MODEL: Array<{ pointer: string; what: string }> = [];
 
 /**
  * A document reduced to what the engine models, so the two writers can be
@@ -129,8 +137,6 @@ function project(value: unknown): unknown {
   const record = value as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(record).sort()) {
-    if (key === "subsystem" || key === "body" || key === "ports") continue;
-    if (key === "parent_param_aliases") continue;
     const entry = record[key];
     if (entry === null || entry === undefined) continue;
     if (Array.isArray(entry) && entry.length === 0) continue;
@@ -386,16 +392,24 @@ describe("the recorded divergences, and their direction", () => {
 });
 
 /**
- * The losses, each asserted to still happen.
+ * The four features that used to be lost, each asserted to survive.
  *
- * This is the half of #200 that belongs in a gate rather than an issue. Every
- * case below is a field the editor writes and the engine's writer drops, so
- * every case is a reason `file/serializer.ts` cannot be replaced by
- * `saveDocument`. When the engine learns one of them, the matching test fails
- * with "the engine now preserves this" — and that failure is the only thing
- * that will tell us the answer to #174 has changed.
+ * These were #200: fields the editor writes and the engine's writer silently
+ * dropped, so that routing the editor's save through `saveDocument` would have
+ * destroyed any sheet carrying a subsystem or a `.SUBCKT` body, with no error.
+ * The tests were written as a tripwire — each asserted the loss still happened,
+ * so that the day the engine learned one, the test would fail and say so.
+ *
+ * It fired, on gsim-core 0.6.1 (gsim-core#78), which is what this rewrite is.
+ * The engine still does not *interpret* any of them; it carries what it does
+ * not model. So these are now parity assertions, and a failure here means a
+ * document has started losing part of itself on the way through the engine.
+ *
+ * This does not by itself make `saveDocument` a drop-in for the editor's
+ * writer — the alias-resolution and error-message asymmetries above are
+ * unchanged, and #174 turns on those too.
  */
-describe("what the engine's writer drops, and must not be trusted with", () => {
+describe("what the engine's writer once dropped, and now carries", () => {
   const BASE = JSON.parse(readFileSync(join(EXAMPLES, "buck_converter.gsim_sch"), "utf8"));
 
   /** The engine's round-trip of `base` with `mutate` applied. */
@@ -405,16 +419,11 @@ describe("what the engine's writer drops, and must not be trusted with", () => {
     return JSON.parse(engineRoundTrip(JSON.stringify(document)));
   };
 
-  it("records every known loss, so the list and the assertions cannot drift apart", () => {
-    expect(ENGINE_DOES_NOT_MODEL.map((entry) => entry.pointer)).toEqual([
-      "model.blocks[].subsystem",
-      "model.subckt_defs[].body",
-      "model.ports",
-      "model.parent_param_aliases",
-    ]);
+  it("records no remaining loss, so the list and the assertions cannot drift apart", () => {
+    expect(ENGINE_DOES_NOT_MODEL.map((entry) => entry.pointer)).toEqual([]);
   });
 
-  it("a nested subsystem body: the whole inner model is gone", () => {
+  it("a nested subsystem: the whole inner model comes back", () => {
     const inner = {
       id: "inner",
       name: "Inner",
@@ -447,10 +456,11 @@ describe("what the engine's writer drops, and must not be trusted with", () => {
         document as { model: { blocks: Array<Record<string, unknown>> } }
       ).model.blocks[0].subsystem = inner;
     });
-    expect(out.model.blocks[0]).not.toHaveProperty("subsystem");
+    expect(out.model.blocks[0]).toHaveProperty("subsystem");
+    expect(out.model.blocks[0].subsystem).toEqual(inner);
   });
 
-  it("a netlist-only .SUBCKT: its SPICE text is gone", () => {
+  it("a netlist-only .SUBCKT: its SPICE text comes back", () => {
     const out = through((document) => {
       (document as { model: Record<string, unknown> }).model.subckt_defs = [
         {
@@ -464,31 +474,30 @@ describe("what the engine's writer drops, and must not be trusted with", () => {
         },
       ];
     });
-    expect(out.model.subckt_defs[0]).not.toHaveProperty("body");
-    expect(JSON.stringify(out)).not.toContain("E1 out 0 inp inn 1e5");
+    expect(out.model.subckt_defs[0].body).toBe("E1 out 0 inp inn 1e5");
   });
 
-  it("a subsystem's boundary ports: gone", () => {
+  it("a subsystem's boundary ports: carried", () => {
     const out = through((document) => {
       (document as { model: Record<string, unknown> }).model.ports = [
         { id: "p1", direction: "in", kind: "signal" },
       ];
     });
-    expect(out.model).not.toHaveProperty("ports");
+    expect(out.model.ports).toEqual([{ id: "p1", direction: "in", kind: "signal" }]);
   });
 
-  it("parent-param aliases: gone", () => {
+  it("parent-param aliases: carried", () => {
     const out = through((document) => {
       (document as { model: Record<string, unknown> }).model.parent_param_aliases = [
         { inner: "x", outer: "y" },
       ];
     });
-    expect(out.model).not.toHaveProperty("parent_param_aliases");
+    expect(out.model.parent_param_aliases).toEqual([{ inner: "x", outer: "y" }]);
   });
 
-  // The control for all four: fields the engine does carry, so that the tests
-  // above are evidence about these specific features and not about a writer
-  // that drops everything it is given.
+  // The control for all four: fields the engine carried even before #200 was
+  // fixed, so that the tests above are evidence about these specific features
+  // and not about a writer that now echoes back whatever it is handed.
   it("…while annotations, nets, labels and `role` survive it intact", () => {
     const out = through((document) => {
       const model = (

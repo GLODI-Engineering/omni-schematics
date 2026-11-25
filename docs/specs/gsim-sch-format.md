@@ -170,6 +170,8 @@ Fields that become advisory under `role: "library"`:
 
 Nothing is *ignored on load* — the loader round-trips the whole document either way. "Advisory" here means "no runtime consumer acts on it," never "the writer may drop it."
 
+That is a guarantee the engine makes, not merely an intention, and it was not always kept: until gsim-core 0.6.1 its writer silently discarded `blocks[].subsystem`, `subckt_defs[].body`, `ports` and `parent_param_aliases` — every §11 feature — so a document that went through `save_document` came back missing its subsystems. It carries them now without interpreting them, which is the distinction that matters: **modelling a field and preserving it are separate obligations, and this format requires the second of everything.** `apps/frontend/src/file/engine-agreement.test.ts` holds both writers to it.
+
 **Validation**
 
 - If present, `role` must be exactly `"schematic"` or `"library"`. Any other value is a hard error at load (`Invalid model role`).
