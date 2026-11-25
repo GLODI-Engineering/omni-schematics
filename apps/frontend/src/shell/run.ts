@@ -36,6 +36,7 @@ import { plotRunContainer } from "../results/container-plot";
 import { useGraphStore, useIpcStore, useUiStore } from "../store";
 import { useSimSettingsStore } from "../store/sim-settings";
 import { useToastStore } from "../store/toast";
+import { stepForDocument } from "./analysis-defaults";
 import type { RunRequest, RunResult } from "./run-host";
 import { cancelRun, requestRun } from "./run-host";
 import { type RunOutputSource, reportRunLine, reportRunOutput } from "./run-output";
@@ -484,7 +485,15 @@ function namedAnalysis(analysisId?: string): { type: string; tEnd: number; tStep
       };
     }
   }
-  return { type: settings.analysisType, tEnd: settings.tEnd, tStep: settings.tStep };
+  // No `simulation` block: a v1 document, or a sheet drawn from nothing. The
+  // store's step is 10 us, which samples a 100 kHz converter once per period
+  // and plots a flat line -- so the sheet's own declared switching period
+  // refines it when there is one (#193).
+  return {
+    type: settings.analysisType,
+    tEnd: settings.tEnd,
+    tStep: stepForDocument(useGraphStore.getState().document, settings.tStep),
+  };
 }
 
 /**
