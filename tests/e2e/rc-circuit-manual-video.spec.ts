@@ -157,11 +157,13 @@ test("manual-style RC video: drag components, wire, run", async ({ appPage }) =>
     // unit test (#102). These specs were waiting for a button that cannot exist in a running app.
     await appPage.getByRole("button", { name: "Run", exact: true }).click();
 
-    // The browser harness runs against `createStubKernel`, which answers the handshake and
-    // produces no samples (`smoke.spec.ts` states it). Pressing Run here checks that the
-    // button is reachable and wired; the solver is covered in the extension's integration
-    // suite, where it actually runs. Waiting hard for samples is why this spec burned its
-    // whole timeout on every run.
+    // No samples arrive here: the browser harness has no extension host, so the netlist
+    // `shell/run.ts` compiles is posted to nothing and the solver is never spawned
+    // (`smoke.spec.ts` states it). There is no kernel to stub any more -- the sidecar and the
+    // `createStubKernel` that stood in for it both went in 0.9.0. Pressing Run here checks
+    // that the button is reachable and wired; the solver is covered in the extension's
+    // integration suite, where it actually runs. Waiting hard for samples is why this spec
+    // burned its whole timeout on every run.
     const gotSamples = await appPage
       .waitForFunction(
         () => ((window as unknown as GensimWindow).__gensim_getWaveformPointCount?.() ?? 0) > 0,
@@ -170,7 +172,7 @@ test("manual-style RC video: drag components, wire, run", async ({ appPage }) =>
       )
       .then(() => true)
       .catch(() => false);
-    test.skip(!gotSamples, "stub kernel: no samples produced, so nothing to assert on");
+    test.skip(!gotSamples, "no extension host in the browser harness: no samples to assert on");
     await expect(appPage.getByLabel(/waveform viewer/i)).toBeVisible();
     await appPage.waitForTimeout(1200);
   }

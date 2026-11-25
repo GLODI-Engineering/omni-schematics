@@ -110,7 +110,10 @@ type PortSigMap = Record<string, string>;
 
 /**
  * Look up port signatures for a block type.
- * Falls back to a built-in registry for known types when catalog is unavailable.
+ *
+ * The catalogue is the source (`docs/decisions/0003` §"editor pipeline
+ * parity"). `BUILTIN_PORT_SIGS` below is consulted after it, and today reaches
+ * nothing the running application places — see its own comment.
  */
 function resolvePortSigs(blockType: string): PortSigMap | null {
   // Try catalog first
@@ -120,11 +123,36 @@ function resolvePortSigs(blockType: string): PortSigMap | null {
   } catch {
     // catalog not loaded yet (test environment)
   }
-  // Built-in fallback for core signal-flow types (covers test stubs)
   return BUILTIN_PORT_SIGS[blockType] ?? null;
 }
 
-/** Minimal built-in registry so tests can run without the catalog */
+/**
+ * Port signatures keyed by legacy `signal-flow.*` names. **Dead against the
+ * running application**, and kept only because deleting it is gsim-core#64's
+ * call, not this file's.
+ *
+ * It called itself a "minimal built-in registry so tests can run without the
+ * catalog". That was true once and is not now. Every key here is a legacy
+ * spelling that the catalogue resolves away before a block is built: inserting
+ * `signal-flow.source.constant` places a block typed `source.const`, and
+ * `signal-flow.math.gain` places `control.gain`. Neither canonical name is in
+ * this table, and neither carries `port_sigs` in the catalogue — 4 of 49
+ * signal-domain components do (`control.pid`, `control.saturation`,
+ * `signal_flow.sink.scope`, `signal_flow.source.step`). So the FE-65 overlay
+ * resolves nothing for a sheet drawn through the palette, and
+ * `CanvasOverlay` renders nothing at all when Ctrl+Alt+D is pressed.
+ *
+ * `dim-propagate.test.ts` passes because it hand-builds blocks under these
+ * legacy names and so hits this table: the test built the world it was testing.
+ * `tests/e2e/dim-mismatch.spec.ts` inserts the way the application inserts and
+ * is the one that says so.
+ *
+ * **Do not re-key this to canonical names.** A port signature guessed here
+ * becomes the de-facto source of truth for a dimension the engine's component
+ * library never declared, and a *wrong* dimension on screen is worse than none.
+ * Where these signatures live is decided in gsim-core#64; this table is deleted
+ * or promoted once it is. Tracked for the editor half in omni-schematics#117.
+ */
 const BUILTIN_PORT_SIGS: Record<string, PortSigMap> = {
   "signal-flow.source.constant": { out: "shape(value)" },
   "signal-flow.math.gain": { in: "inherit", out: "from(in)" },
