@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { openBlockSource } from "../canvas/open-block-source";
-import { requestSource } from "../ipc/vscode-host";
+import { getWebviewInit, requestSource } from "../ipc/vscode-host";
 import { type DerivedPorts, derivePortsFor } from "../netlist/code-ports";
 import type { ScriptedBlock, ScriptedSource } from "../netlist/code-source";
 
@@ -39,10 +39,20 @@ export function SourcePorts({
   currentOutputs,
   onAdopt,
 }: SourcePortsProps) {
-  const [state, setState] = useState<"idle" | "reading" | "done" | "unavailable">("idle");
+  const [state, setState] = useState<"idle" | "reading" | "done" | "unavailable" | "no-host">(
+    "idle",
+  );
   const [found, setFound] = useState<DerivedPorts | null>(null);
 
   async function read() {
+    // Two different answers, and they used to be one. Outside VS Code there is
+    // no host to ask and no workspace to read from, which is worth saying;
+    // inside it, every candidate coming back empty means the file is not there
+    // yet, which is a different sentence and a different next step.
+    if (getWebviewInit() === null) {
+      setState("no-host");
+      return;
+    }
     setState("reading");
     // In order, because a `cscript` block's parameter names a compiled library
     // and the source beside it is a convention with more than one spelling.
@@ -87,6 +97,12 @@ export function SourcePorts({
         <p className="source-ports__note">
           This block's parameter names a compiled library, so its source is looked for by
           convention: {source.candidates.slice(0, 2).join(", ")}, …
+        </p>
+      )}
+
+      {state === "no-host" && (
+        <p className="source-ports__note">
+          The source can only be read inside the editor, where there is a workspace to read from.
         </p>
       )}
 
