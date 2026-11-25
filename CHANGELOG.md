@@ -1,6 +1,36 @@
 # Changelog
 
-## Unreleased
+## 2026-11-25 — Omni Schematics (0.9.0)
+
+**The editor needs no Python.** Two downloads, one setting, and a schematic you
+can draw, compile, simulate and plot — with no interpreter on the machine.
+
+### Install it
+
+1. `omni-schematics-0.9.0.vsix` from this release. **Extensions → … → Install
+   from VSIX**.
+2. A `general-simulator` binary — the engine that does the numerical work.
+   Download it from
+   [general-simulator's releases](https://github.com/GLODI-Engineering/general-simulator/releases)
+   (v0.8.0 or newer; a source build needs three sibling checkouts, so prefer
+   the release).
+3. Point the editor at it:
+
+```jsonc
+"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"
+```
+
+That is the whole list. No Python, no virtual environment, no wheels, no
+version pin. For comparison: 0.7.0 asked for nine Python packages and shipped
+seven of them; 0.8.0 shipped all nine and still needed a hand-built venv and
+CPython 3.12 or 3.13 specifically.
+
+**Scripting a schematic has not gone away — it has moved out of the editor.**
+Install [`gsim-tools`](https://github.com/GLODI-Engineering/gsim-tools) and a
+[`gsim_py`](https://crates.io/crates/gsim-py) wheel into an environment of your
+own and build or measure documents there, with your own numpy and your own
+notebook. That is what those packages were written for, and it is a better
+place for it than a REPL inside a webview.
 
 ### The editor installs as one `.vsix` — **breaking**
 
