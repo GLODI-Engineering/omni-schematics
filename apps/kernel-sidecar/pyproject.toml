@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Local Python sidecar — launched by Tauri, binds to 127.0.0.1 only."
 requires-python = ">=3.11"
 dependencies = [
-    "kernel-core",
     "simulator",
     "numpy>=1.26",
     "websockets>=13.0",

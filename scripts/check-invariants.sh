@@ -60,21 +60,17 @@ check "canvas-non-blocking" \
         '(await[[:space:]]+(compile|solverCall|runSimulation|runSim)|blockOnSolver|synchronousCompile)' \
         apps/frontend/src/canvas
 
-# -----------------------------------------------------------------------------
-# 3. Smooth component models only.
-#    Only checks the templates/ subtree; user blocks may use external
-#    function blocks with internal discrete behavior.
-#    See: docs/agent-rules/architecture-invariants.md#smooth-models
-# -----------------------------------------------------------------------------
-check "no-piecewise-templates" \
-    "Component equation templates must be smooth" \
-    grep -rEni \
-        --include='*.py' --include='*.yaml' --include='*.yml' \
-        '(piecewise|region_switch|case[[:space:]]+region|if[[:space:]]+region_|Heaviside)' \
-        packages/components/src/components/templates
+# There was a third check here, `no-piecewise-templates`, grepping
+# `packages/components/src/components/templates` for piecewise keywords. That
+# package was deleted in #155: every `.py` in it was an empty `__init__.py` and
+# nothing imported it. A grep over a directory that does not exist cannot fail,
+# so the check was removed with the tree rather than left reporting a tick it
+# had not earned. The rule it encoded belongs to the engine, which owns the
+# component library; if equation templates ever come back to Python, the check
+# comes back with them.
 
 # -----------------------------------------------------------------------------
-# 4. No hook bypass in scripts or CI.
+# 3. No hook bypass in scripts or CI.
 #    See: docs/agent-rules/architecture-invariants.md#no-no-verify
 # -----------------------------------------------------------------------------
 check "no-hook-bypass" \

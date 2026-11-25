@@ -83,14 +83,14 @@ The workspace root is `pyproject.toml`. Members:
 | `simulator` | `packages/simulator/` | Compiler + postprocess |
 | `gsim-model` | `packages/gsim-model/` | The Python document model |
 | `schemas` | `packages/schemas/` | (reserved for Python schema gen) |
-| `components` | `packages/components/` | Device models (future) |
-| `kernel-core` | `packages/kernel-core/` | Shared kernel primitives (future) |
-| `synthesis` | `packages/synthesis/` | Code generation (future) |
 
-Read from `pyproject.toml`'s `[tool.uv.workspace] members` on 2026-11-19. Two rows this table
-used to carry are gone: `blocks`, which has no `packages/blocks/`, and `engine-xyce`, which
-never existed as a directory at all — it described a Xyce subprocess wrapper for a direction
-this project dropped.
+Read from `pyproject.toml`'s `[tool.uv.workspace] members` on 2026-11-25. Five rows this table
+used to carry are gone. `blocks` has no `packages/blocks/`, and `engine-xyce` never existed as
+a directory at all — it described a Xyce subprocess wrapper for a direction this project
+dropped. `components`, `kernel-core` and `synthesis` were real directories holding no code:
+every `.py` in them was an empty `__init__.py` and nothing imported them, so #155 deleted
+them. What they were reserved for — device models and netlist emission — lives in the Rust
+engine, which is the point of the engine being Rust.
 
 ### Running Python tools
 

@@ -66,35 +66,30 @@ compiler round-trip to complete a diagram edit.
 
 ---
 
-## 3. Smooth component models only {#smooth-models}
+## Retired — smooth component models only {#smooth-models}
 
-**Rule.** Equation templates in `packages/components/src/components/templates/`
-must be smooth and continuous over their domain. Piecewise / region-switched
-models are forbidden at IR-2 level.
+**Retired in #155.** This invariant governed equation templates in
+`packages/components/src/components/templates/`: they had to be smooth and
+continuous, because a piecewise model turns the DAE into a hybrid system the
+symbolic processor cannot index-reduce across.
 
-**Why.** A piecewise model turns the DAE into a hybrid (continuous +
-discrete-event) system. The symbolic processor cannot perform index
-reduction across discontinuities, and the solver must detect events and
-re-initialize at every region switch. This is a qualitatively harder
-numerical problem and the source of most convergence failures in legacy
-SPICE engines.
+The rule is still true of the product. It is no longer an invariant *of this
+repository*, because the subtree it named never held anything. Every `.py`
+file in `packages/components` was an empty `__init__.py`, nothing imported the
+package, and the component library it was a skeleton for landed in the Rust
+engine instead. The package is deleted, and a grep over a directory that does
+not exist is a check that cannot fail — so it went with it rather than stay
+here reporting a tick it had not earned.
 
-**Check.** `scripts/check-invariants.sh` greps component templates for
-keywords like `piecewise`, `region_switch`, `if region_`, `case region`,
-and fails on any match.
-
-**If the check fails.** Smooth the model with a `tanh`-based approximation,
-or reject it explicitly at the lowering stage with an actionable error. Do
-not silently let a piecewise model into IR-2.
-
-Note: this applies to **library templates**, not to user blocks. A user
-who supplies an external function through the ExternalFunctionBlock contract
-may have stateful or non-smooth internals — those are handled via the
-ExternalFunctionBlock contract, not by library templates.
+Where the rule lives now: the engine owns the component library, so smoothness
+is the engine's invariant to hold. The heading and anchor are kept so the
+`#smooth-models` links elsewhere still land on this explanation. If equation
+templates ever come back to Python here, this section and its check come back
+with them.
 
 ---
 
-## 4. Hooks must not be bypassed in automation {#no-no-verify}
+## 3. Hooks must not be bypassed in automation {#no-no-verify}
 
 **Rule.** `scripts/` and `.github/workflows/` must not contain `--no-verify`,
 `--no-gpg-sign`, `SKIP=` (pre-commit's skip env), or other hook-bypass

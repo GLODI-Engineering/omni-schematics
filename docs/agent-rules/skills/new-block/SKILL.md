@@ -13,8 +13,10 @@ skill walks all of them.
 
 ## When NOT to use this skill
 
-- Adding a **device model** (R, L, MOSFET, BJT) — those go in
-  `packages/components/`, not blocks. Use `/new-component` instead.
+- Adding a **device model** (R, L, MOSFET, BJT) — those belong to the
+  engine's component library in `gsim-core`, not to blocks and not to this
+  repository. There is no Python package for them: `packages/components` was
+  deleted in #155 for holding no code.
 - Adding a **solver backend** — use `/new-solver`.
 - Modifying an existing block — just edit the file. This skill is
   scaffolding only.
@@ -186,4 +188,5 @@ follow-up commits as the synthesis engine matures.
 - Architectural invariants: `docs/agent-rules/architecture-invariants.md`
 - Block library catalog: `gsim-core`'s component library (`crates/gsim-core/src/compile/library.rs`)
 - IR-2 schema: `packages/schemas/definitions/ir2/`
-- Synthesis targets: `packages/synthesis/`
+- Synthesis targets: none in this repository — `packages/synthesis` was deleted in #155
+  for holding no code, and code generation belongs to the engine.

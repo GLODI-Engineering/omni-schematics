@@ -7,21 +7,15 @@ requires-python = ">=3.11"
 [tool.uv.workspace]
 members = [
     "apps/kernel-sidecar",
-    "packages/kernel-core",
     "packages/schemas",
     "packages/simulator",
     "packages/gsim-model",
-    "packages/components",
-    "packages/synthesis",
 ]
 
 [tool.uv.sources]
-kernel-core = { workspace = true }
 schemas = { workspace = true }
 simulator = { workspace = true }
 gsim-model = { workspace = true }
-components = { workspace = true }
-synthesis = { workspace = true }
 # `gsim-tools` and `gsim_py` are both installed by hand, not locked.
 #
 # `gsim_py` because it is a compiled PyO3 extension (gsim-core/crates/gsim-py):
@@ -137,11 +131,8 @@ no_implicit_optional = true
 # ("There are no .py[i] files in directory"). A new Python package needs a line here.
 files = [
     "apps/kernel-sidecar/src",
-    "packages/components/src",
     "packages/gsim-model/src",
-    "packages/kernel-core/src",
     "packages/simulator/src",
-    "packages/synthesis/src",
 ]
 exclude = [
     "build/",

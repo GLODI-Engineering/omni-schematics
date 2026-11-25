@@ -12,7 +12,7 @@
  *   node scripts/make-kernel-venv.mjs --out ~/.omni-schematics/kernel-venv
  *
  * What goes in:
- *   - the seven Python workspace packages of this repo, from source;
+ *   - the four Python workspace packages of this repo, from source;
  *   - their scientific dependencies, resolved by pip from PyPI;
  *   - a `gsim_py` wheel, if one is given or found (the compiler; a maturin
  *     build belonging to gsim-core);
@@ -32,10 +32,7 @@ const REPO = path.resolve(import.meta.dirname, "..");
 
 /** The uv workspace members, which are also exactly what the kernel imports. */
 const PACKAGES = [
-  "packages/kernel-core",
   "packages/schemas",
-  "packages/components",
-  "packages/synthesis",
   "packages/gsim-model",
   "packages/simulator",
   "apps/kernel-sidecar",
@@ -130,9 +127,9 @@ function main() {
   );
   run(venvPython, ["-m", "pip", "install", "--quiet", "--upgrade", "pip"], "upgrading pip");
 
-  // All seven paths in one install: pip satisfies the packages' dependencies on
+  // All four paths in one install: pip satisfies the packages' dependencies on
   // each other from the command line, so none of them is looked for on PyPI --
-  // where `components` and `schemas` are somebody else's packages entirely.
+  // where `schemas` is somebody else's package entirely.
   run(
     venvPython,
     ["-m", "pip", "install", ...PACKAGES.map((member) => path.join(REPO, member))],

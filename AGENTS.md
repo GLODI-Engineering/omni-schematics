@@ -26,8 +26,8 @@ apps/frontend         React/Vite webview bundles — the canvas, inspector,
 apps/vscode-extension The extension host: custom editor, views, commands,
                       kernel lifecycle
 apps/kernel-sidecar   Python process the extension spawns; speaks WebSocket
-packages/             Python libraries — schemas, simulator, gsim-model,
-                      components, synthesis, kernel-core, webview-protocol
+packages/             Python libraries — schemas, simulator, gsim-model;
+                      webview-protocol (TypeScript)
 docs/                 specs/ (architecture), guides/, decisions/, journal/
 tests/                cross-package integration, e2e, validation
 ```
@@ -103,9 +103,11 @@ Do not reintroduce that.
    awaits the solver/compiler/kernel. All such interaction is async.
    → `docs/agent-rules/architecture-invariants.md#optimistic-canvas`
 
-2. **Smooth component models only.** Equation templates in
-   `packages/components/` must be smooth/continuous. Piecewise models are
-   rejected at IR-1 → IR-2 lowering.
+2. ~~**Smooth component models only.**~~ *Retired in #155.* It governed
+   equation templates in `packages/components/`, a package whose every `.py`
+   file was an empty `__init__.py`; the component library lives in the Rust
+   engine, which is now the only place the rule can be held. The numbers below
+   are unchanged on purpose — invariant 6 is cited by name from six files.
    → `docs/agent-rules/architecture-invariants.md#smooth-models`
 
 3. **The webview generates no code at runtime.** The CSP has no
