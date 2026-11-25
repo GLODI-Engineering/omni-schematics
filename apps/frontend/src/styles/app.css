@@ -872,31 +872,12 @@ textarea:focus-visible {
   gap: 2px;
 }
 
-.workspace-tab,
 .waveform-tab {
   display: grid;
   gap: 12px;
   min-height: 100%;
 }
 
-.workspace-tab {
-  grid-template-columns: minmax(200px, var(--workspace-split, 32%)) 18px minmax(0, 1fr);
-}
-
-.workspace-tab__split {
-  writing-mode: vertical-lr;
-  transform: rotate(180deg);
-  accent-color: #3b82f6;
-}
-
-.workspace-tab__value {
-  display: grid;
-  grid-template-rows: auto minmax(180px, 1fr);
-  gap: 12px;
-}
-
-.workspace-list,
-.workspace-value,
 .waveform-canvas,
 .waveform-legend {
   border: 1px solid #e2e8f0;
@@ -904,61 +885,19 @@ textarea:focus-visible {
   background: #ffffff;
 }
 
-.workspace-list {
-  display: grid;
-  gap: 1px;
-  overflow: hidden;
-}
-
-.workspace-list__item {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  border: 0;
-  background: #ffffff;
-  padding: 10px 12px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.workspace-list__item:hover,
 .waveform-legend__item.is-active {
   background: #eff6ff;
 }
 
-.workspace-list__shape,
-.workspace-value--empty,
 .waveform-empty {
   color: #64748b;
   font-size: 12px;
 }
 
-.workspace-value,
 .waveform-canvas {
   padding: 12px;
 }
 
-/* The REPL output pane WorkspaceTab still renders; the Monaco input that
-   shared this rule (.code-editor__fallback) went with workspace/CodeEditor. */
-.workspace-console {
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #ffffff;
-  padding: 12px;
-  overflow: auto;
-}
-
-.workspace-console__empty {
-  color: #64748b;
-  font-size: 12px;
-}
-
-.workspace-console__line {
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.workspace-value__preview,
 .waveform-canvas__preview {
   overflow: auto;
   margin: 8px 0 0;

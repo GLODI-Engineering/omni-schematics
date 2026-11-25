@@ -1,18 +1,7 @@
-import {
-  CancelledError,
-  type ExecuteResult,
-  type IpcClient,
-  type WaveformSlice,
-  type WorkspaceVariable,
-} from "../types";
-import {
-  STUB_EXECUTE_CHUNKS,
-  STUB_MANIFEST,
-  STUB_WAVEFORM,
-  STUB_WORKSPACE_VARIABLES,
-} from "./fixtures";
+import { CancelledError, type ExecuteResult, type IpcClient, type WaveformSlice } from "../types";
+import { STUB_MANIFEST, STUB_WAVEFORM } from "./fixtures";
 
-type StubEvent = "workspace_update" | "kernel_status" | "execute_stream";
+type StubEvent = "kernel_status";
 type Listener = (payload: unknown) => void;
 
 function clone<T>(value: T): T {
@@ -22,12 +11,7 @@ function clone<T>(value: T): T {
 export function createStubKernel(): IpcClient & {
   on(event: StubEvent, listener: Listener): () => void;
 } {
-  const listeners = new Map<StubEvent, Set<Listener>>([
-    ["workspace_update", new Set()],
-    ["kernel_status", new Set()],
-    ["execute_stream", new Set()],
-  ]);
-  let lastExecuteId: string | null = null;
+  const listeners = new Map<StubEvent, Set<Listener>>([["kernel_status", new Set()]]);
 
   const emit = (event: StubEvent, payload: unknown) => {
     for (const listener of listeners.get(event) ?? []) {
@@ -36,34 +20,17 @@ export function createStubKernel(): IpcClient & {
   };
 
   return {
-    async execute(payload: unknown): Promise<ExecuteResult> {
-      lastExecuteId = `stub-${Date.now()}`;
+    async execute(_payload: unknown): Promise<ExecuteResult> {
       emit("kernel_status", "busy");
       return new Promise((resolve) => {
         window.setTimeout(() => {
-          emit("workspace_update", clone(STUB_WORKSPACE_VARIABLES));
           emit("kernel_status", "idle");
-          const type =
-            typeof payload === "object" && payload !== null
-              ? (payload as { type?: string }).type
-              : undefined;
-          if (type === "execute") {
-            for (const chunk of STUB_EXECUTE_CHUNKS) {
-              emit("execute_stream", { id: lastExecuteId, chunk });
-            }
-          }
-          resolve({
-            manifest: clone(STUB_MANIFEST),
-            chunks: type === "execute" ? [...STUB_EXECUTE_CHUNKS] : undefined,
-          });
+          resolve({ manifest: clone(STUB_MANIFEST) });
         }, 20);
       });
     },
     cancel(): void {
       throw new CancelledError();
-    },
-    async workspaceGet(name: string): Promise<WorkspaceVariable | null> {
-      return clone(STUB_WORKSPACE_VARIABLES.find((entry) => entry.name === name) ?? null);
     },
     async waveformGet(_simId: string, signals: string[]): Promise<WaveformSlice> {
       return clone({
@@ -74,9 +41,6 @@ export function createStubKernel(): IpcClient & {
     subscribe(event, listener) {
       const typedEvent = event as StubEvent;
       listeners.get(typedEvent)?.add(listener);
-      if (typedEvent === "workspace_update") {
-        listener(clone(STUB_WORKSPACE_VARIABLES));
-      }
       if (typedEvent === "kernel_status") {
         listener("idle");
       }

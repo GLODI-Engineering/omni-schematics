@@ -19,22 +19,15 @@ import numpy as np
 class MessageType(StrEnum):
     # Frontend → Kernel
     HANDSHAKE = "handshake"
-    EXECUTE = "execute"
-    EXECUTE_CANCEL = "execute_cancel"
-    WORKSPACE_GET = "workspace_get"
-    KERNEL_RESTART = "kernel_restart"
-    COMPLETION_REQUEST = "completion_request"
     SIMULATE = "simulate"
     SIMULATE_CANCEL = "simulate_cancel"
 
     # Kernel → Frontend
-    EXECUTE_RESULT = "execute_result"
-    EXECUTE_STREAM = "execute_stream"
+    #: The one error channel, and the only member still named after the REPL
+    #: that is gone (omni-schematics#161). It is what the dispatcher answers
+    #: with for an unknown message type or an unhandled handler exception, and
+    #: renaming it is a wire break for a layer #162 removes outright.
     EXECUTE_ERROR = "execute_error"
-    WORKSPACE_UPDATE = "workspace_update"
-    WORKSPACE_VALUE = "workspace_value"
-    PLOT_READY = "plot_ready"
-    COMPLETION_REPLY = "completion_reply"
     KERNEL_STATUS = "kernel_status"
     SIMULATE_PROGRESS = "simulate_progress"
     SIMULATE_RESULT = "simulate_result"

@@ -39,13 +39,8 @@ class _KernelContext:
     """Shared state passed to every IPC handler."""
 
     def __init__(self, token: str, workdir: str) -> None:
-        from kernel_sidecar.kernel.executor import Executor
-        from kernel_sidecar.kernel.namespace import Namespace
-
         self.token = token
         self.workdir = workdir
-        self.namespace = Namespace()
-        self.executor = Executor(max_workers=4)
         # Active simulate cancel tokens keyed by request id.
         self.simulate_tokens: dict[str, Any] = {}
         self.simulate_tasks: dict[str, Any] = {}
@@ -58,18 +53,9 @@ class _KernelContext:
 def _build_dispatcher(ctx: _KernelContext) -> Any:
     from kernel_sidecar.ipc.dispatch import Dispatcher
     from kernel_sidecar.ipc.envelope import MessageType
-    from kernel_sidecar.ipc.handlers.completion import handle_completion_request
-    from kernel_sidecar.ipc.handlers.execute import handle_execute, handle_execute_cancel
-    from kernel_sidecar.ipc.handlers.kernel import handle_kernel_restart
     from kernel_sidecar.ipc.handlers.simulate import handle_simulate, handle_simulate_cancel
-    from kernel_sidecar.ipc.handlers.workspace import handle_workspace_get
 
     d = Dispatcher()
-    d.register(MessageType.EXECUTE, handle_execute)
-    d.register(MessageType.EXECUTE_CANCEL, handle_execute_cancel)
-    d.register(MessageType.WORKSPACE_GET, handle_workspace_get)
-    d.register(MessageType.KERNEL_RESTART, handle_kernel_restart)
-    d.register(MessageType.COMPLETION_REQUEST, handle_completion_request)
     d.register(MessageType.SIMULATE, handle_simulate)
     d.register(MessageType.SIMULATE_CANCEL, handle_simulate_cancel)
     return d

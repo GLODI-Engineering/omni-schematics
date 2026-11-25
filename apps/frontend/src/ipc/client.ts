@@ -3,9 +3,7 @@ import { useIpcStore } from "../store/ipc";
 import { CancelledError, type ExecuteResult, type IpcClient, type WaveformSlice } from "./types";
 import { decodeWaveformChunkFrame } from "./waveform-chunk-frame";
 
-type EventName = "workspace_update" | "kernel_status" | "execute_stream";
-
-type OutboundType = "execute" | "simulate";
+type EventName = "kernel_status";
 
 interface CreateIPCClientOptions {
   wsFactory?: () => WebSocket;
@@ -13,18 +11,14 @@ interface CreateIPCClientOptions {
 
 interface PendingExecute {
   id: string;
-  type: OutboundType;
   resolve: (value: ExecuteResult) => void;
   reject: (reason?: unknown) => void;
-  chunks: string[];
 }
 
 interface Envelope {
   id: string;
   type: string;
   payload?: unknown;
-  chunk?: string;
-  result?: Record<string, unknown>;
   status?: string;
 }
 
@@ -124,9 +118,7 @@ export function createIPCClient({
   }
   const pending = new Map<string, PendingExecute>();
   const listeners = new Map<EventName, Set<(payload: unknown) => void>>([
-    ["workspace_update", new Set()],
     ["kernel_status", new Set()],
-    ["execute_stream", new Set()],
   ]);
   const manifestCache = new Map<string, SimulationManifestDoc>();
 
@@ -270,38 +262,6 @@ export function createIPCClient({
         handshakeDone = true;
         readyResolve?.();
       }
-      return;
-    }
-
-    if (message.type === "workspace_update") {
-      emit("workspace_update", message.payload);
-      return;
-    }
-
-    if (message.type === "execute_stream") {
-      const chunk =
-        message.chunk ?? (message.payload as { chunk?: string } | undefined)?.chunk ?? "";
-      const pendingExecute = pending.get(message.id);
-      if (pendingExecute && chunk) pendingExecute.chunks.push(chunk);
-      emit("execute_stream", { id: message.id, chunk });
-      return;
-    }
-
-    if (message.type === "execute_result") {
-      const p = pending.get(message.id);
-      if (!p) return;
-      pending.delete(message.id);
-      p.resolve({
-        ...(message.result ?? {}),
-        manifest: (message.result?.manifest as ExecuteResult["manifest"]) ?? {
-          sim_id: "",
-          signals: [],
-          t_start: 0,
-          t_end: 0,
-        },
-        chunks: [...p.chunks],
-      });
-      emit("kernel_status", "idle");
       return;
     }
 
@@ -454,27 +414,17 @@ export function createIPCClient({
       lastExecuteId = id;
       emit("kernel_status", "busy");
 
-      let outboundType: OutboundType = "execute";
-      let outboundPayload: unknown = payload;
-
-      if (typeof payload === "object" && payload !== null) {
-        const maybe = payload as { type?: string; [k: string]: unknown };
-        if (maybe.type === "simulate") {
-          outboundType = "simulate";
-          const { type: _drop, ...rest } = maybe;
-          outboundPayload = rest;
-        } else if (maybe.type === "execute") {
-          outboundType = "execute";
-          const { type: _drop, ...rest } = maybe;
-          outboundPayload = rest;
-        }
-      } else if (typeof payload === "string") {
-        outboundPayload = { code: payload };
-      }
+      // `simulate` is the only request the kernel still answers: `execute`
+      // left with the REPL (#161). The caller's `type` is dropped rather than
+      // forwarded, since the envelope carries it.
+      const outboundPayload =
+        typeof payload === "object" && payload !== null
+          ? (({ type: _drop, ...rest }) => rest)(payload as { type?: string })
+          : payload;
 
       return new Promise((resolve, reject) => {
-        pending.set(id, { id, type: outboundType, resolve, reject, chunks: [] });
-        send({ id, type: outboundType, payload: outboundPayload });
+        pending.set(id, { id, resolve, reject });
+        send({ id, type: "simulate", payload: outboundPayload });
       });
     },
     cancel(id?: string): void {
@@ -491,7 +441,7 @@ export function createIPCClient({
       try {
         send({
           id: requestId,
-          type: p.type === "simulate" ? "simulate_cancel" : "execute_cancel",
+          type: "simulate_cancel",
           payload: { target_id: requestId },
         });
       } catch {
@@ -499,9 +449,6 @@ export function createIPCClient({
       }
       p.reject(new CancelledError());
       emit("kernel_status", "idle");
-    },
-    async workspaceGet(): Promise<null> {
-      return null;
     },
     async waveformGet(simId: string, signals: string[]): Promise<WaveformSlice> {
       const { port, token } = getKernelConfig();

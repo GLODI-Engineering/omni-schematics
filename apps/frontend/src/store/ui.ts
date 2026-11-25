@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 export type ActivityId = "core.explorer" | "core.search" | "core.library" | "core.problems";
-export type BottomTabId = "core.waveform" | "core.workspace" | "core.output" | "core.problems";
+export type BottomTabId = "core.waveform" | "core.output" | "core.problems";
 export type AnnotationTool = "text" | "polyline" | "rectangle" | "ellipse";
 export type CanvasTool = "select" | "wire" | "annotate" | "pan" | "label";
 

@@ -1,11 +1,5 @@
 export type BinaryDType = "float32" | "float64" | "int16";
 
-export interface WorkspaceVariable {
-  name: string;
-  value: unknown;
-  shape: number[];
-}
-
 export interface WaveformTrace {
   label: string;
   values: number[];
@@ -74,6 +68,14 @@ export interface DcOpEntry {
   unit: string;
 }
 
+/**
+ * What a `simulate` request resolves to.
+ *
+ * Still called `ExecuteResult` because `execute()` is the one request method on
+ * the client and `simulate` is now the only thing it sends -- renaming both is
+ * churn across the run path for no change in meaning. `chunks` carries the
+ * error text of a failed run; it used to carry a REPL cell's stdout as well.
+ */
 export interface ExecuteResult {
   status?: string;
   manifest: SimulationManifest;
@@ -114,10 +116,6 @@ export class CancelledError extends Error {
 export interface IpcClient {
   execute(payload: unknown): Promise<ExecuteResult>;
   cancel(id?: string): void;
-  workspaceGet(name: string): Promise<WorkspaceVariable | null>;
   waveformGet(simId: string, signals: string[]): Promise<WaveformSlice>;
-  subscribe(
-    event: "workspace_update" | "kernel_status" | "execute_stream",
-    listener: (payload: unknown) => void,
-  ): () => void;
+  subscribe(event: "kernel_status", listener: (payload: unknown) => void): () => void;
 }

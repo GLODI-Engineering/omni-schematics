@@ -113,10 +113,14 @@ python -m venv gsim-venv
 gsim-venv/bin/pip install <wheels>/*.whl   # the seven kernel packages
 ```
 
-`numpy`, `scipy`, `matplotlib`, `pandas`, `sympy`, `websockets` and `h5py` are
-declared by those wheels, so pip resolves them — you do not list them yourself.
-Verified: a venv holding nothing but the seven wheels starts the kernel and
-prints its `KERNEL_READY` line.
+`numpy`, `scipy`, `sympy`, `websockets` and `h5py` are declared by those wheels,
+so pip resolves them — you do not list them yourself. Verified: a venv holding
+nothing but the seven wheels starts the kernel and prints its `KERNEL_READY`
+line.
+
+`matplotlib` and `pandas` used to be on that list, and are not any more: they
+were there for the in-editor Python REPL, which is gone (#161). Scripting lives
+in your own environment now — see [Scripting a schematic](#scripting-a-schematic).
 
 The wheels are attached to every release; `uv build --all-packages --out-dir dist`
 builds them from a checkout.
@@ -199,6 +203,77 @@ be driven by Playwright:
 ```sh
 pnpm dev:webviews          # http://localhost:5173
 ```
+
+## Scripting a schematic
+
+The editor is for drawing, running and reading. To **build or measure a
+schematic programmatically** — sweep a parameter, generate a family of sheets,
+assert a measurement in a test — you do it in a Python environment you own,
+with [`gsim-tools`](https://github.com/GLODI-Engineering/gsim-tools):
+
+```sh
+python -m venv .venv
+.venv/bin/pip install 'gsim-tools @ git+https://github.com/GLODI-Engineering/gsim-tools'
+.venv/bin/pip install <path-to>/gsim_py-*.whl     # only needed to build or compile a schematic
+export GSIM_SIMULATOR=<general-simulator>/target/release/general-simulator
+```
+
+`gsim_tools.schematic` builds and compiles documents, `gsim_tools.results` runs
+the engine and reads what comes back, and `gsim_tools.measure` is a Python port
+of the same measurement crate the engine's own `kind=measure` blocks use —
+cross-validated against it, so a number you compute here and a number the
+engine reports agree.
+
+A whole run, against a sheet the editor saved:
+
+```python
+from gsim_tools import measure, results
+from gsim_tools.schematic import Schematic
+
+# The .gsim_sch the editor saved. compile() is the same compiler the editor
+# shows you in its Netlist tab, because both call gsim-core.
+sheet = Schematic.load("examples/buck_converter.gsim_sch")
+run = results.run_netlist_text(sheet.compile(), mode="transient", tfinal=5e-3, dt=1e-7)
+
+# Steady state only: this buck's output LC rings for about 2.2 ms after startup.
+steady = measure.Window(from_=3e-3)
+v_out = run.trace.samples("V(n_cout_p)")
+gate = run.trace.samples("gate")
+
+print(f"V_out  {measure.mean(v_out, steady):.2f} V")
+print(f"ripple {measure.peak_to_peak(v_out, steady) * 1e3:.0f} mV")
+print(f"duty   {measure.duty_cycle(gate, steady, on=2.5, off=2.5) * 100:.0f} %")
+print(f"f_sw   {measure.freq(gate, steady, on=2.5, off=2.5) / 1e3:.0f} kHz")
+```
+
+```
+V_out  18.85 V
+ripple 375 mV
+duty   41 %
+f_sw   100 kHz
+```
+
+`run.trace.names` lists what a run produced. Nets are named after an endpoint
+unless you name them, so `connect(..., net="out")` in a generator is what makes
+`V(out)` exist instead of `V(n_cout_p)`.
+
+Building a sheet from scratch rather than loading one is the same library:
+`examples/build_buck_converter.py` is a complete, CI-checked example of it, and
+every example schematic in this repository is generated that way.
+
+### Why not in the editor
+
+Until #161 the kernel ran a Python REPL for a **Workspace** bottom tab: a
+persistent namespace with `numpy`, `scipy`, `matplotlib.pyplot`, `pandas` and
+`sympy` pre-imported, a variable list, and captured plots. It is gone, and
+nothing replaced it inside the editor.
+
+A venv you control is simply a better scripting environment than a REPL
+embedded in a webview: your own interpreter, your own package set, a notebook if
+you want one, a debugger, a test runner, and an editor for the script that is
+the editor you are already in. Those four scientific packages were in the
+kernel's install for the REPL and nothing else — no part of drawing, compiling
+or simulating a schematic imported them — so they left with it.
 
 ## Settings
 
