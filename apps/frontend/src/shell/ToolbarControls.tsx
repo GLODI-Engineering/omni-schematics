@@ -5,14 +5,14 @@
  * duplicated in both, so the two toolbars stay visually consistent.
  */
 
-// ── Lucide icon wrapper (18 × 18, stroke-based) ─────────────────────────────
+// ── Lucide icon wrapper (16 × 16, stroke-based) ─────────────────────────────
 
 export function Icon({ children }: { children: React.ReactNode }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -28,10 +28,22 @@ export function Icon({ children }: { children: React.ReactNode }) {
 
 // ── Generic toolbar button ────────────────────────────────────────────────
 
+/**
+ * A toolbar button: an icon, a tooltip, and a label only where one is earned.
+ *
+ * Every button used to stack a text label under its icon, which is what made
+ * the row 54 px tall and 1,100 px wide — roughly double VS Code's own toolbar
+ * metrics — so it truncated its last control in any ordinary editor pane
+ * (#210). The label is now the tooltip and the accessible name, and `showLabel`
+ * is reserved for Run: a person opening the editor for the first time has to be
+ * able to find the button that simulates, and an icon alone does not do that.
+ */
 export function Btn({
   children,
   label,
   title,
+  showLabel = false,
+  pin = false,
   active = false,
   disabled = false,
   danger = false,
@@ -40,12 +52,16 @@ export function Btn({
   children: React.ReactNode;
   label?: string;
   title: string;
+  showLabel?: boolean;
+  /** Never moved into the overflow menu — see `TOOLBAR_PIN_ATTR`. */
+  pin?: boolean;
   active?: boolean;
   disabled?: boolean;
   danger?: boolean;
   onClick: () => void;
 }) {
   let cls = "gs-toolbar__btn";
+  if (showLabel && label) cls += " has-label";
   if (active && danger) cls += " is-active is-danger";
   else if (active) cls += " is-active";
 
@@ -57,10 +73,11 @@ export function Btn({
       aria-label={label ?? title}
       aria-pressed={active || undefined}
       disabled={disabled}
+      {...(pin ? { "data-toolbar-pin": "" } : {})}
       onClick={onClick}
     >
       {children}
-      {label ? <span className="gs-toolbar__btn-label">{label}</span> : null}
+      {showLabel && label ? <span className="gs-toolbar__btn-label">{label}</span> : null}
     </button>
   );
 }
