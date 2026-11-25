@@ -6,7 +6,6 @@ import { serialize } from "./file/serializer";
 import { ComponentParamsPanel } from "./inspector/ComponentParamsPanel";
 import { Inspector } from "./inspector/Inspector";
 import { getIpcClient } from "./ipc/transport";
-import type { WorkspaceVariable } from "./ipc/types";
 import { QuickInsert } from "./library/QuickInsert";
 import { loadCatalogFromManifest } from "./library/catalog";
 import { createBlockFromMetadata } from "./library/insert";
@@ -26,7 +25,6 @@ import { saveSymbolToLibrary } from "./symbol-editor/save";
 import { useSymbolEditorStore } from "./symbol-editor/store";
 import { registerWaveformTab } from "./waveform/register";
 import { installWaveformRenderHook } from "./waveform/render-hook";
-import { registerWorkspaceTab } from "./workspace/register";
 
 import { KeymapProvider } from "./canvas/KeymapProvider";
 import { insertBuckSchematic } from "./canvas/buck-schematic";
@@ -82,7 +80,6 @@ function bootRegistries() {
   registerCanvasTab();
   registerNetlistTab();
   registerWaveformTab();
-  registerWorkspaceTab();
   registerSymbolEditorTab();
   registerProblemsSurface();
   // A wire naming a port its block does not have is drawn anyway; without
@@ -344,13 +341,12 @@ function handleAction(actionId: string, event?: KeyboardEvent): void {
     case "shell.focus-tab-1":
       ui.focusBottomTab("core.waveform");
       break;
+    // Renumbered when the Workspace tab left with the REPL (#161): these are
+    // positions in the bottom panel, and there are three of them now.
     case "shell.focus-tab-2":
-      ui.focusBottomTab("core.workspace");
-      break;
-    case "shell.focus-tab-3":
       ui.focusBottomTab("core.output");
       break;
-    case "shell.focus-tab-4":
+    case "shell.focus-tab-3":
       ui.focusBottomTab("core.problems");
       break;
     case "simulate.start":
@@ -996,7 +992,6 @@ export default function App() {
   const setCatalog = useLibraryStore((state) => state.setCatalog);
   const setStatus = useIpcStore((state) => state.setStatus);
   const pushDiagnostic = useToastStore((state) => state.pushDiagnostic);
-  const setWorkspaceVariables = useIpcStore((state) => state.setWorkspaceVariables);
   const _setLastManifest = useIpcStore((state) => state.setLastManifest);
   const inspectorVisible = useUiStore((state) => state.secondarySideBarVisible);
 
@@ -1302,14 +1297,8 @@ export default function App() {
     const unsubscribeStatus = ipc.subscribe("kernel_status", (status) => {
       setStatus(status as KernelStatus);
     });
-    const unsubscribeWorkspace = ipc.subscribe("workspace_update", (variables) => {
-      setWorkspaceVariables(variables as WorkspaceVariable[]);
-    });
-    return () => {
-      unsubscribeStatus();
-      unsubscribeWorkspace();
-    };
-  }, [setStatus, setWorkspaceVariables]);
+    return unsubscribeStatus;
+  }, [setStatus]);
 
   // Which editor surface this shell shows.
   //

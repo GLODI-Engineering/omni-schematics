@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { DcOpEntry, SimulationManifest, WaveformSlice, WorkspaceVariable } from "../ipc/types";
+import type { DcOpEntry, SimulationManifest, WaveformSlice } from "../ipc/types";
 
 export type KernelStatus = "disconnected" | "connecting" | "idle" | "busy" | "running" | "error";
 
@@ -19,7 +19,6 @@ export interface IpcStoreState {
   status: KernelStatus;
   pendingIds: Map<string, PendingRequest>;
   lastManifest: SimulationManifest | null;
-  workspaceVariables: WorkspaceVariable[];
   waveformSlice: WaveformSlice | null;
   dcOpTable: DcOpEntry[] | null;
   output: string[];
@@ -48,7 +47,6 @@ export interface IpcStoreState {
    * if called after the real manifest already landed (dedup by name).
    */
   registerLiveSignal: (simId: string, signalName: string) => void;
-  setWorkspaceVariables: (variables: WorkspaceVariable[]) => void;
   setWaveformSlice: (slice: WaveformSlice | null) => void;
   setDcOpTable: (table: DcOpEntry[] | null) => void;
   appendOutput: (line: string) => void;
@@ -75,7 +73,6 @@ export const useIpcStore = create<IpcStoreState>((set, get) => ({
   status: "disconnected",
   pendingIds: new Map<string, PendingRequest>(),
   lastManifest: null,
-  workspaceVariables: [],
   waveformSlice: null,
   dcOpTable: null,
   output: [],
@@ -123,9 +120,6 @@ export const useIpcStore = create<IpcStoreState>((set, get) => ({
       // and setLastManifest() replaces this with the authoritative one.
       return { lastManifest: { sim_id: simId, signals: [signalName], t_start: 0, t_end: 0 } };
     });
-  },
-  setWorkspaceVariables: (workspaceVariables) => {
-    set({ workspaceVariables });
   },
   setWaveformSlice: (waveformSlice) => {
     set({ waveformSlice });

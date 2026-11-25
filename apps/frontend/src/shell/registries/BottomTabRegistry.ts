@@ -1,7 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 
 export interface BottomTabRegistration {
-  id: "core.waveform" | "core.workspace" | "core.output" | "core.problems";
+  id: "core.waveform" | "core.output" | "core.problems";
   label: string;
   icon?: ReactNode;
   component: ComponentType;

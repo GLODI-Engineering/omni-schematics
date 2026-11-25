@@ -4,8 +4,11 @@ Covers:
 - Header is exactly 128 bytes, padded, parseable as JSON.
 - Frame total length = 128 + array.nbytes.
 - dtype/shape match the array exactly.
-- Non-ndarray values produce a regular JSON workspace_value message.
 - Round-trip for float32, float64, int32, int64 arrays of various shapes.
+
+The three `encode_workspace_value` cases that used to close this file went with
+the REPL (omni-schematics#161): `workspace_get` was the only caller of this
+encoder, so what it did with a scalar is no longer a property of anything.
 """
 
 from __future__ import annotations
@@ -23,15 +26,6 @@ def _import_binary_frame():  # type: ignore[no-untyped-def]
         return encode_array, decode_array
     except (ImportError, AttributeError):
         pytest.xfail("kernel_sidecar.ipc.binary_frame not yet implemented")
-
-
-def _import_workspace_handler():  # type: ignore[no-untyped-def]
-    try:
-        from kernel_sidecar.ipc.handlers.workspace import encode_workspace_value
-
-        return encode_workspace_value
-    except (ImportError, AttributeError):
-        pytest.xfail("kernel_sidecar.ipc.handlers.workspace not yet implemented")
 
 
 HEADER_LEN = 128
@@ -136,34 +130,3 @@ def test_round_trip(dtype: str, shape: tuple) -> None:
     frame = encode_array(arr, request_id="rt")
     recovered = decode_array(frame)
     np.testing.assert_array_equal(arr, recovered)
-
-
-# ---------------------------------------------------------------------------
-# Non-ndarray → JSON-only
-# ---------------------------------------------------------------------------
-
-
-def test_scalar_produces_json_message() -> None:
-    encode_workspace_value = _import_workspace_handler()
-    msg = encode_workspace_value("my_scalar", 3.14)
-    # Must be a str (JSON), not bytes
-    assert isinstance(msg, str), "Expected JSON string for scalar value"
-    parsed = json.loads(msg)
-    assert parsed.get("type") == "workspace_value"
-
-
-def test_string_value_produces_json_message() -> None:
-    encode_workspace_value = _import_workspace_handler()
-    msg = encode_workspace_value("my_str", "hello world")
-    assert isinstance(msg, str)
-    parsed = json.loads(msg)
-    assert parsed.get("type") == "workspace_value"
-
-
-def test_ndarray_produces_binary_frame() -> None:
-    encode_workspace_value = _import_workspace_handler()
-    arr = np.zeros(10, dtype="float32")
-    frame = encode_workspace_value("my_arr", arr)
-    # Binary frames are bytes, not str
-    assert isinstance(frame, (bytes, bytearray)), "Expected bytes frame for ndarray workspace_get"
-    assert len(frame) == HEADER_LEN + arr.nbytes

@@ -411,12 +411,6 @@ export const keyBindings: KeyBinding[] = [
     chord: "Ctrl+Shift+7",
     contexts: ["global"],
   },
-  {
-    id: "shell.focus-tab-4",
-    label: "Focus bottom tab 4",
-    chord: "Ctrl+Shift+8",
-    contexts: ["global"],
-  },
 ];
 
 /**

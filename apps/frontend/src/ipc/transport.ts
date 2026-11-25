@@ -9,7 +9,7 @@ import {
   postToHost,
 } from "./vscode-host";
 
-type EventName = "workspace_update" | "kernel_status" | "execute_stream";
+type EventName = "kernel_status";
 
 /** The concrete client actually doing the work — stub, or a real WS client. */
 let realClient: IpcClient | null = null;
@@ -54,11 +54,6 @@ const proxyClient: IpcClient = {
   },
   cancel: (id) => {
     realClient?.cancel(id);
-  },
-  workspaceGet: (name) => {
-    if (realClient) return realClient.workspaceGet(name);
-    if (connectPromise) return connectPromise.then((c) => c.workspaceGet(name));
-    return Promise.resolve(null);
   },
   waveformGet: (simId, signals) => {
     if (realClient) return realClient.waveformGet(simId, signals);

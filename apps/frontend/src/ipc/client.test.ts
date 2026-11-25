@@ -244,25 +244,25 @@ describe("BE-56: waveform_chunk live streaming (binary frame)", () => {
 });
 
 describe("FE-31: IPC client", () => {
-  it("execute assembles streamed chunks into result", async () => {
-    // Fake WebSocket that sends stream chunks then a result
-    class FakeWS {
+  it("sends every request as `simulate`, whatever the caller's payload says", async () => {
+    // The REPL's `execute` request is gone (#161), so there is one outbound
+    // type left and the envelope must always carry it -- a caller that forgot
+    // `type: "simulate"` used to get an `execute` frame the kernel no longer
+    // answers at all.
+    const sent: Array<{ type: string; payload: unknown }> = [];
+
+    class RecordingWS {
       onmessage: ((e: { data: string }) => void) | null = null;
-      send(_: string) {
-        const msg = JSON.parse(_);
-        const id = msg.id;
+      send(raw: string) {
+        const msg = JSON.parse(raw) as { id: string; type: string; payload: unknown };
+        if (msg.type === "handshake") return;
+        sent.push({ type: msg.type, payload: msg.payload });
         setTimeout(() => {
           this.onmessage?.({
-            data: JSON.stringify({ id, type: "execute_stream", chunk: "line1\n" }),
-          });
-          this.onmessage?.({
-            data: JSON.stringify({ id, type: "execute_stream", chunk: "line2\n" }),
-          });
-          this.onmessage?.({
             data: JSON.stringify({
-              id,
-              type: "execute_result",
-              result: { status: "ok", manifest: {} },
+              id: msg.id,
+              type: "simulate_result",
+              payload: { status: "ok", sim_id: "s1", t_start: 0, t_end: 1, signals: [] },
             }),
           });
         }, 0);
@@ -270,10 +270,12 @@ describe("FE-31: IPC client", () => {
       close() {}
     }
 
-    const client = createIPCClient?.({ wsFactory: () => new FakeWS() as unknown as WebSocket });
-    const result = await client.execute("print('hi')");
+    const client = createIPCClient({ wsFactory: () => new RecordingWS() as unknown as WebSocket });
+    const result = await client.execute({ type: "simulate", netlist: "R1 a b 1k" });
+
     expect(result.status).toBe("ok");
-    expect(result.chunks).toEqual(["line1\n", "line2\n"]);
+    expect(result.manifest.sim_id).toBe("s1");
+    expect(sent).toEqual([{ type: "simulate", payload: { netlist: "R1 a b 1k" } }]);
   });
 
   it("cancel resolves with CancelledError", async () => {
@@ -285,7 +287,7 @@ describe("FE-31: IPC client", () => {
       close() {}
     }
     const client = createIPCClient({ wsFactory: () => new SlowWS() as unknown as WebSocket });
-    const promise = client.execute("import time; time.sleep(999)");
+    const promise = client.execute({ type: "simulate", netlist: "R1 a b 1k" });
     await new Promise((r) => setTimeout(r, 0));
     client.cancel(/* id from promise */);
     const err = await promise.catch((e: Error) => e);

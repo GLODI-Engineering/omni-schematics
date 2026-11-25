@@ -34,8 +34,8 @@ describe("FE-05: BottomTabRegistry", () => {
   it("tabs ordered by ascending order number", () => {
     registerBottomTab({ ...base, id: "core.output", order: 30 });
     registerBottomTab({ ...base, id: "core.waveform", order: 10 });
-    registerBottomTab({ ...base, id: "core.workspace", order: 20 });
+    registerBottomTab({ ...base, id: "core.problems", order: 40 });
     const ids = listBottomTabs().map((t) => t.id);
-    expect(ids).toEqual(["core.waveform", "core.workspace", "core.output"]);
+    expect(ids).toEqual(["core.waveform", "core.output", "core.problems"]);
   });
 });

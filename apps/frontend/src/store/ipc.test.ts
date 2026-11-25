@@ -10,7 +10,6 @@ beforeEach(() => {
     status: "disconnected",
     pendingIds: new Map(),
     lastManifest: null,
-    workspaceVariables: [],
     waveformSlice: null,
     output: [],
     problems: [],

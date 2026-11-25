@@ -51,16 +51,16 @@ def test_serialized_is_valid_json(msg_type: MessageType) -> None:
 def test_payload_preserved_complex() -> None:
     """Nested payload structures must survive round-trip."""
     payload = {
-        "code": "x = [1, 2, 3]",
+        "netlist": "R1 a b 1k",
         "nested": {"a": True, "b": None, "c": [1.0, 2.0]},
     }
-    msg = Message(id="abc", type=MessageType.EXECUTE, payload=payload)
+    msg = Message(id="abc", type=MessageType.SIMULATE, payload=payload)
     recovered = Message.from_json(msg.to_json())
     assert recovered.payload == payload
 
 
 def test_empty_payload_round_trip() -> None:
-    msg = Message(id="empty", type=MessageType.KERNEL_RESTART, payload={})
+    msg = Message(id="empty", type=MessageType.SIMULATE_CANCEL, payload={})
     recovered = Message.from_json(msg.to_json())
     assert recovered.payload == {}
 
@@ -74,7 +74,7 @@ def test_from_json_missing_payload_defaults_to_empty() -> None:
 
 def test_message_is_frozen() -> None:
     """Message is frozen; mutation must raise."""
-    msg = Message(id="x", type=MessageType.EXECUTE, payload={})
+    msg = Message(id="x", type=MessageType.SIMULATE, payload={})
     with pytest.raises((AttributeError, TypeError)):
         msg.id = "changed"  # type: ignore[misc]
 
@@ -85,26 +85,17 @@ def test_message_is_frozen() -> None:
 
 FRONTEND_TO_KERNEL = {
     "handshake",
-    "execute",
-    "execute_cancel",
-    "workspace_get",
-    "kernel_restart",
-    "completion_request",
     "simulate",
     "simulate_cancel",
 }
 
 KERNEL_TO_FRONTEND = {
-    "execute_result",
-    "execute_stream",
     "execute_error",
-    "workspace_update",
-    "workspace_value",
-    "plot_ready",
-    "completion_reply",
     "kernel_status",
     "simulate_progress",
     "simulate_result",
+    "waveform_chunk",
+    "waveform_done",
 }
 
 
