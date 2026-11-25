@@ -35,8 +35,8 @@ simulation kernel is a child process the extension owns.
 | Symbol editor — draw a custom component from primitives, place its ports, save it to the library | `apps/frontend/src/symbol-editor/` |
 | Parameter inspector, including Level-1 device models taken from ngspice 46's own model set and a raw `.MODEL` fallback for BSIM/PSP/HICUM-class compact models | `apps/frontend/src/inspector/` |
 | Waveform viewer — multi-axes figures, cursors, per-signal colour, decimation, PDF export | `apps/frontend/src/waveform/` |
-| Netlist preview and emission, in the engine's own dual grammar | `apps/frontend/src/netlist/`, `packages/simulator/` |
-| Hierarchy: subsystems, `.SUBCKT` definitions and instances, Goto/From routing | `apps/frontend/src/canvas/`, `packages/gsim-model/` |
+| Compiling a sheet to a netlist — `gsim-core` itself, built to WebAssembly, in the webview | `apps/frontend/src/engine/`, `packages/gsim-wasm/` |
+| Hierarchy: subsystems, `.SUBCKT` definitions and instances, Goto/From routing | `apps/frontend/src/canvas/` |
 
 Signal-flow and physical-electrical blocks coexist in one sheet: a control
 loop can drive a converter leg in the same document.
@@ -55,9 +55,26 @@ webviews (Vite bundles from apps/frontend)
 ├── schematic.html   the canvas, inspector and symbol editor
 ├── library.html     the block library
 └── waveform.html    the results viewer
+    └── gsim-core as WebAssembly   compiles the sheet to a netlist
 
-kernel sidecar (Python)      compiles the document and runs the solver
+kernel sidecar (Python)      runs the solver on the netlist it is given
 ```
+
+### The compiler is in the editor
+
+`gsim-core` is the engine: one Rust implementation of what a document means,
+what each block compiles to, and what netlist comes out. The editor used to
+post the whole document to the kernel and let Python compile it there — through
+roughly 1,600 lines that reimplemented the engine's expression evaluator,
+Goto/From resolution, subcircuit flattening and document I/O in a second
+language. The two drifted twice that anyone noticed, and each time the symptom
+was a sheet that looked correct in the palette and would not compile.
+
+The engine's own `crates/gsim-wasm` is built to WebAssembly and committed in
+[`packages/gsim-wasm`](./packages/gsim-wasm), so the editor compiles with the
+engine and the kernel is handed netlist text. `scripts/check-gsim-wasm-fresh.mjs`
+keeps the committed bundle honest, and `examples/expected-netlists/` holds every
+example to the netlist it compiled to before the change — byte for byte.
 
 The webviews talk to the sidecar over a loopback WebSocket. The extension
 host owns the process and tells the webviews which port and token to use.
@@ -102,9 +119,10 @@ node scripts/make-kernel-venv.mjs            # ~/.omni-schematics/kernel-venv
 ```
 
 It installs the four kernel packages and their dependencies, adds `gsim_py` and
-`gsim-tools` if it finds them beside this checkout, starts the kernel to check
-the result, and prints the path to paste into the setting. `--out <dir>` puts it
-somewhere else and `--python <exe>` picks the base interpreter.
+`gsim-tools` if it finds them beside this checkout — for scripting, not for the
+editor, which compiles in WebAssembly — starts the kernel to check the result,
+and prints the path to paste into the setting. `--out <dir>` puts it somewhere
+else and `--python <exe>` picks the base interpreter.
 
 Without a checkout, the same thing by hand from a release's wheels:
 
@@ -130,17 +148,14 @@ in your own environment now — see [Scripting a schematic](#scripting-a-schemat
 The wheels are attached to every release; `uv build --all-packages --out-dir dist`
 builds them from a checkout.
 
-That is enough for the editor to **open and edit** schematics. To **simulate**,
-the environment also needs the two packages that cannot come from a public
-index:
-
-```sh
-gsim-venv/bin/pip install <path-to>/gsim_py-*.whl    # maturin build of gsim-core/crates/gsim-py
-gsim-venv/bin/pip install -e <sibling-repos-root>/gsim-tools
-```
-
-Without them the kernel starts and a run answers `SolverUnavailable` naming the
-missing build step, rather than failing obscurely.
+That is enough to **open, edit and simulate**. The two packages that used to be
+needed as well — a `gsim_py` wheel and `gsim-tools` — are not any more (#158):
+they were what the kernel compiled a schematic with, and the editor compiles its
+own schematic now, with the same engine built to WebAssembly. What the kernel
+receives is netlist text. They are still worth having in that environment if you
+want to script a document from Python — see
+[Scripting a schematic](#scripting-a-schematic) — and nothing in the editor
+notices their absence.
 
 On Windows the interpreter is `gsim-venv\Scripts\python.exe`; either the
 directory or the executable is accepted.
@@ -171,8 +186,12 @@ you something that runs on the first click, not to serve as reference designs.
 
 `scripts/check-examples.mjs --check` holds them to that, in CI. For each one it
 asserts the document parses, every block type is a canonical name the engine
-declares and can compile, the document compiles with the real compiler, and it
-still matches the `build_*.py` script that generated it.
+declares and can compile, the editor's own loader accepts it, it still matches
+the `build_*.py` script that generated it — and that it compiles **to the
+netlist in `examples/expected-netlists/`, byte for byte**, through the same
+WebAssembly engine the editor uses. Those expectations were captured from the
+Python compiler before #158 replaced it, so "the same netlist as before" is
+checked rather than claimed.
 
 ### Working on this repository
 

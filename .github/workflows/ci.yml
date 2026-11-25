@@ -103,10 +103,11 @@ jobs:
       # `make-kernel-venv.mjs` stops producing a kernel that reaches
       # KERNEL_READY, this job goes red rather than a user finding out.
       #
-      # `gsim_py` and `gsim-tools` are absent here on purpose (a maturin build
-      # of another repo, and a private one). The kernel starts without them;
-      # compiling a schematic is what needs them, and `examples-still-work`
-      # covers that with a wheel it builds itself.
+      # `gsim_py` and `gsim-tools` are absent here on purpose, and since #158
+      # nothing in the product misses them: the kernel starts without them and
+      # compiling a schematic is the editor's own job, done in WebAssembly. They
+      # are still what the example *generators* need, and `examples-still-work`
+      # builds a wheel itself for that.
       - name: build the kernel environment the suite will be pointed at
         run: node scripts/make-kernel-venv.mjs --out "$RUNNER_TEMP/kernel-venv" --force
       - name: integration tests (real VS Code)
@@ -225,6 +226,53 @@ jobs:
       - name: engine catalogue drift
         run: GSIM_PYTHON=$(which python) node scripts/gen-engine-catalog.mjs --check
 
+  gsim-wasm-drift:
+    # The editor's compiler is a 1.7 MB WebAssembly binary committed in
+    # `packages/gsim-wasm/pkg`. A generated artefact in the tree can stop matching its
+    # source, and for this one that means the editor silently compiling with a *fork* of
+    # the engine -- the two-implementations problem #158 exists to end, wearing a
+    # different hat.
+    #
+    # Two steps, because they fail for different reasons and the message has to say which.
+    # The first is offline: the bundle hashes to what `provenance.json` records, exports
+    # what its own `.d.ts` declares, and names the engine's current default-branch HEAD --
+    # the same question `engine-catalogue-drift` asks of the catalogue. The second rebuilds
+    # from the commit the bundle names and compiles every example with the result: if the
+    # committed bundle were not what that commit emits, the netlists would differ.
+    #
+    # Behaviour, not bytes. Two `wasm-pack` runs of one commit agree only if the Rust,
+    # wasm-bindgen and wasm-opt versions all match, so a byte comparison would go red on a
+    # toolchain bump with nothing wrong -- and a gate that cries wolf gets deleted.
+    # Identical netlists from both bundles is the stronger statement anyway.
+    name: The committed WebAssembly engine is the engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: the bundle is what it says it is, and the engine has not moved
+        run: node scripts/check-gsim-wasm-fresh.mjs --check --against-engine
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      # The release binary rather than an action or `cargo install`: pinned to the exact
+      # version `provenance.json` records, so the rebuild below uses the same wasm-bindgen
+      # and wasm-opt the committed bundle was built with.
+      - name: install wasm-pack 0.13.1
+        run: |
+          curl -fsSL https://github.com/rustwasm/wasm-pack/releases/download/v0.13.1/wasm-pack-v0.13.1-x86_64-unknown-linux-musl.tar.gz \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin \
+                wasm-pack-v0.13.1-x86_64-unknown-linux-musl/wasm-pack
+          wasm-pack --version
+      - name: rebuild from the commit the bundle names
+        run: |
+          commit=$(node -e 'process.stdout.write(require("./packages/gsim-wasm/provenance.json").engine.commit)')
+          node scripts/build-gsim-wasm.mjs --rev "$commit" --out "$RUNNER_TEMP/fresh-bundle"
+          cp packages/gsim-wasm/node.js packages/gsim-wasm/compile.js "$RUNNER_TEMP/fresh-bundle/"
+      - name: the fresh bundle compiles the examples to the same netlists
+        run: node scripts/check-examples.mjs --check --engine "$RUNNER_TEMP/fresh-bundle"
+
   examples-still-work:
     # An example is the one artefact whose whole purpose is to work the first time
     # someone opens it, and it was the only one with no check holding it to that. When this
@@ -232,18 +280,16 @@ jobs:
     # the engine no longer declares, two aliases the netlist emitter rejects, a document the
     # loader could not even read, and content that no longer matched its own generator.
     #
-    # `gsim_py` is built here rather than skipped, for the reason `engine-catalogue-drift`
-    # gives: a check that cannot fail is not one. Only `gsim_py` is installed -- not
-    # `gsim-tools`, on the stated ground that it is private and would make this job
-    # unrunnable in CI. It is not private (#147), so that ground is gone and the arms
-    # below can compile the way the product does; making them is a behaviour change and
-    # belongs in its own commit, not in the one correcting the comment.
+    # The compile arm needs no Python and no Rust any more (#158): it loads the committed
+    # WebAssembly engine and compares each netlist, byte for byte, against
+    # `examples/expected-netlists/` -- which was captured from the Python compiler as it
+    # stood before #158, so "the same netlist as today" is checked rather than asserted.
     #
-    # The repo's own Python packages go in too (#143). The port arm runs the product's
-    # real preparation step, `simulator.compiler.compile_input.prepare_document`, rather
-    # than a copy of it -- and a copy is precisely what let a transform on the product's
-    # side of the line turn every example into `floating-port` at Run time while this job
-    # reported five examples OK.
+    # What the Python environment is still for is the last arm: the generators under
+    # `examples/` author their documents with `gsim-tools`, so a document that no longer
+    # matches its own generator needs them to be caught. `gsim_py` is built here rather
+    # than skipped, for the reason `engine-catalogue-drift` gives: a check that cannot fail
+    # is not one.
     name: The examples still open, compile, and match their generators
     runs-on: ubuntu-latest
     steps:
@@ -251,6 +297,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: examples check (no Python, no Rust — the committed WebAssembly engine)
+        run: node scripts/check-examples.mjs --check
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
@@ -264,7 +312,9 @@ jobs:
       # just built handed to it.
       - name: build the kernel environment
         run: node scripts/make-kernel-venv.mjs --out "$RUNNER_TEMP/kernel-venv" --force --gsim-py /tmp/wheels/gsim_py-*.whl
-      - name: examples check
+      # The same command again, now with an interpreter that can run the generators, so the
+      # last arm is real rather than reported-as-absent.
+      - name: examples check, with the generators
         run: GSIM_PYTHON="$RUNNER_TEMP/kernel-venv/bin/python" node scripts/check-examples.mjs --check
 
   keybinding-drift:

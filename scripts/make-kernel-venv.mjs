@@ -14,14 +14,17 @@
  * What goes in:
  *   - the four Python workspace packages of this repo, from source;
  *   - their scientific dependencies, resolved by pip from PyPI;
- *   - a `gsim_py` wheel, if one is given or found (the compiler; a maturin
- *     build belonging to gsim-core);
+ *   - a `gsim_py` wheel, if one is given or found (a maturin build belonging to
+ *     gsim-core);
  *   - `gsim-tools`, if a checkout is given or found beside this one. Public,
  *     but published to no index, so a checkout or a release wheel it is.
  *
- * The last two are optional on purpose: the kernel starts without them, and
- * then a run answers `SolverUnavailable` naming what is missing instead of the
- * whole editor refusing to open a schematic.
+ * The last two are optional, and since #158 they are optional to the editor as
+ * well as to this script. They used to be the compiler: the kernel compiled a
+ * schematic and answered `SolverUnavailable` without them. The editor compiles
+ * its own document now, with `gsim-core` built to WebAssembly, and hands this
+ * process netlist text. What they are for here is scripting a document in
+ * Python and running the example generators.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -145,7 +148,8 @@ function main() {
     );
   } else {
     process.stdout.write(
-      "\n[make-kernel-venv] no gsim_py wheel found — compiling a schematic will say so.\n" +
+      "\n[make-kernel-venv] no gsim_py wheel found. The editor does not need one — it\n" +
+        "  compiles with gsim-core in WebAssembly — but scripting a document from Python does.\n" +
         "  Build one with: cd ../gsim-core && maturin build --release -m crates/gsim-py/Cargo.toml\n",
     );
   }

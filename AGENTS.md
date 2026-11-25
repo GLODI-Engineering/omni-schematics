@@ -26,8 +26,9 @@ apps/frontend         React/Vite webview bundles — the canvas, inspector,
 apps/vscode-extension The extension host: custom editor, views, commands,
                       kernel lifecycle
 apps/kernel-sidecar   Python process the extension spawns; speaks WebSocket
-packages/             Python libraries — schemas, simulator, gsim-model;
-                      webview-protocol (TypeScript)
+packages/             gsim-wasm (the engine, built to WebAssembly — the
+                      editor's compiler), webview-protocol (TypeScript);
+                      Python libraries — schemas, simulator, gsim-model
 docs/                 specs/ (architecture), guides/, decisions/, journal/
 tests/                cross-package integration, e2e, validation
 ```
@@ -51,6 +52,15 @@ What that means in practice:
 - `gsim-core`'s compile registry (`crates/gsim-core/src/compile/spec.rs`) is
   the authority on what a block is and what it compiles to. When the catalog
   and the registry disagree, the registry wins and the catalog is wrong.
+- **The editor compiles with the engine, not with a copy of it** (#158).
+  `packages/gsim-wasm` is `gsim-core`'s own `crates/gsim-wasm` built to
+  WebAssembly, and `packages/gsim-wasm/compile.js` is the single route from a
+  document to a netlist — taken by the webview, by
+  `scripts/check-examples.mjs` and by the release workflow alike. A second
+  implementation of any part of that route, in any language, is the thing this
+  invariant exists to prevent: there were two, they drifted twice (#143,
+  #153), and both times a sheet that looked correct in the palette would not
+  compile. Put nothing between a document and the compiler.
 - A block type offered in the library should be one the engine can actually
   run. **Today that is not true**: the catalog carries 265 types and the
   registry knows 59, and the two use different names — a part spelled
@@ -110,13 +120,18 @@ Do not reintroduce that.
    are unchanged on purpose — invariant 6 is cited by name from six files.
    → `docs/agent-rules/architecture-invariants.md#smooth-models`
 
-3. **The webview generates no code at runtime.** The CSP has no
+3. **The webview generates no JavaScript at runtime.** The CSP has no
    `'unsafe-eval'`, and `apps/vscode-extension/src/webview-html.test.ts`
    asserts it stays absent. A dependency that compiles code at runtime (a
    JSON-schema compiler, a templating engine, a charting library that
    compiles accessors) makes the webview render *nothing at all*, with no
    error visible outside the webview. Precompile it or replace it — see
    `apps/frontend/scripts/gen-validators.mjs` for the pattern.
+
+   `'wasm-unsafe-eval'` *is* there, and is not the same grant: it permits
+   compiling a WebAssembly module and nothing else, which is what the editor's
+   own compiler needs (#158). The two directives are independent in CSP3. A
+   request for `'unsafe-eval'` is still a no.
 
 4. **Tpetra, not Epetra.** Epetra was removed from Trilinos end of 2025.
    New code in `packages/engine-*/` uses Tpetra + Kokkos + Belos.

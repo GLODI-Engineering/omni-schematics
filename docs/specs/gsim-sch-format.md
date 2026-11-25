@@ -87,7 +87,7 @@ The first non-whitespace bytes of every valid file are `{"schema_version":2` so 
 | `schema_version` | integer | yes | Must be `2`. The v2 loader rejects any other value. There is no v1 reader. |
 | `model` | object | yes | See §4. |
 
-The loader at `packages/simulator/src/simulator/compiler/gsim_sch_loader.py` accepts a file path, a JSON string, or an already-parsed dict.
+The loader is the engine's own `load_document` — `gsim_py.load_document` from Python, `loadDocument` from the editor's WebAssembly bundle. It takes the document's JSON text and returns it canonically re-serialised, rejecting a non-v2 `schema_version` with a clear message. There used to be a second loader here, `packages/simulator/src/simulator/compiler/gsim_sch_loader.py`, which read the same format in Python; it is gone (#158), because two readers of one format is how the format acquires two meanings.
 
 ---
 
@@ -418,7 +418,7 @@ Example signatures:
 5. Algebraic loops between dim-inheriting blocks → DimensionLoopError (cycle path named).
 ```
 
-The pass runs once per `gsim_sch_loader.load()` call, after structural validation and before IR-1 build.
+The pass runs once per `load_document` call, after structural validation.
 
 #### Wire `dim` (runtime, not persisted)
 
@@ -1176,37 +1176,43 @@ Domain: `physical-thermal`. Through = heat flow (W); across = temperature (K).
 
 ## 16. Compilation pipeline
 
+Every stage of it is `gsim-core`, and the editor runs that engine itself — built
+to WebAssembly, in `packages/gsim-wasm` (#158). The stages below are its own
+modules, named so that a reader of this spec can find the code implementing each
+rule; they are not separate programs, and nothing between them belongs to this
+repository.
+
 ```
 .gsim_sch file
     │
     ▼
-gsim_sch_loader.load()            schema_version + JSON Schema + structural rules
-    │                              + param expression evaluation + alias resolution
+loadDocument                      schema_version + JSON Schema + structural rules
+  document/model.rs                + param expression evaluation
+    │                              (expr/{lexer,parser,eval}.rs) + alias resolution
     ▼
-gsim_sch_flatten()                inline subsystems → flat block/wire list
-    │                              + per-block id namespace check
+compile                           inline SubcktDefs   (document/subckt.rs)
+  compile/mod.rs                   resolve Goto/From  (compile/routing.rs)
+    │                              per-block compile  (compile/spec.rs)
     ▼
-goto_from_resolve()               replace Goto/From pairs with direct wires
-    │                              + tag visibility check
+netlist text + notes + provenance
+    │                             the editor sends this over IPC:
+    │                             apps/frontend/src/shell/run.ts
     ▼
-ir1_builder.build()               ModelDocument → IR1Graph
-    │                              + per-paradigm partitioning
+general-simulator                 the solver, a subprocess the kernel spawns
+    │
     ▼
-   ┌──────────────────────────────┴───────────────────────────────┐
-   ▼                                                              ▼
-spice_netlist_writer            signal_flow_lowerer
-(physical-electrical only)       (signal-flow + converters)
-   │                                                              │
-   ▼                                                              ▼
-ngspice / Xyce                                                  scipy ODE
-   │                                                              │
-   └──────────────────────────┬───────────────────────────────────┘
-                              ▼
-                      result_aggregator
-                              │
-                              ▼
-                         IPC result delivery
+result container + manifest       simulator.postprocess.result_writer
+    │
+    ▼
+the waveform viewer               crates/waveform-store, also WebAssembly
 ```
+
+A pipeline this spec used to describe ran `gsim_sch_loader.load` →
+`gsim_sch_flatten` → `goto_from_resolve` → `ir1_builder.build`, then either
+`spice_netlist_writer` into ngspice/Xyce or `signal_flow_lowerer` into a scipy
+ODE. The ngspice/Xyce and scipy branches went when `general-simulator` became
+the only backend (invariant 0a); the Python stages in front of them went with
+#158, having been a second implementation of the four engine modules above.
 
 IR-1 (`packages/simulator/src/simulator/ir/ir1.py`) gains the following fields:
 
