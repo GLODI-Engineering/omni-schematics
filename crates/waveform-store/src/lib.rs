@@ -27,12 +27,14 @@
 
 pub mod decimate;
 pub mod manifest;
+pub mod samples;
 pub mod source;
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 
 pub use manifest::{DataKind, Document};
+pub use samples::SamplesSource;
 pub use source::{Slice, WaveformSource};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

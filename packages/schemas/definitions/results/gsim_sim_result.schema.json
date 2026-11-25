@@ -122,16 +122,16 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["inline", "hdf5"],
-          "description": "inline: every vector carries its own `encoding` and `data`, and the file stands alone \u2014 it can be committed, attached to a review or emailed. hdf5: the samples, and the LOD pyramid over them, live in the file `path` points at, and each vector names its `dataset`."
+          "enum": ["inline", "samples", "hdf5"],
+          "description": "inline: every vector carries its own `encoding` and `data`, and the file stands alone \u2014 it can be committed, attached to a review or emailed. samples: the samples and the LOD pyramid over them live in the `.gsim_samples` file `path` points at, written by general-simulator's `--format samples`; a vector is found in it by `name`. hdf5: the same arrangement with an HDF5 file, and each vector names its `dataset`. Prefer `samples`: an HDF5 reader needs the libhdf5 C library, which cannot be compiled to WebAssembly, so a viewer running in a webview cannot read one at all."
         },
         "path": {
           "type": "string",
-          "description": "Required when kind is hdf5. Relative to this file's directory, so a result and its data move together."
+          "description": "Required when kind is samples or hdf5. Relative to this file's directory, so a result and its data move together."
         },
         "pyramid": {
           "type": "boolean",
-          "description": "Whether the HDF5 file carries precomputed LOD levels. A reader that knows there are none can skip looking for them."
+          "description": "Whether the sample file carries precomputed LOD levels. A reader that knows there are none can skip looking for them. Always true for `samples`, where the pyramid is part of the format rather than an option."
         }
       }
     }
