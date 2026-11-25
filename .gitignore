@@ -70,3 +70,4 @@ render-out/
 crates/*/target/
 crates/*/pkg/
 crates/*/pkg-node/
+apps/vscode-extension/media/examples/
