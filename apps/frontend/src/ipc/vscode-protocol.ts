@@ -10,7 +10,6 @@
 
 export type {
   HostBoundMessage,
-  KernelConfig,
   WebviewBoundMessage,
   WebviewInit,
   WebviewRole,
