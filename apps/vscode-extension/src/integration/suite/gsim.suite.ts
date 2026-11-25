@@ -595,5 +595,182 @@ suite("Omni Schematics — VS Code integration", () => {
         "the result's path was reported",
       );
     });
+
+    /**
+     * The claim #157 exists for, measured in a real webview.
+     *
+     * The run above left a `.gsim_samples` container on disk. Nothing in this
+     * window can decimate except the WebAssembly in a webview, and nothing
+     * can read a file except the extension host, so a trace on screen here is
+     * the whole two-sided mechanism working: the viewer planned the ranges,
+     * `gsim/readSamples` carried them to the host, the host read exactly those
+     * bytes, and `crates/waveform-store` turned them into points.
+     *
+     * Driven against the **waveform panel**, because that is where a run
+     * becomes a picture in VS Code: the schematic webview hosts only the
+     * schematic (`App.tsx` pins its surface), so it asks for this panel and
+     * the host hands it the result — broadcast if it is open, replayed on its
+     * `gsim/ready` if it opens afterwards.
+     *
+     * Read off the live uPlot instances rather than off a store, because a
+     * store write is not a picture.
+     */
+    interface WaveformReport {
+      simId: string | null;
+      figures: number;
+      axes: number;
+      cached: { key: string; samples: number; unit: string; quantity: string }[];
+      bytesFetched: number;
+      lastWindowBytes: number;
+      traces: {
+        axesId: string;
+        series: number;
+        points: number;
+        peaks: { min: number; max: number }[];
+      }[];
+    }
+
+    /**
+     * The panel's report once it is drawing, or whatever it last said.
+     *
+     * `notSimId` is the run it must have moved *past*: a second run leaves the
+     * first run's traces on screen until its own window lands, so "a trace
+     * exists" is already true and waiting on it alone would read the previous
+     * run's numbers. That is how this test first passed while measuring the
+     * wrong container.
+     */
+    async function drawnReport(
+      notSimId?: string | null,
+      deadlineMs = 60_000,
+    ): Promise<WaveformReport> {
+      const deadline = Date.now() + deadlineMs;
+      const settled = (report: WaveformReport) =>
+        report.traces.some((trace) => trace.points > 0) &&
+        (notSimId === undefined || report.simId !== notSimId);
+
+      let report = await api.probe<WaveformReport>("waveform", "waveform", {}, 30_000);
+      while (Date.now() < deadline && !settled(report)) {
+        await sleep(250);
+        report = await api.probe<WaveformReport>("waveform", "waveform", {}, 30_000);
+      }
+      return report;
+    }
+
+    test("the container is plotted, from a fraction of its bytes", async () => {
+      // The viewer, where the schematic asked for it to be.
+      await vscode.commands.executeCommand("omniSchematics.showWaveforms");
+      await api.waitForWebview("waveform");
+
+      const report = await drawnReport();
+
+      assert.ok(report.figures > 0, "the run laid out a figure");
+      assert.ok(
+        report.cached.length > 0,
+        `the container's signals are cached, got ${report.cached.length}`,
+      );
+      assert.ok(
+        report.cached.every((signal) => signal.samples > 0),
+        `every cached signal carries samples, got ${JSON.stringify(report.cached)}`,
+      );
+      // Labelled from the container's prologue, not left bare. The solver
+      // writes `quantity: "dimensionless"` for every vector, which
+      // `axes-config.ts` *skips* when building spines -- so taking that field
+      // at face value gives a chart with no y axis at all (#185).
+      assert.ok(
+        report.cached.some((signal) => signal.unit !== ""),
+        `the signals carry units, got ${JSON.stringify(report.cached)}`,
+      );
+      assert.ok(
+        report.cached.every((signal) => signal.quantity !== "dimensionless"),
+        `no signal is left dimensionless, got ${JSON.stringify(report.cached)}`,
+      );
+
+      const drawn = report.traces.filter((trace) => trace.points > 0);
+      assert.ok(
+        drawn.length > 0,
+        `at least one uPlot instance is drawing points, got ${JSON.stringify(report.traces)}`,
+      );
+      assert.ok(
+        drawn.some((trace) => trace.peaks.some((peak) => peak.max > peak.min)),
+        `a drawn trace varies rather than being a flat line, got ${JSON.stringify(drawn)}`,
+      );
+
+      // The whole point of the format: the bytes read are a fraction of the
+      // file, and that fraction does not grow with the run's length.
+      const runsDir = path.join(workspaceDir(), ".gsim", "runs");
+      const runs = fs.readdirSync(runsDir).sort();
+      const container = path.join(runsDir, runs[runs.length - 1] as string, "run.gsim_samples");
+      const size = fs.statSync(container).size;
+      assert.ok(report.bytesFetched > 0, "something was fetched");
+      // Per *window*, because that is the claim: one view is a small read
+      // whatever the file's length. The cumulative figure is logged beside it
+      // and is deliberately not asserted -- this example is 1,000 samples,
+      // which is a single stripe, so two views of it already pass the file's
+      // own size. The ratio only means something on a long run, and
+      // `samples-source.test.ts` plus the measurements in the pull request
+      // are where that is shown.
+      assert.ok(
+        report.lastWindowBytes > 0 && report.lastWindowBytes <= size,
+        `one window read ${report.lastWindowBytes} bytes of a ${size}-byte container`,
+      );
+      console.log(
+        `[integration] plotted ${drawn[0]?.series ?? 0} series of ${drawn[0]?.points ?? 0} ` +
+          `points; one window read ${report.lastWindowBytes} bytes of ${size} ` +
+          `(${((100 * report.lastWindowBytes) / size).toFixed(1)}%), ` +
+          `${report.bytesFetched} bytes over every read so far`,
+      );
+    });
+
+    /**
+     * A narrower window costs less than the whole extent.
+     *
+     * Which ranges a window reads is decided from the stripe directory and
+     * index arithmetic — no sample value takes part — so this is a property of
+     * the format rather than of a cache, and it is the reason a
+     * multi-gigabyte result scrubs at all.
+     */
+    test("a window narrower than the extent fetches less than the whole extent", async () => {
+      // A longer, finer run than the example asks for by default. The
+      // container stores samples in stripes of a fixed number of rows, so a
+      // 1,000-sample run is a *single* stripe and every window of it reads
+      // that one stripe -- true, and it tells us nothing. 100,000 rows is
+      // several stripes, which is where a window's cost starts to track the
+      // window.
+      const previous = (await api.probe<WaveformReport>("waveform", "waveform", {}, 30_000)).simId;
+      await api.probe("schematic", "run", { tEnd: 1e-3, tStep: 1e-8 }, 180_000);
+      const report = await drawnReport(previous);
+      assert.notEqual(report.simId, previous, "the panel moved on to the longer run");
+      assert.ok(
+        report.cached.every((signal) => signal.samples > 0),
+        "the longer run is drawn before its cost is measured",
+      );
+
+      const full = await api.probe<{ bytesFetched: number; maxPoints: number }>(
+        "waveform",
+        "fullWaveform",
+        { maxPoints: 500 },
+        60_000,
+      );
+      const zoomed = await api.probe<{
+        bytesFetched: number;
+        window: [number, number];
+        extent: [number, number];
+      }>("waveform", "zoomWaveform", { fraction: 0.05, maxPoints: 500 }, 60_000);
+
+      console.log(
+        `[integration] whole extent at 500 points: ${full.bytesFetched} bytes; ` +
+          `5% of it: ${zoomed.bytesFetched} bytes`,
+      );
+      assert.ok(full.bytesFetched > 0, "the whole extent cost something to read");
+      assert.ok(
+        zoomed.bytesFetched < full.bytesFetched,
+        `a 5% window (${zoomed.bytesFetched} bytes) must cost less than the whole extent ` +
+          `(${full.bytesFetched} bytes)`,
+      );
+      assert.ok(
+        zoomed.window[1] - zoomed.window[0] < zoomed.extent[1] - zoomed.extent[0],
+        "the window really is narrower than the extent",
+      );
+    });
   });
 });

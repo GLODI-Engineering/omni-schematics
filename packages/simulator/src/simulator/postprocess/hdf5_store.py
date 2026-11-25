@@ -21,7 +21,7 @@ Layout::
             ├── level_2/{time, value}   ~10,000x decimated
             └── level_3/{time, value}   ~1,000,000x decimated
 
-Pyramid levels are built via ``decimation.minmax_decimate_by_value`` (genuine
+Pyramid levels are built via ``_minmax_decimate_by_value`` below (genuine
 value-extrema decimation, not mean-averaging) so transient spikes survive
 regardless of decimation factor. A level is skipped once its source is too
 short to benefit — most of today's simulation sizes (thousands of points)
@@ -38,8 +38,6 @@ from typing import TYPE_CHECKING, Any
 import h5py
 import numpy as np
 
-from simulator.postprocess.decimation import minmax_decimate_by_value
-
 if TYPE_CHECKING:
     from simulator.postprocess.result_writer import ResultBundle
 
@@ -55,6 +53,56 @@ _LOD_MAX_LEVELS = 3
 # Below this many source points, building a level isn't worth the storage —
 # it would barely decimate anything and the raw-array fallback is just as fast.
 _LOD_MIN_SOURCE_LEN = 400
+
+
+def _minmax_decimate_by_value(values: np.ndarray, max_points: int) -> np.ndarray:
+    """Return indices into *values* selecting <= max_points entries.
+
+    Splits *values* into ``max_points // 2`` buckets and keeps the argmin and
+    argmax index of each bucket (deduplicated, in ascending order). When
+    *values* already has <= max_points entries, or max_points < 2, all
+    indices are returned unchanged.
+
+    Private to this module, and deliberately so. It used to be
+    ``simulator.postprocess.decimation.minmax_decimate_by_value``, a *shared*
+    module three other things reduced waveforms through — which is the problem
+    #157 removed: there were three implementations of "give me this window of
+    these signals, at most this many points", so a trace could change shape
+    depending on which one produced it. There is one now,
+    ``crates/waveform-store``, and the viewer calls it directly.
+
+    This copy survives only because this module writes an HDF5 pyramid and has
+    to build one. Nothing else in the repository may use it: the container the
+    viewer actually reads is written by the solver, in Rust, in one pass. This
+    module and its ``h5py`` dependency go together in #156, and this function
+    goes with them.
+    """
+    n = len(values)
+    if n <= max_points or max_points < 2:
+        return np.arange(n, dtype=np.intp)
+
+    n_buckets = max_points // 2
+    bucket_size = n / n_buckets
+
+    indices: list[int] = []
+    for i in range(n_buckets):
+        lo = round(i * bucket_size)
+        hi = min(round((i + 1) * bucket_size), n)
+        if lo >= n:
+            break
+        bucket = values[lo:hi]
+        if len(bucket) == 0:
+            continue
+        min_idx = int(np.argmin(bucket)) + lo
+        max_idx = int(np.argmax(bucket)) + lo
+        lo_idx, hi_idx = (min_idx, max_idx) if min_idx <= max_idx else (max_idx, min_idx)
+        indices.append(lo_idx)
+        if hi_idx != lo_idx:
+            indices.append(hi_idx)
+
+    if not indices:
+        return np.arange(n, dtype=np.intp)
+    return np.array(sorted(set(indices)), dtype=np.intp)
 
 
 def dataset_key(block_id: str, port_id: str) -> str:
@@ -157,7 +205,7 @@ def _write_pyramid(
         if n < _LOD_MIN_SOURCE_LEN or target >= n:
             break
 
-        idx = minmax_decimate_by_value(level_value, target)
+        idx = _minmax_decimate_by_value(level_value, target)
         level_value = level_value[idx]
         level_time = level_time[idx]
 

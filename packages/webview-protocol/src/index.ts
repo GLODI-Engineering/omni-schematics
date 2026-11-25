@@ -112,6 +112,22 @@ export type HostBoundMessage =
    * looks like it expects. The host confines the path to the workspace.
    */
   | { type: "gsim/readSource"; requestId: string; path: string }
+  /**
+   * Byte ranges of a `.gsim_samples` container (#157).
+   *
+   * The division this message exists for: a webview can run WebAssembly but
+   * cannot read a file, and the extension host can read a file but cannot
+   * load the WebAssembly — `vsce package --no-dependencies` ships no
+   * `node_modules`, so a value import of a workspace package from the host
+   * throws `Cannot find module` on every machine but a developer's (#175).
+   *
+   * So the webview plans and the host fetches. `crates/waveform-store`
+   * computes which ranges a window needs from the stripe directory alone —
+   * index arithmetic, with no sample value taking part — and they arrive here
+   * as a list. An empty `ranges` asks only for the file's size, which is the
+   * first thing a reader needs and the one number it cannot derive.
+   */
+  | { type: "gsim/readSamples"; requestId: string; request: SamplesReadRequest }
   /** Open the waveform panel. */
   | { type: "gsim/showWaveforms" }
   | { type: "gsim/log"; level: "info" | "warn" | "error"; message: string }
@@ -256,6 +272,52 @@ export type RunResult =
     };
 
 // ---------------------------------------------------------------------------
+// Reading a sample container the webview cannot open (#157)
+// ---------------------------------------------------------------------------
+
+/** One byte range, as `crates/waveform-store` planned it. */
+export interface SamplesRange {
+  /** File offset. A `number` carries any integer below 2^53, nine petabytes. */
+  offset: number;
+  length: number;
+}
+
+/**
+ * Which bytes of which container, and how the host is to find it.
+ *
+ * `path` is either absolute — what `RunResult.samplesPath` carries, from a run
+ * this host itself performed — or relative, in which case it is resolved
+ * against the directory of `relativeTo`. The second form is what a
+ * `.gsim_sim_result` holds: its `data.path` is relative to the document, and
+ * resolving it is the host's job because only the host knows where that
+ * document is on disk. Either way the host decides what the path means and
+ * refuses one that leaves the directory it was anchored to; the webview is
+ * handed documents from anywhere and is not the right place to adjudicate
+ * that.
+ */
+export interface SamplesReadRequest {
+  path: string;
+  /** URI of the document `path` is relative to, when it is relative. */
+  relativeTo?: string;
+  /** Empty asks only for the size. */
+  ranges: SamplesRange[];
+}
+
+/**
+ * The bytes, base64 of each range, in the order they were asked for.
+ *
+ * Base64 rather than a `Uint8Array`: a webview's `postMessage` is specified in
+ * terms of JSON-serialisable values, and a typed array survives the trip as an
+ * object with numeric keys on some hosts and as an array on others. A window
+ * at a plot's point budget is tens of kilobytes whatever the file's length —
+ * that is the property the container exists for — so the third of a byte that
+ * base64 adds buys a format that cannot be misread.
+ */
+export type SamplesReadResult =
+  | { ok: true; size: number; chunks: { offset: number; base64: string }[] }
+  | { ok: false; summary: string };
+
+// ---------------------------------------------------------------------------
 // extension host -> webview
 // ---------------------------------------------------------------------------
 
@@ -313,6 +375,14 @@ export type WebviewBoundMessage =
   | { type: "gsim/symbolSaved"; name: string; path: string }
   /** Answer to `gsim/readSource`: the file's text, or why it could not be read. */
   | { type: "gsim/sourceContent"; requestId: string; text?: string; error?: string }
+  /**
+   * Answer to a `gsim/readSamples` (#157), which always arrives.
+   *
+   * An outcome rather than a resolve-or-reject, for the reason `gsim/runResult`
+   * gives: a viewer waiting on bytes that never come shows an empty plot, and
+   * an empty plot presented as a result is the failure FE-146 reported.
+   */
+  | { type: "gsim/samplesBytes"; requestId: string; result: SamplesReadResult }
   | { type: "gsim/symbolSaveFailed"; name: string; reason: string }
   /** Integration-harness only: run a probe inside this webview. */
   | { type: "gsim/test/exec"; requestId: string; op: string; args?: Record<string, unknown> };

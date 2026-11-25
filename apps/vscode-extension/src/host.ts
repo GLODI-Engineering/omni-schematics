@@ -35,12 +35,15 @@ import {
   type HostBoundMessage,
   type RunRequest,
   type RunResult,
+  type SamplesReadRequest,
+  type SamplesReadResult,
   type WebviewBoundMessage,
   type WebviewRole,
   isHostBoundMessage,
 } from "./protocol";
 import { type LevelledChannel, createRunOutputChannel, writeRunOutput } from "./run-output";
 import { runSimulation } from "./run-simulation";
+import { SamplesReadError, readSamplesRanges } from "./samples-read";
 import { resolveSolver } from "./solver-path";
 import {
   SYMBOLS_DIR,
@@ -96,6 +99,18 @@ export class GsimHost implements vscode.Disposable {
 
   /** sim id of the most recent finished simulation, for the waveform panel. */
   lastSimId: string | null = null;
+
+  /**
+   * The last run that produced a result, kept so a waveform panel opened
+   * *after* it can still plot it (#157).
+   *
+   * A run happens in the schematic webview; the viewer is a different webview
+   * and may not exist yet when the result lands. `gsim/runResult` is
+   * broadcast to every webview, so a panel that is already open plots
+   * immediately — and one that opens a second later gets this on its
+   * `gsim/ready`, the same way `lastSimId` is replayed just below.
+   */
+  lastRunResult: { requestId: string; result: RunResult } | null = null;
 
   /**
    * Solver processes in flight, by the request id the webview is waiting on.
@@ -259,6 +274,51 @@ export class GsimHost implements vscode.Disposable {
   }
 
   /**
+   * Hand the webview byte ranges of a sample container (#157).
+   *
+   * The whole of the host's half of plotting a completed run. The webview's
+   * WebAssembly worked out which bytes a window needs — from the stripe
+   * directory, with no sample value taking part — and this reads them. It does
+   * no arithmetic of its own, deliberately: the layout is known in one place
+   * and that place is `crates/waveform-store`, which is the same reason
+   * `samples-read.ts` exists as a plain positioned read.
+   *
+   * Confined to this window's workspace folders, the fallback run directory
+   * and the directory of the result that named the container. A path arrives
+   * from a document and a document may have been opened from anywhere, so the
+   * host adjudicates it rather than trusting it — the same rule `readSource`
+   * follows above, for the same reason.
+   */
+  private readSamples(requestId: string, request: SamplesReadRequest): void {
+    const reply = (result: SamplesReadResult) =>
+      this.broadcast({ type: "gsim/samplesBytes", requestId, result });
+
+    const roots = [
+      ...(vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+      // Where `runDirectory` puts a run when no folder is open. Such a run is
+      // a scratch experiment and still has to be plottable.
+      path.join(os.tmpdir(), "omni-schematics-runs"),
+    ];
+
+    try {
+      const { size, chunks } = readSamplesRanges(request, { roots });
+      reply({
+        ok: true,
+        size,
+        chunks: chunks.map((chunk) => ({
+          offset: chunk.offset,
+          base64: chunk.bytes.toString("base64"),
+        })),
+      });
+    } catch (error) {
+      const summary =
+        error instanceof SamplesReadError || error instanceof Error ? error.message : String(error);
+      this.log.appendLine(`[samples] refused ${request.path}: ${summary}`);
+      reply({ ok: false, summary });
+    }
+  }
+
+  /**
    * Where a run's four files go: `.gsim/runs/<run id>/` in the open folder.
    *
    * Beside `.gsim/symbols/`, which is already this extension's corner of a
@@ -354,6 +414,10 @@ export class GsimHost implements vscode.Disposable {
       this.runningChildren.delete(requestId);
     }
 
+    if (result.ok) {
+      this.lastRunResult = { requestId, result };
+    }
+
     if (!result.ok) {
       // The panel, revealed. A `solver-not-found` is five lines naming where
       // it looked and the command that builds a binary; written to a channel
@@ -438,6 +502,10 @@ export class GsimHost implements vscode.Disposable {
 
       case "gsim/readSource":
         void this.readSource(message.requestId, message.path);
+        return true;
+
+      case "gsim/readSamples":
+        this.readSamples(message.requestId, message.request);
         return true;
 
       // --- in-app File buttons -> the workbench's own commands -----------
@@ -546,6 +614,12 @@ export class GsimHost implements vscode.Disposable {
         }
         if (message.role === "waveform" && this.lastSimId) {
           void source.postMessage({ type: "gsim/showSimulation", simId: this.lastSimId });
+        }
+        // A viewer opened after a run still has a run to show (#157). The
+        // result names the container it wrote, and the container is
+        // self-describing, so this is the whole of what the panel needs.
+        if (message.role === "waveform" && this.lastRunResult) {
+          void source.postMessage({ type: "gsim/runResult", ...this.lastRunResult });
         }
         return true;
 

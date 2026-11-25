@@ -14,6 +14,8 @@
       "**/build",
       "generated",
       "packages/gsim-wasm/pkg",
+      "packages/waveform-wasm/pkg",
+      "**/provenance.json",
       "**/engine-catalog.json",
       "**/engine-capabilities.json"
     ]

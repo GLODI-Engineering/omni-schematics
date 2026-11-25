@@ -29,6 +29,9 @@ importers:
       '@gensim/gsim-wasm':
         specifier: workspace:*
         version: link:../../packages/gsim-wasm
+      '@gensim/waveform-wasm':
+        specifier: workspace:*
+        version: link:../../packages/waveform-wasm
       '@gensim/webview-protocol':
         specifier: workspace:*
         version: link:../../packages/webview-protocol
@@ -153,6 +156,8 @@ importers:
       json-schema-to-typescript:
         specifier: ^15.0.3
         version: 15.0.4
+
+  packages/waveform-wasm: {}
 
   packages/webview-protocol:
     devDependencies:

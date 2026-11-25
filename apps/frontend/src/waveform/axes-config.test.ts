@@ -8,7 +8,6 @@ import {
   buildAlignedData,
   buildAxes,
   buildSeries,
-  decimateMinMax,
   formatTimeTicks,
   isBodeAxes,
   makePanAwareMousedown,
@@ -20,6 +19,7 @@ import {
   xAxisLabel,
 } from "./axes-config";
 import type { SpineSpec } from "./axes-config";
+import { decimatorLoaded, reduceToBudget } from "./decimator";
 import { formatLogTicks, formatTicks } from "./theme";
 import type { SignalRef, WaveformSignal } from "./types";
 
@@ -536,7 +536,22 @@ describe("overlayPx", () => {
   });
 });
 
-describe("FE-159 decimateMinMax", () => {
+describe("FE-159, through the one decimator (#157)", () => {
+  /**
+   * These assertions are unchanged in substance from when the reduction was a
+   * TypeScript copy of `crates/waveform-store/src/decimate.rs` living in
+   * `axes-config.ts`. They are pointed at `reduceToBudget` now, which is the
+   * crate itself compiled to WebAssembly — so the behaviour FE-159 was fixed
+   * to get is held against the Rust implementation rather than against a
+   * second one written to agree with it.
+   */
+  it("is the WebAssembly decimator, not a pass-through", () => {
+    // The guard that makes every other assertion here mean something: if the
+    // bundle had not loaded, `reduceToBudget` would hand the samples back
+    // whole and each `toBeLessThanOrEqual` below would pass vacuously.
+    expect(decimatorLoaded()).toBe(true);
+  });
+
   it("caps a 300,000-point signal to <= MAX_RENDER_POINTS while preserving its min/max envelope", () => {
     const n = 300_000;
     const time = new Float64Array(n);
@@ -549,9 +564,11 @@ describe("FE-159 decimateMinMax", () => {
     values[12345] = 1000;
     values[54321] = -1000;
 
-    const { time: decTime, values: decValues } = decimateMinMax(time, values, MAX_RENDER_POINTS);
+    const { time: decTime, columns } = reduceToBudget(time, [values], MAX_RENDER_POINTS);
+    const decValues = columns[0] as Float64Array;
 
     expect(decTime.length).toBeLessThanOrEqual(MAX_RENDER_POINTS);
+    expect(decTime.length).toBeLessThan(n);
     expect(decValues.length).toBe(decTime.length);
     expect(Math.max(...decValues)).toBe(1000);
     expect(Math.min(...decValues)).toBe(-1000);
@@ -561,23 +578,53 @@ describe("FE-159 decimateMinMax", () => {
     const time = new Float64Array(500).map((_, i) => i);
     const values = new Float64Array(500).map((_, i) => Math.sin(i));
 
-    const result = decimateMinMax(time, values, MAX_RENDER_POINTS);
+    const result = reduceToBudget(time, [values], MAX_RENDER_POINTS);
 
     expect(result.time).toBe(time);
-    expect(result.values).toBe(values);
+    expect(result.columns[0]).toBe(values);
   });
 
-  it("decimates multiple signals of different lengths independently against the same budget", () => {
+  it("decimates signals of different lengths independently against the same budget", () => {
     const short = new Float64Array(100).map((_, i) => i);
     const long = new Float64Array(50_000).map((_, i) => Math.cos(i / 100));
     const longTime = new Float64Array(50_000).map((_, i) => i);
 
-    const shortResult = decimateMinMax(short, short, 20_000);
-    const longResult = decimateMinMax(longTime, long, 20_000);
+    const shortResult = reduceToBudget(short, [short], 20_000);
+    const longResult = reduceToBudget(longTime, [long], 20_000);
 
-    expect(shortResult.values.length).toBe(100);
-    expect(longResult.values.length).toBeLessThanOrEqual(20_000);
-    expect(longResult.values.length).toBeGreaterThan(100);
+    expect((shortResult.columns[0] as Float64Array).length).toBe(100);
+    expect((longResult.columns[0] as Float64Array).length).toBeLessThanOrEqual(20_000);
+    expect((longResult.columns[0] as Float64Array).length).toBeGreaterThan(100);
+  });
+
+  it("keeps a one-sample spike that time bucketing would lose", () => {
+    // `decimate.rs`'s own `the_envelope_keeps_a_spike_that_time_bucketing_loses`,
+    // asserted from the browser's side of the boundary: a single sample of
+    // 96 V overshoot in a 50,000-sample run, deliberately off a bucket edge.
+    const n = 50_000;
+    const time = new Float64Array(n).map((_, i) => i * 1e-8);
+    const values = new Float64Array(n).fill(48);
+    values[(n * 3) / 4 + 1237] = 96;
+
+    const { columns } = reduceToBudget(time, [values], 3000);
+    const reduced = columns[0] as Float64Array;
+    expect(reduced.length).toBeLessThanOrEqual(3000);
+    expect(Math.max(...reduced)).toBe(96);
+  });
+
+  it("keeps every signal on one shared grid", () => {
+    const n = 10_000;
+    const time = new Float64Array(n).map((_, i) => i * 1e-6);
+    const a = new Float64Array(n).map((_, i) => Math.sin(i / 50));
+    const b = new Float64Array(n).map((_, i) => Math.cos(i / 37) * 20);
+
+    const { time: grid, columns } = reduceToBudget(time, [a, b], 400);
+    expect(grid.length).toBeLessThanOrEqual(400);
+    expect((columns[0] as Float64Array).length).toBe(grid.length);
+    expect((columns[1] as Float64Array).length).toBe(grid.length);
+    for (let i = 1; i < grid.length; i++) {
+      expect(grid[i] as number).toBeGreaterThanOrEqual(grid[i - 1] as number);
+    }
   });
 });
 

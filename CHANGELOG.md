@@ -2,6 +2,58 @@
 
 ## Unreleased
 
+### A completed run plots itself — one decimator, in Rust
+
+Pressing Run now ends in a waveform. The solver writes a `.gsim_samples`
+container, the viewer reads windows of it, and the chart is drawn from the
+bytes those windows needed and no others (#157).
+
+**How, given that neither side can do it alone.** A webview can run
+WebAssembly and cannot open a file; the extension host can open a file and
+cannot load the WebAssembly, because `vsce package --no-dependencies` ships no
+`node_modules` (#175). So `crates/waveform-store` — committed as WebAssembly in
+`packages/waveform-wasm` — works out which byte ranges a window needs from the
+container's stripe directory, the webview asks for them over the new
+`gsim/readSamples`, the host answers with exactly those bytes, and the same
+crate reduces them to what the plot can show. No sample value takes part in
+deciding which bytes to read, which is what lets the reader ask twice and get
+the same answer both times.
+
+**What that buys.** On a 148 MB, 4,000,000-sample, 7-signal run: opening the
+container costs 5,152 bytes and already answers the signal names, their count
+and the sweep extent, so the axes are labelled before a sample is fetched. The
+whole extent at 3,000 points costs 3.0% of the file; a tenth of it costs 0.35%;
+one signal of seven costs a seventh of what all of them cost, because the
+container is signal-major. A one-sample spike in a 200,000-row run survives a
+500x reduction exactly, and the decimated extremes of a switching node over
+4,000,000 samples equal its full-resolution extremes at 10,000x.
+
+**A `.gsim_sim_result` whose `data.kind` is `"samples"` opens.** The results
+editor used to refuse one — `codec.ts` said the document "stores data
+externally" and gave up. It now reads the container beside it, with the path
+resolved by the extension host against the document, confined to the
+workspace folders and that document's own directory, and bounded so a bad
+length cannot ask the host to allocate a gigabyte. An HDF5-backed result is
+still refused, now with the reason: every HDF5 binding links a C library and a
+webview has nothing to link it to.
+
+**Three decimators are gone.** `apps/frontend/src/waveform/axes-config.ts`
+carried a hand-maintained TypeScript copy of `minmax_envelope`, kept in step by
+a comment saying so and a `_roundHalfEven` written to match Python's banker's
+rounding bucket for bucket; it now calls the crate. `lod-client.ts` and
+`prefetch.ts`, imported by nothing, are deleted, as are
+`simulator/postprocess/decimation.py` and the whole of
+`kernel_sidecar/waveform/` — so the sidecar no longer serves binary LOD frames
+or `.npy` slices, and `server.py` has no HTTP surface at all. The one piece of
+Python decimation left is a private helper inside `hdf5_store.py`, which is
+what builds that legacy writer's pyramid and goes with it in #156.
+
+**Where the plot appears.** Inside VS Code the schematic webview hosts only the
+schematic, so a finished run opens the waveform panel and the panel reads the
+container. The host replays the last result to a panel opened afterwards, so
+either ordering works. Outside VS Code the viewer is a tab in the same shell
+and draws there directly.
+
 ### Running a simulation needs no Python — **breaking**
 
 The extension runs `general-simulator` itself. Pressing Run compiles the sheet

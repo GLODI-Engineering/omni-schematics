@@ -64,14 +64,24 @@ jobs:
           fi
           echo "version $manifest"
 
-      # The .vsix carries the schematic compiler now (#158): `gsim-core` built to
-      # WebAssembly, bundled into the webview by Vite. A release whose package lost it
-      # would install, open a sheet, and fail every Run with "the schematic compiler did
-      # not load" -- 0.7.0's failure mode exactly, one layer over.
-      - name: The .vsix carries the schematic compiler
+      # The .vsix carries two WebAssembly bundles, bundled into the webview by Vite:
+      # the schematic compiler (#158, `gsim-core`) and the decimator that reads a
+      # `.gsim_samples` container (#157, `crates/waveform-store`). A release missing
+      # the first would install, open a sheet, and fail every Run with "the schematic
+      # compiler did not load" -- 0.7.0's failure mode exactly, one layer over. A
+      # release missing the second would run and then plot nothing, which is the
+      # failure #157 was opened to end.
+      - name: The .vsix carries the compiler and the decimator
         run: |
-          if ! unzip -l omni-schematics.vsix | grep -qE '\.wasm$'; then
-            echo "::error::the packaged .vsix has no .wasm — the webview has no compiler"
+          shipped=$(unzip -l omni-schematics.vsix | grep -cE 'gsim_wasm_bg-[^/]*\.wasm$' || true)
+          if [ "$shipped" -lt 1 ]; then
+            echo "::error::the packaged .vsix has no engine .wasm — the webview has no compiler"
+            unzip -l omni-schematics.vsix | tail -40
+            exit 1
+          fi
+          decimator=$(unzip -l omni-schematics.vsix | grep -cE 'waveform_store_bg-[^/]*\.wasm$' || true)
+          if [ "$decimator" -lt 1 ]; then
+            echo "::error::the packaged .vsix has no decimator .wasm — a run would plot nothing"
             unzip -l omni-schematics.vsix | tail -40
             exit 1
           fi

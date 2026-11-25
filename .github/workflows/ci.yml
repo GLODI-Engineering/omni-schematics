@@ -308,6 +308,35 @@ jobs:
       - name: the fresh bundle compiles the examples to the same netlists
         run: node scripts/check-examples.mjs --check --engine "$RUNNER_TEMP/fresh-bundle"
 
+  waveform-wasm-drift:
+    # `packages/waveform-wasm/pkg` is a 203 KB binary committed in the tree: the
+    # decimator and the `.gsim_samples` reader, which is the only thing in this
+    # repository that can turn a container into a picture. A generated artefact
+    # can stop matching its source, and for this one that means the viewer
+    # drawing a window with a *different* decimator from the one `cargo test`
+    # checks -- the two-implementations problem #157 exists to end, wearing a
+    # different hat.
+    #
+    # Unlike `gsim-wasm-drift` this needs no network and no second opinion. The
+    # crate is in this repository, so the gate hashes `Cargo.toml`, `Cargo.lock`
+    # and every file under `src/` and compares that digest: drift arrives in the
+    # same commit that caused it rather than whenever a remote branch moves.
+    #
+    # Behaviour is checked elsewhere and deliberately: the `frontend` job runs
+    # every assertion about envelopes, budgets and surviving peaks *through this
+    # bundle* (`src/test-setup.ts` loads it), which is a stronger statement than
+    # comparing bytes against a rebuild -- and a byte comparison would go red on
+    # a toolchain bump with nothing wrong.
+    name: The committed decimator is the crate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: the bundle is what it says it is, and the crate has not moved
+        run: node scripts/check-waveform-wasm-fresh.mjs --check
+
   examples-still-work:
     # An example is the one artefact whose whole purpose is to work the first time
     # someone opens it, and it was the only one with no check holding it to that. When this

@@ -12,9 +12,16 @@
 import { getActiveDragBlock, setActiveDragBlock } from "../canvas/dnd";
 import { serialize } from "../file/serializer";
 import { getWebviewInit, postToHost, requestSource } from "../ipc/vscode-host";
+import {
+  containerBytesFetched,
+  containerLastWindowBytes,
+  requestContainerWindow,
+} from "../results/container-plot";
 import { type RunOutputLine, reportRunOutput } from "../shell/run-output";
 import { useGraphStore, useIpcStore, useLibraryStore } from "../store";
+import { useSimSettingsStore } from "../store/sim-settings";
 import { useToastStore } from "../store/toast";
+import { useWaveformStore } from "../store/waveform";
 
 type Probe = (args: Record<string, unknown>) => unknown;
 
@@ -131,7 +138,130 @@ async function readSourceProbe(args: Record<string, unknown>): Promise<unknown> 
   return { ok: text !== null, length: text?.length ?? 0, text: text?.slice(0, 400) ?? null };
 }
 
+/**
+ * What the waveform viewer is actually showing, read off the live charts.
+ *
+ * `__gensim_charts` is the map of mounted uPlot instances — the real ones,
+ * drawing into a real canvas in a real Chromium. Reading `chart.data` is the
+ * one way to assert that the points the container gave up reached the plot,
+ * rather than that a store was written to. Peaks are reported per series
+ * because losing one is the failure that matters in power electronics (#157):
+ * a transient one sample wide is the thing that destroys the device.
+ */
+function waveformReport(): unknown {
+  const store = useWaveformStore.getState();
+  const charts = (globalThis as { __gensim_charts?: Map<string, { data: unknown[] }> })
+    .__gensim_charts;
+
+  const traces: {
+    axesId: string;
+    series: number;
+    points: number;
+    peaks: { min: number; max: number }[];
+  }[] = [];
+  for (const [axesId, chart] of charts ?? []) {
+    const data = chart.data as (Float64Array | number[])[];
+    const peaks = data.slice(1).map((series) => {
+      let min = Number.POSITIVE_INFINITY;
+      let max = Number.NEGATIVE_INFINITY;
+      for (let i = 0; i < series.length; i++) {
+        const value = series[i] as number;
+        if (!Number.isFinite(value)) continue;
+        if (value < min) min = value;
+        if (value > max) max = value;
+      }
+      return { min, max };
+    });
+    traces.push({
+      axesId,
+      series: Math.max(0, data.length - 1),
+      points: (data[0] as { length: number } | undefined)?.length ?? 0,
+      peaks,
+    });
+  }
+
+  return {
+    simId: store.currentSimId,
+    figures: store.figures.size,
+    axes: store.axes.size,
+    cached: [...store.signalCache.entries()].map(([key, signal]) => ({
+      key,
+      samples: signal.values.length,
+      unit: signal.unit,
+      quantity: signal.quantity,
+    })),
+    // Cumulative, and the per-window cost beside it: a session's every read
+    // added up will exceed a short container, while one window never does.
+    bytesFetched: containerBytesFetched(store.currentSimId ?? ""),
+    lastWindowBytes: containerLastWindowBytes(store.currentSimId ?? ""),
+    traces,
+  };
+}
+
 const PROBES: Record<string, Probe> = {
+  /**
+   * What the viewer is drawing, from the live charts (#157).
+   *
+   * Only a real webview has a uPlot instance with data in it, so this is the
+   * one place "the run plotted" can be asserted rather than inferred from a
+   * store write.
+   */
+  waveform: () => waveformReport(),
+
+  /**
+   * Zoom one axes to a fraction of the run's extent and report what that cost.
+   *
+   * The claim the container format makes, measured: a narrower window fetches
+   * fewer bytes than the whole extent does, because which ranges a window
+   * needs is decided from the stripe directory and index arithmetic rather
+   * than by reading the file.
+   */
+  zoomWaveform: async (args: Record<string, unknown>) => {
+    const fraction = typeof args.fraction === "number" ? args.fraction : 0.1;
+    const maxPoints = typeof args.maxPoints === "number" ? args.maxPoints : 3000;
+    const store = useWaveformStore.getState();
+    const simId = store.currentSimId ?? "";
+
+    const refs = [...store.axes.values()].flatMap((axes) => axes.signals);
+    const signal =
+      refs.length > 0 ? store.signalCache.get(`${simId}::${refs[0]?.signalName}`) : undefined;
+    const time = signal?.time;
+    if (!time || time.length < 2) {
+      throw new Error("no cached signal to take an extent from");
+    }
+    const from = time[0] as number;
+    const to = time[time.length - 1] as number;
+    const span = (to - from) * fraction;
+
+    const before = containerBytesFetched(simId);
+    const fetched = await requestContainerWindow(refs, [from, from + span], maxPoints);
+    return {
+      window: [from, from + span],
+      extent: [from, to],
+      fraction,
+      maxPoints,
+      bytesFetched: fetched,
+      totalBefore: before,
+      totalAfter: containerBytesFetched(simId),
+      report: waveformReport(),
+    };
+  },
+
+  /** The whole extent again, at the same budget, for the comparison above. */
+  fullWaveform: async (args: Record<string, unknown>) => {
+    const maxPoints = typeof args.maxPoints === "number" ? args.maxPoints : 3000;
+    const store = useWaveformStore.getState();
+    const simId = store.currentSimId ?? "";
+    const refs = [...store.axes.values()].flatMap((axes) => axes.signals);
+    const fetched = await requestContainerWindow(refs, null, maxPoints);
+    return {
+      maxPoints,
+      bytesFetched: fetched,
+      total: containerBytesFetched(simId),
+      report: waveformReport(),
+    };
+  },
+
   /**
    * Emit labelled run output, so the webview -> host -> Output panel path can
    * be tested end to end (#139).
@@ -163,8 +293,19 @@ const PROBES: Record<string, Probe> = {
    * asserted by the test, from the workspace, which is the half a webview
    * cannot see.
    */
-  run: async () => {
+  run: async (args: Record<string, unknown>) => {
     useToastStore.setState({ toasts: [] });
+    // A longer, finer run when the test asks for one. The container's stripes
+    // are a fixed number of rows, so a 1,000-sample run is a *single* stripe
+    // and every window of it reads that one stripe -- true, and useless for
+    // asserting that a narrower window costs less. `triggerRun` takes t_end
+    // and t_step from this store, so setting it here is the same rung the
+    // Simulation panel sets.
+    if (typeof args.tEnd === "number" && typeof args.tStep === "number") {
+      useSimSettingsStore
+        .getState()
+        .updateSettings({ tEnd: args.tEnd, tStep: args.tStep, analysisType: "TRAN" });
+    }
     const { triggerRun } = await import("../shell/run");
     await triggerRun();
     return {
