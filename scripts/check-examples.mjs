@@ -13,41 +13,58 @@
  *   1. it parses as a `.gsim_sch` document with blocks in it;
  *   2. every block type resolves in the engine catalogue, by name or alias;
  *   3. every resolved type is one the engine says it can compile;
- *   4. every wire endpoint names a port the engine declares for that block's
- *      type -- asked not of the committed file but of what
- *      `simulator.compiler.compile_input.prepare_document` returns, which is
- *      the product's own preparation step and therefore what the compiler is
- *      actually handed at Run time (#143);
- *   5. the committed file matches what its generating script emits, when it has
+ *   4. the editor's own loader accepts it (the generated schema validator the
+ *      webview itself loads);
+ *   5. it compiles, **to the netlist byte for byte**, and emits exactly the
+ *      compiler notes recorded in `examples/expected-netlists/`;
+ *   6. the committed file matches what its generating script emits, when it has
  *      one -- the same shape as gsim-core's `examples-still-emit-what-they-
  *      emitted` job.
  *
- * Arm 4 exists because arms 1-3 and the compile below all reach the compiler by
- * a route the product does not take. `gsim_py` is called directly here, on the
- * belief that `gsim-tools` was private so a gate needing it would run on one
- * machine. That belief was false (#147): gsim-tools is public, MIT and pure
- * Python, and CI can install it like anything else -- so the split this arm
- * compensates for is one this script no longer has to live with. Meanwhile the
- * product goes through
- * `simulator.compiler.gsim_py_netlist`. A transform living only on the
- * product's route is invisible to this script by construction, and #143 was
- * exactly that: a port respelling that turned every example into
- * `floating-port` at Run time while this script reported five examples OK.
+ * ## Why arm 5 is the whole point now, and what it replaced
  *
- * Which is why the preparation step moved into `compile_input`, a module that
- * imports nothing: the only part of the product's route this script now cannot
- * run is gsim-tools' own compile call. Anything added to the way in has to be
- * put there too, or this arm stops meaning what it says.
+ * Two arms used to live where arm 5 is. One compiled with `gsim_py` and counted
+ * the netlist's lines; the other asked
+ * `simulator.compiler.compile_input.prepare_document` whether every wire landed
+ * on a port the engine declares. The second existed because the first reached
+ * the compiler by a route the product did not take: the product went through
+ * `simulator.compiler.gsim_py_netlist`, this script went straight to `gsim_py`,
+ * and a transform on only one of those routes is invisible to the other by
+ * construction. #143 was exactly that -- a port respelling on the product's
+ * side turned every example into `floating-port` at Run time while this script
+ * reported five examples OK.
+ *
+ * There is no second route left to reconcile (#158). The editor compiles with
+ * `gsim-core` built to WebAssembly, through `packages/gsim-wasm/compile.js`,
+ * and this script imports *that file*. Nothing is between a document and the
+ * compiler on either side, so there is nothing for a transform to hide in --
+ * and the undeclared-port arm is gone because the thing it guarded against
+ * cannot exist any more. What it is replaced by is stronger: a count of netlist
+ * lines could not tell a correct netlist from a differently-wrong one of the
+ * same length, and the expectations under `examples/expected-netlists/` can.
+ *
+ * Those expectations were captured from the Python path as it stood on `main`
+ * before #158 -- `compile_gsim_document_full`, with `gsim_py` built from
+ * gsim-core 0.6.0 -- so "the same netlist as today" is a fact about this file
+ * and not a claim about it. See `examples/expected-netlists/README.md`.
+ *
+ * No Python is needed for arms 1-5. Arm 6 runs the generators, which author
+ * documents in Python with `gsim-tools`; without them it says so rather than
+ * failing.
  *
  * Usage:
  *   node scripts/check-examples.mjs --check     # exit 1 on any failure
  *   node scripts/check-examples.mjs            # report, exit 0
+ *   node scripts/check-examples.mjs --check --engine /tmp/fresh-bundle
+ *       # compile with a bundle built elsewhere -- what `gsim-wasm-drift` uses
+ *       # to prove the committed bundle is what the pinned engine commit emits
  */
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { fileURLToPath } from "node:url";
 
 // The editor's own generated validator, loaded dynamically rather than with a
@@ -67,14 +84,24 @@ const REPO_ROOT = resolve(__dirname, "..");
 const STRICT = process.argv.includes("--check");
 
 const EXAMPLES_DIR = join(REPO_ROOT, "examples");
+const EXPECTED_DIR = join(EXAMPLES_DIR, "expected-netlists");
 const CATALOG = join(REPO_ROOT, "apps", "frontend", "src", "library", "engine-catalog.json");
+
+/** Which WebAssembly bundle to compile with; the committed one unless told otherwise. */
+function engineDir() {
+  const index = process.argv.indexOf("--engine");
+  return index >= 0 && process.argv[index + 1]
+    ? resolve(process.argv[index + 1])
+    : join(REPO_ROOT, "packages", "gsim-wasm");
+}
 
 /**
  * The interpreter that has `gsim_tools` and `gsim_py` in it.
  *
- * `python3` on PATH is almost never the right one -- the engine bindings live
- * in this workspace's venv, and `gsim_py` is a compiled extension that has to
- * be built. Preference order mirrors `gen-engine-catalog.mjs`: an explicit
+ * Needed by arm 6 alone -- the example generators author their documents in
+ * Python. `python3` on PATH is almost never the right one: the engine bindings
+ * live in this workspace's venv, and `gsim_py` is a compiled extension that has
+ * to be built. Preference order mirrors `gen-engine-catalog.mjs`: an explicit
  * `GSIM_PYTHON`, then the workspace venv, then PATH.
  */
 function enginePython() {
@@ -95,16 +122,18 @@ function enginePython() {
 const PYTHON = enginePython();
 
 /**
- * Compile a document with the real compiler.
+ * Do the document's wires name ports the engine actually declares?
  *
- * This is the arm that matters, and the reason the others are not enough: a
- * block type can be in the catalogue, be marked compilable, and still be
- * spelled in a way the netlist emitter rejects. Only compiling finds that.
- *
- * Absent engine bindings are reported, not failed -- same contract as
- * `gen-engine-catalog.mjs`, which exits cleanly without `gsim_py` so an
- * ordinary checkout is usable. CI installs them, so there the arm is real.
+ * This question used to have an arm of its own, asked of the product's own
+ * preparation step in Python. It is now answered by the compile arm itself and
+ * by nothing else, because the compile arm *is* the product's route: the engine
+ * answers `floating-port` naming the wire, which is a better message than the
+ * one this script used to build. Kept as a note rather than deleted silently,
+ * because the lesson is about routes and not about ports -- put nothing between
+ * a document and the compiler, on either side, and there is nothing to
+ * reconcile.
  */
+
 /**
  * Does the editor's own loader accept this document?
  *
@@ -124,9 +153,9 @@ const PYTHON = enginePython();
  *
  * The validator used here is the generated one the webview itself loads -- not a
  * reimplementation, and not `ajv.compile()` at runtime, which the webview's CSP
- * forbids. It is plain JavaScript with no dependencies, so unlike the compile arm
- * this one needs nothing installed and only degrades to `ok: null` if codegen has
- * never been run. There was never a reason for it not to run (#146).
+ * forbids. It is plain JavaScript with no dependencies, so unlike arm 6 this one
+ * needs nothing installed and only degrades to `ok: null` if codegen has never
+ * been run.
  */
 function loadsInTheEditor(documentPath) {
   if (validateDocument === null) {
@@ -155,99 +184,84 @@ function loadsInTheEditor(documentPath) {
   );
   return {
     ok: false,
-    reason: [...seen].join("; ") || "failed schema validation with no message",
+    reason: seen.size > 0 ? [...seen].join("; ") : "failed schema validation with no message",
   };
 }
 
-function compiles(documentPath) {
-  // `gsim_py` only, not `gsim_tools` -- for now. The stated reason was that
-  // gsim-tools is a private repository no CI checkout can install, and a gate
-  // that only runs on one machine is not a gate. It is not private (#147), so
-  // the reason is gone and this arm should compile the way the product does;
-  // changing it is a behaviour change and belongs in its own commit.
-  // `gsim_py` is built from public gsim-core, which `engine-catalogue-drift`
-  // already does in this same workflow.
-  //
-  // Both calls return a JSON *string*, not an object -- `compile` puts the
-  // netlist under `netlist`. Reading the return value as text and counting its
-  // lines reports 1 for every document, which looks like a successful compile
-  // of an empty circuit.
-  const probe = [
-    "import json,pathlib,sys",
-    "import gsim_py",
-    "doc = pathlib.Path(sys.argv[1]).read_text()",
-    "loaded = json.loads(gsim_py.load_document(doc))",
-    "model = loaded['model'] if 'model' in loaded else loaded",
-    "result = json.loads(gsim_py.compile(json.dumps(model), 'general-simulator'))",
-    "net = result['netlist']",
-    "print(len([l for l in net.splitlines() if l.strip() and not l.startswith('*')]))",
-  ].join("\n");
-  try {
-    const out = execFileSync(PYTHON, ["-I", "-c", probe, documentPath], {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const lines = Number.parseInt(out.trim(), 10);
-    if (!Number.isInteger(lines) || lines <= 0) {
-      return { ok: false, reason: `compiled to ${out.trim() || "nothing"}` };
-    }
-    return { ok: true, lines };
-  } catch (error) {
-    const text = `${error.stderr ?? ""}${error.stdout ?? ""}`;
-    if (/ModuleNotFoundError: No module named 'gsim_py'/.test(text)) {
-      return { ok: null, reason: "gsim_py not installed" };
-    }
-    const last = text.trim().split("\n").filter(Boolean).pop() ?? String(error.message);
-    return { ok: false, reason: last };
+/**
+ * Compile with the engine, and hold the result to the byte.
+ *
+ * The netlist is the product. "It compiles" is a far weaker statement than "it
+ * compiles to this", and the gap between them is where a change to the engine,
+ * to an example, or to this repository's own preparation of a document goes
+ * unnoticed: a netlist with the wrong reference node, a parameter silently
+ * defaulted, a `.model` card dropped, all still compile and all still have
+ * about the same number of lines.
+ *
+ * The notes are held to the byte too. They are the decisions the compiler made
+ * *for* the user -- the DC references it adds for nodes nothing else ties down
+ * -- and an unreferenced node does not fail a solve, it returns a different
+ * answer. A note appearing or disappearing is therefore a change in what the
+ * circuit means, which is exactly the class of change an expectation file is
+ * for.
+ */
+function compilesToTheExpectedNetlist(engine, compileDocument, name, documentPath) {
+  const expectedNetlist = join(EXPECTED_DIR, `${name}.net`);
+  const expectedNotes = join(EXPECTED_DIR, `${name}.notes.txt`);
+  if (!existsSync(expectedNetlist) || !existsSync(expectedNotes)) {
+    return {
+      ok: false,
+      reason:
+        "has no recorded expectation. Compile it and commit the result:\n" +
+        `      ${expectedNetlist}\n      ${expectedNotes}\n` +
+        "    See examples/expected-netlists/README.md.",
+    };
   }
+
+  let result;
+  try {
+    result = compileDocument(engine, readFileSync(documentPath, "utf8"));
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+
+  const problems = [];
+  const netlist = readFileSync(expectedNetlist, "utf8");
+  if (result.netlist !== netlist) {
+    problems.push(
+      `the netlist differs from ${name}.net${firstDifference(netlist, result.netlist)}`,
+    );
+  }
+  const notes = readFileSync(expectedNotes, "utf8");
+  const actualNotes = result.notes.map((note) => `${note}\n`).join("");
+  if (actualNotes !== notes) {
+    problems.push(
+      `the compiler notes differ from ${name}.notes.txt\n` +
+        `      expected ${notes.split("\n").filter(Boolean).length}, got ${result.notes.length}` +
+        result.notes.map((note) => `\n        + ${note}`).join(""),
+    );
+  }
+  if (problems.length > 0) {
+    return { ok: false, reason: problems.join("\n    ") };
+  }
+  const lines = result.netlist.split("\n").filter((line) => line.trim() && !line.startsWith("*"));
+  return { ok: true, lines: lines.length, notes: result.notes.length };
 }
 
-/**
- * Do the document's wires name ports the engine actually declares?
- *
- * The question is asked of `simulator.compiler.compile_input`, the product's own
- * function, imported from a module that deliberately imports nothing -- so this
- * gate runs with `gsim_py` alone, where `gsim_py_netlist` could not even be
- * imported (it needs `gsim-tools`, which nothing here installs yet).
- *
- * Reported rather than failed when the packages are absent, same contract as
- * `compiles` below: a developer's bare checkout stays usable, and CI installs
- * them so the arm is real there.
- */
-function portsAreDeclared(documentPath) {
-  const probe = [
-    "import json,pathlib,sys",
-    "import gsim_py",
-    "from simulator.compiler.compile_input import (",
-    "    assert_ports_are_declared, declared_ports_from_catalog, prepare_document)",
-    "declared = declared_ports_from_catalog(json.loads(gsim_py.catalog()))",
-    // `prepare_document` is the product's own step, not a copy of it: whatever
-    // the compiler is handed at Run time is what gets checked here.
-    "prepared = prepare_document(json.loads(pathlib.Path(sys.argv[1]).read_text()))",
-    "assert_ports_are_declared(prepared['model'], declared)",
-    "print(sum(1 for _ in prepared['model'].get('wires', [])))",
-  ].join("\n");
-  try {
-    const out = execFileSync(PYTHON, ["-I", "-c", probe, documentPath], {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { ok: true, wires: Number.parseInt(out.trim(), 10) };
-  } catch (error) {
-    const text = `${error.stderr ?? ""}${error.stdout ?? ""}`;
-    // Matches a submodule too (`simulator.compiler.compile_input`), which is what
-    // a venv holding an older build of the package reports -- the same thing as
-    // "not installed" for this arm's purposes, and worth naming so the reader
-    // knows to reinstall rather than hunt for a wiring fault.
-    const absent = text.match(/No module named '((?:gsim_py|simulator|numpy|scipy)[^']*)'/);
-    if (absent) {
-      return { ok: null, reason: `${absent[1]} is not installed in ${PYTHON}` };
+/** Where two texts first diverge, as a line number and the two lines. */
+function firstDifference(expected, actual) {
+  const a = expected.split("\n");
+  const b = actual.split("\n");
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if (a[i] !== b[i]) {
+      return (
+        `, first at line ${i + 1}:\n` +
+        `      expected: ${a[i] === undefined ? "(end of netlist)" : JSON.stringify(a[i])}\n` +
+        `      actual:   ${b[i] === undefined ? "(end of netlist)" : JSON.stringify(b[i])}`
+      );
     }
-    const last = text.trim().split("\n").filter(Boolean).pop() ?? String(error.message);
-    return { ok: false, reason: last.replace(/^ValueError: /, "") };
   }
+  return "";
 }
 
 /**
@@ -356,6 +370,18 @@ function sortKeys(value) {
 
 // ---------------------------------------------------------------------------
 
+const ENGINE_DIR = engineDir();
+let engine = null;
+let compileDocument = null;
+let engineReason = "";
+try {
+  const loader = await import(pathToFileURL(join(ENGINE_DIR, "node.js")).href);
+  engine = await loader.loadEngine();
+  compileDocument = loader.compileDocument;
+} catch (error) {
+  engineReason = error instanceof Error ? error.message : String(error);
+}
+
 const { canonical, aliases } = loadCatalog();
 const files = readdirSync(EXAMPLES_DIR)
   .filter((name) => name.endsWith(".gsim_sch"))
@@ -367,6 +393,20 @@ if (files.length === 0) {
 }
 
 const failures = [];
+
+// The engine is not optional. Every arm that matters compiles, the bundle is
+// committed, and loading it needs nothing installed -- so "no engine" is a
+// broken checkout, not a reduced-capability one, and reporting it as a skip
+// would turn this whole script into a check that cannot fail.
+if (engine === null) {
+  failures.push(
+    `the WebAssembly engine at ${ENGINE_DIR} did not load — ${engineReason}\n` +
+      "  Rebuild it with `node scripts/build-gsim-wasm.mjs`, or check it with\n" +
+      "  `node scripts/check-gsim-wasm-fresh.mjs --check`.",
+  );
+} else {
+  console.log(`engine: gsim-core ${engine.version()} (WebAssembly, ${ENGINE_DIR})`);
+}
 
 for (const file of files) {
   const name = file.replace(/\.gsim_sch$/, "");
@@ -433,27 +473,35 @@ for (const file of files) {
     console.log(`  ✗ the editor cannot open it — ${loads.reason}`);
   }
 
-  const ports = portsAreDeclared(path);
-  if (ports.ok === true) {
-    console.log(`  · all ${ports.wires} wires land on declared ports`);
-  } else if (ports.ok === null) {
-    console.log(`  · ports not checked (${ports.reason})`);
-  } else {
-    failures.push(`${name}: a wire names a port the engine does not declare — ${ports.reason}`);
-    console.log(`  ✗ ${ports.reason}`);
-  }
-
-  const compiled = compiles(path);
-  if (compiled.ok === true) {
-    console.log(`  · compiles to ${compiled.lines} netlist lines`);
-  } else if (compiled.ok === null) {
-    console.log(`  · not compiled (${compiled.reason})`);
-  } else {
-    failures.push(`${name}: does not compile — ${compiled.reason}`);
-    console.log(`  ✗ does not compile — ${compiled.reason}`);
+  if (engine !== null) {
+    const compiled = compilesToTheExpectedNetlist(engine, compileDocument, name, path);
+    if (compiled.ok) {
+      console.log(
+        "  · compiles to the recorded netlist, byte for byte " +
+          `(${compiled.lines} lines, ${compiled.notes} note(s))`,
+      );
+    } else {
+      failures.push(`${name}: ${compiled.reason}`);
+      console.log(`  ✗ ${compiled.reason}`);
+    }
   }
 
   console.log(`  · ${regenerates(name, path, failures)}`);
+}
+
+// An expectation with no example is a file nothing holds to anything, and the
+// likeliest reason for one is an example renamed or deleted without its
+// expectation -- after which this script would happily report everything OK.
+if (existsSync(EXPECTED_DIR)) {
+  const documented = new Set(files.map((file) => file.replace(/\.gsim_sch$/, "")));
+  for (const file of readdirSync(EXPECTED_DIR).sort()) {
+    const name = file.replace(/\.(net|notes\.txt)$/, "");
+    if (name !== file && !documented.has(name)) {
+      failures.push(
+        `expected-netlists/${file} has no examples/${name}.gsim_sch — delete it or restore the example`,
+      );
+    }
+  }
 }
 
 console.log("");
