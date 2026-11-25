@@ -27,6 +27,7 @@
 
 pub mod decimate;
 pub mod manifest;
+pub mod ranges;
 pub mod samples;
 pub mod source;
 
@@ -34,6 +35,7 @@ pub mod source;
 pub mod wasm;
 
 pub use manifest::{DataKind, Document};
+pub use ranges::{PrefetchedBytes, RecordingBytes, Span};
 pub use samples::SamplesSource;
 pub use source::{Slice, WaveformSource};
 
