@@ -11,7 +11,7 @@
 import * as vscode from "vscode";
 
 import type { GsimHost } from "./host";
-import type { KernelConfig, WebviewRole } from "./protocol";
+import type { WebviewRole } from "./protocol";
 
 /**
  * `publisher.name` from package.json. Kept in one place: when the manifest
@@ -34,9 +34,6 @@ export interface GsimTestApi {
   ): Promise<T>;
   /** Await the next message of `type` arriving from `role`. */
   nextMessage<T = unknown>(role: WebviewRole, type: string, timeoutMs?: number): Promise<T>;
-  /** The live kernel sidecar config, if it has started. */
-  kernelConfig(): KernelConfig | null;
-  startKernel(): Promise<KernelConfig | null>;
   /**
    * What the run-output channel has been given (#139).
    *
@@ -138,9 +135,6 @@ export function createTestApi(host: GsimHost): GsimTestApi {
       const channel = host.runOutput as { entries?: { level: string; text: string }[] };
       return [...(channel.entries ?? [])];
     },
-
-    kernelConfig: () => host.kernel.current,
-    startKernel: () => host.kernel.start(),
   };
 }
 

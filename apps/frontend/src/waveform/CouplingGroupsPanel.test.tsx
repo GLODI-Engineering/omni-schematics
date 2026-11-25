@@ -11,7 +11,6 @@ describe("FE-116 CouplingGroupsPanel", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     render(<CouplingGroupsPanel />);

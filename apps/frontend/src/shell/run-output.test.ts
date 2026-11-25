@@ -68,11 +68,11 @@ describe("reportRunOutput", () => {
 
   it("carries the source through, so the host can label it", () => {
     installFakeHost();
-    reportRunLine("kernel", "error", "no interpreter at that path");
+    reportRunLine("solver", "error", "no solver binary at that path");
     expect(posted).toEqual([
       {
         type: "gsim/output",
-        lines: [{ source: "kernel", severity: "error", text: "no interpreter at that path" }],
+        lines: [{ source: "solver", severity: "error", text: "no solver binary at that path" }],
       },
     ]);
   });

@@ -31,7 +31,6 @@ function seed(): string {
     axes: new Map(),
     couplingGroups: new Map(),
     signalCache: new Map(),
-    streamingSignals: new Set(),
     activeAxesId: null,
   });
   const store = useWaveformStore.getState();

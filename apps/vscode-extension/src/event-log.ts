@@ -1,8 +1,8 @@
 /**
  * The engine's rule-event stream, read back from the JSONL file it writes.
  *
- * A port of `packages/simulator/src/simulator/postprocess/event_log.py`, kept
- * faithful. `general-simulator` reports what a run *found* -- a rating
+ * Ported from `simulator/postprocess/event_log.py`, which is deleted (#162),
+ * so this is the reader. `general-simulator` reports what a run *found* -- a rating
  * exceeded, a dead time too short, a volt-second balance drifting -- as one
  * JSON object per line beside the waveform, and the record shapes are its own
  * `book/dev-guide/src/output-contract.md` §L3.

@@ -11,7 +11,6 @@ describe("FE-111 FigureManager", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     render(<FigureManager />);
@@ -35,7 +34,6 @@ describe("FE-111 FigureManager", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     render(<FigureManager />);
@@ -55,7 +53,6 @@ describe("FE-111 FigureManager", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
     const s = useWaveformStore.getState();
     const figA = s.createFigure("A", 1, 1);

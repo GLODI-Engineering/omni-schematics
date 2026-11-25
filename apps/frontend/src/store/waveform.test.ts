@@ -1,13 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("../ipc/transport", () => ({
-  getIpcClient: () => ({
-    waveformGet: vi.fn().mockResolvedValue({
-      time: [0, 1],
-      traces: [{ values: [1, 2] }],
-    }),
-  }),
-}));
+import { describe, expect, it } from "vitest";
 
 import type { Block, ModelDocument } from "../model/types";
 import { useGraphStore } from "./graph";
@@ -20,7 +11,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -46,7 +36,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -70,7 +59,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -95,7 +83,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -115,7 +102,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -149,7 +135,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -177,7 +162,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -201,7 +185,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -227,7 +210,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -245,7 +227,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -269,7 +250,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -290,7 +270,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -313,7 +292,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -343,7 +321,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -365,7 +342,6 @@ describe("FE-110/116/118 waveform store", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
 
     const s = useWaveformStore.getState();
@@ -379,72 +355,6 @@ describe("FE-110/116/118 waveform store", () => {
     expect(entry?.xMax).toBe(5);
     expect(entry?.yMin).toBe(-2);
     expect(entry?.yMax).toBe(2);
-  });
-
-  it("appends streaming chunks and marks streaming lifecycle", () => {
-    useWaveformStore.setState({
-      figures: new Map(),
-      axes: new Map(),
-      couplingGroups: new Map(),
-      signalCache: new Map(),
-      streamingSignals: new Set(),
-    });
-
-    const key = "sim-1::V(out)";
-    const s = useWaveformStore.getState();
-    s.markStreaming(key);
-    s.appendChunk(key, [1, 2, 3]);
-    s.appendChunk(key, [4, 5]);
-
-    const cached = useWaveformStore.getState().signalCache.get(key);
-    expect(Array.from(cached?.values ?? [])).toEqual([1, 2, 3, 4, 5]);
-
-    s.markStreamingDone(key);
-    expect(useWaveformStore.getState().streamingSignals.has(key)).toBe(false);
-  });
-
-  it("BE-54: appendChunk populates time from x so the chart can render live", () => {
-    useWaveformStore.setState({
-      figures: new Map(),
-      axes: new Map(),
-      couplingGroups: new Map(),
-      signalCache: new Map(),
-      streamingSignals: new Set(),
-    });
-
-    const key = "sim-1::V(out)";
-    const s = useWaveformStore.getState();
-    s.appendChunk(key, [1, 2], [0, 1e-6]);
-    s.appendChunk(key, [3], [2e-6]);
-
-    const cached = useWaveformStore.getState().signalCache.get(key);
-    expect(Array.from(cached?.values ?? [])).toEqual([1, 2, 3]);
-    expect(Array.from(cached?.time ?? [])).toEqual([0, 1e-6, 2e-6]);
-  });
-
-  it("BE-54: markStreamingDone drops the live cache entry so fetchSignal re-fetches authoritative data", async () => {
-    useWaveformStore.setState({
-      figures: new Map(),
-      axes: new Map(),
-      couplingGroups: new Map(),
-      signalCache: new Map(),
-      streamingSignals: new Set(),
-    });
-
-    const key = "sim-1::V(out)";
-    const s = useWaveformStore.getState();
-    s.appendChunk(key, [1, 2], [0, 1e-6]);
-    s.markStreamingDone(key);
-
-    // fetchSignal is async (awaits waveformGet) — flush microtasks.
-    await Promise.resolve();
-    await Promise.resolve();
-
-    const cached = useWaveformStore.getState().signalCache.get(key);
-    // The mocked waveformGet() returns time:[0,1] values:[1,2] — distinct
-    // from the live-streamed [0,1e-6]/[1,2] pair, proving the cache was
-    // replaced by a real fetchSignal() call rather than left as-is.
-    expect(Array.from(cached?.time ?? [])).toEqual([0, 1]);
   });
 });
 
@@ -473,7 +383,6 @@ describe("#98 a measured trace is marked as one", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
     useGraphStore.getState().loadDocument(documentWith([]));
   }
@@ -525,14 +434,22 @@ describe("#98 a measured trace is marked as one", () => {
     expect(cache.get("run-1::V_out")?.measured).toBe(false);
   });
 
-  it("replaces the placeholder metadata a streamed stub was cached with", () => {
-    // A signal delivered as live chunks arrives with `analysis: "transient"`,
-    // `quantity: "dimensionless"` and no unit, because a chunk frame carries
-    // a name and numbers. `fetchSignal` returns early for a signal already
-    // cached, so before this the placeholders were what an AC run was drawn
-    // and labelled with.
+  it("replaces the placeholder metadata a signal was cached with", () => {
+    // A signal can reach the cache before anything says what it is, and the
+    // placeholders are `analysis: "transient"`, `quantity: "dimensionless"`
+    // and no unit. Before this they were what an AC run was drawn and
+    // labelled with.
     reset();
-    useWaveformStore.getState().appendChunk("run-2::V_in", [1, 2], [0, 1]);
+    useWaveformStore.getState().cacheSignal("run-2", "V_in", {
+      simId: "run-2",
+      name: "V_in",
+      analysis: "transient",
+      quantity: "dimensionless",
+      unit: "",
+      domain: "time",
+      time: new Float64Array([0, 1]),
+      values: new Float64Array([1, 2]),
+    });
     expect(useWaveformStore.getState().signalCache.get("run-2::V_in")?.analysis).toBe("transient");
 
     useWaveformStore.getState().applySignalMetadata("run-2", [

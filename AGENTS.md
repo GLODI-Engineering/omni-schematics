@@ -24,17 +24,25 @@ If you are fighting a gate, the gate is probably right.
 apps/frontend         React/Vite webview bundles — the canvas, inspector,
                       library, waveform viewer and symbol editor
 apps/vscode-extension The extension host: custom editor, views, commands,
-                      kernel lifecycle
-apps/kernel-sidecar   Python process the extension spawns; speaks WebSocket
+                      and the solver it spawns on Run
 packages/             gsim-wasm (the engine, built to WebAssembly — the
-                      editor's compiler), webview-protocol (TypeScript);
-                      Python libraries — schemas, simulator, gsim-model
+                      editor's compiler), waveform-wasm (the decimator and
+                      the `.gsim_samples` reader), webview-protocol, schemas
+crates/waveform-store The decimator and container reader, in Rust
 docs/                 specs/ (architecture), guides/, decisions/, journal/
 tests/                cross-package integration, e2e, validation
 ```
 
-Languages: TypeScript (pnpm workspace), Python (uv workspace). The single
-source of truth for cross-language schemas is `packages/schemas/definitions/`.
+Languages: TypeScript (pnpm workspace) and Rust (`crates/waveform-store`). The
+single source of truth for schemas is `packages/schemas/definitions/`.
+
+**There is no Python in this repository** beyond `examples/build_*.py`, the
+generators that author the committed examples with `gsim-tools` from a venv of
+your own. `apps/kernel-sidecar/` and the `packages/` that served it —
+`simulator`, `gsim-model` and the Python half of `schemas` — are deleted, with
+the root `pyproject.toml` and `uv`; `docs/DEVELOPMENT.md` §2 says where each
+part went. Nothing the editor does starts an interpreter, and a change that
+would reintroduce one needs to say so out loud.
 
 ## Invariant 0a — `general-simulator` is the contract
 
@@ -110,7 +118,7 @@ Do not reintroduce that.
 ## Architectural invariants
 
 1. **Optimistic canvas.** `apps/frontend/src/canvas/` never synchronously
-   awaits the solver/compiler/kernel. All such interaction is async.
+   awaits the solver or the compiler. All such interaction is async.
    → `docs/agent-rules/architecture-invariants.md#optimistic-canvas`
 
 2. ~~**Smooth component models only.**~~ *Retired in #155.* It governed
@@ -159,7 +167,7 @@ Conventional Commits enforced by the `commit-msg` hook. Types: `feat`,
 
 ```
 feat(canvas): add orthogonal wire router
-fix(kernel): handle stdout chunks > 64KB
+fix(solver): handle stdout chunks > 64KB
 refactor!: rename IR-1 schema fields
 ```
 

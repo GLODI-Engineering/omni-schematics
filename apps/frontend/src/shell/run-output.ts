@@ -1,8 +1,9 @@
 /**
  * Forward a run's output to the extension host, for VS Code's Output panel.
  *
- * #139. The webview talks to the kernel over its own socket, so the host sees
- * nothing of a run unless it is told. Everything here is additive: output still
+ * #139. What the webview knows about a run — the netlist it compiled, a sheet
+ * that would not compile — is known only to the webview, so the host sees
+ * nothing of it unless it is told. Everything here is additive: output still
  * goes to the webview's own Output tab exactly as before, because that tab is
  * the only one a browser-hosted shell has.
  *

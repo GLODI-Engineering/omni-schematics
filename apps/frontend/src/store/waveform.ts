@@ -1,6 +1,5 @@
 import { create } from "zustand";
 
-import { getIpcClient } from "../ipc/transport";
 import type { SignalDetail } from "../ipc/types";
 import { fileSourceBlockIds } from "../waveform/measured";
 import type { MeasurementKey } from "../waveform/measurements";
@@ -90,7 +89,6 @@ export interface WaveformState {
   historyLimit: number;
   couplingGroups: Map<string, CouplingGroup>;
   signalCache: Map<string, WaveformSignal>;
-  streamingSignals: Set<string>;
 
   // Figure actions
   createFigure: (name: string, rows: number, cols: number) => string;
@@ -120,18 +118,14 @@ export interface WaveformState {
   /** FE-164: empty an axes' signals and reset its zoom/cursor state, leaving id/figureId/row/col/mode/couplingGroupId untouched. */
   clearAxes: (axesId: string) => void;
   cacheSignal: (simId: string, name: string, data: WaveformSignal) => void;
-  fetchSignal: (simId: string, signalName: string) => Promise<void>;
   /**
    * Take what the run's manifest says about its signals.
    *
-   * Two things were wrong without this. A signal delivered as live chunks is
-   * cached as a stub carrying `analysis: "transient"`, `quantity:
-   * "dimensionless"` and no unit, because a binary chunk frame holds a name
-   * and numbers and nothing else -- and `fetchSignal` returns early for a
-   * signal already in the cache, so the real metadata never replaced it. An
-   * AC run whose signals streamed therefore kept transient labels. And
-   * nothing recorded which block produced a trace, which is the only honest
-   * way to know that one of them is a measurement rather than a result.
+   * Two things were wrong without this. A signal arriving without metadata is
+   * cached carrying `analysis: "transient"`, `quantity: "dimensionless"` and
+   * no unit, so an AC run's traces kept transient labels. And nothing recorded
+   * which block produced a trace, which is the only honest way to know that
+   * one of them is a measurement rather than a result.
    */
   applySignalMetadata: (simId: string, details: SignalDetail[]) => void;
 
@@ -178,24 +172,6 @@ export interface WaveformState {
   setAxesCursor: (axesId: string, cursor: "A" | "B" | "AH" | "BH", value: number) => void;
   setAxesPanMode: (axesId: string, panMode: boolean) => void;
   propagateZoom: (axesId: string, xMin: number, xMax: number, yMin: number, yMax: number) => void;
-
-  // Streaming
-  markStreaming: (signalId: string) => void;
-  markStreamingDone: (signalId: string) => void;
-  /**
-   * Append a chunk of values (from a waveform_chunk IPC message) to the
-   * cached signal identified by signalId (format: "simId::signalName").
-   * Creates a stub WaveformSignal in the cache when the first chunk arrives.
-   * Triggers a store update so Axes components re-render via their selectors.
-   *
-   * `x` carries the exact per-point sweep-axis value (time/frequency/
-   * parameter) for each entry in `values` — required for the chart to
-   * actually render while streaming (BE-54): without it `time` stays empty
-   * and Axes treats the signal as having no data. Omitting `x` keeps the
-   * pre-BE-54 behavior (values accumulate but nothing renders until the
-   * signal is later replaced by a full fetchSignal() load).
-   */
-  appendChunk: (signalId: string, values: ArrayLike<number>, x?: ArrayLike<number>) => void;
 }
 
 /** The cache with every signal belonging to `simIds` removed. */
@@ -221,7 +197,6 @@ export const useWaveformStore = create<WaveformState>((set, get) => ({
   historyLimit: DEFAULT_HISTORY_LIMIT,
   couplingGroups: new Map(),
   signalCache: new Map(),
-  streamingSignals: new Set(),
 
   createFigure: (name, rows, cols) => {
     const id = _uuid();
@@ -334,7 +309,7 @@ export const useWaveformStore = create<WaveformState>((set, get) => ({
   },
 
   addSignalToAxes: (axesId, simId, signalName) => {
-    const { signalCache, axes } = get();
+    const { axes } = get();
     const axesEntry = axes.get(axesId);
     if (!axesEntry) return;
 
@@ -349,10 +324,13 @@ export const useWaveformStore = create<WaveformState>((set, get) => ({
       return { axes: axesMap };
     });
 
-    const cacheKey = _signalCacheKey(simId, signalName);
-    if (!signalCache.has(cacheKey)) {
-      void get().fetchSignal(simId, signalName);
-    }
+    // Nothing is fetched here. A signal reaches this store before an axes can
+    // name it: the viewer reads windows of the run's `.gsim_samples` container
+    // and caches what it read (#157), and this used to call a `fetchSignal`
+    // that asked the kernel sidecar for `manifest.json` and a `.npy` over HTTP
+    // -- routes the sidecar stopped serving, and then stopped existing (#194,
+    // #162). Its `catch` was silent by design, so a cache miss here would have
+    // drawn an empty trace rather than said anything.
   },
 
   removeSignalFromAxes: (axesId, simId, signalName) => {
@@ -498,14 +476,7 @@ export const useWaveformStore = create<WaveformState>((set, get) => ({
       axesMap.set(axesId, { ...entry, signals: refs });
       return { axes: axesMap };
     });
-    // Kick off fetches for any uncached signals.
-    const { signalCache, fetchSignal } = get();
-    for (const { simId, signalName } of signals) {
-      const key = _signalCacheKey(simId, signalName);
-      if (!signalCache.has(key)) {
-        void fetchSignal(simId, signalName);
-      }
-    }
+    // No fetch for an uncached signal, for the reason `addSignalToAxes` gives.
   },
 
   clearAxes: (axesId) => {
@@ -567,39 +538,6 @@ export const useWaveformStore = create<WaveformState>((set, get) => ({
       }
       return changed ? { signalCache } : {};
     });
-  },
-
-  fetchSignal: async (simId, signalName) => {
-    const cacheKey = _signalCacheKey(simId, signalName);
-    if (get().signalCache.has(cacheKey)) return;
-
-    try {
-      const slice = await getIpcClient().waveformGet(simId, [signalName]);
-      const trace = slice.traces[0];
-      if (!trace) return;
-
-      const signal: WaveformSignal = {
-        simId,
-        name: signalName,
-        // BE-47 metadata comes from the manifest via waveformGet(); these
-        // literals are only the fallback for callers/fixtures that omit it
-        // (previously always hardcoded here regardless of the real
-        // analysis type, which broke Bode-mode axis labeling for AC runs —
-        // every signal looked like a plain transient/time-domain trace).
-        analysis: trace.analysis ?? "transient",
-        quantity: trace.quantity ?? "dimensionless",
-        unit: trace.unit ?? "",
-        domain: trace.domain ?? "time",
-        time: new Float64Array(slice.time),
-        values: new Float64Array(trace.values),
-        ...(trace.block === undefined ? {} : { blockId: trace.block }),
-        ...(trace.port === undefined ? {} : { portId: trace.port }),
-        measured: trace.block !== undefined && _fileSourceIds().has(trace.block),
-      };
-      get().cacheSignal(simId, signalName, signal);
-    } catch {
-      // Fetch failures are silent — the axes will show no data for this signal.
-    }
   },
 
   createCouplingGroup: (name, lockX, lockY) => {
@@ -760,88 +698,6 @@ export const useWaveformStore = create<WaveformState>((set, get) => ({
       }
 
       return { axes: axesMap };
-    });
-  },
-
-  markStreaming: (signalId) => {
-    set((state) => {
-      const streamingSignals = new Set(state.streamingSignals);
-      streamingSignals.add(signalId);
-      return { streamingSignals };
-    });
-  },
-
-  markStreamingDone: (signalId) => {
-    set((state) => {
-      const streamingSignals = new Set(state.streamingSignals);
-      streamingSignals.delete(signalId);
-      // BE-54: drop the client-accumulated cache entry so the next read
-      // goes through fetchSignal() and lands on the authoritative,
-      // pyramidal-HDF5-backed data (with real LOD support for zoom/pan)
-      // instead of permanently serving the raw array assembled from live
-      // WS chunks — fetchSignal() is a no-op whenever the cache already
-      // has an entry for the key, so without this the finished signal
-      // would never pick up the real backend data.
-      const signalCache = new Map(state.signalCache);
-      signalCache.delete(signalId);
-      return { streamingSignals, signalCache };
-    });
-
-    const separatorIdx = signalId.indexOf("::");
-    if (separatorIdx >= 0) {
-      const simId = signalId.slice(0, separatorIdx);
-      const name = signalId.slice(separatorIdx + 2);
-      void get().fetchSignal(simId, name);
-    }
-  },
-
-  appendChunk: (signalId, values, x) => {
-    set((state) => {
-      const signalCache = new Map(state.signalCache);
-      const existing = signalCache.get(signalId);
-      const xValues = x ?? [];
-
-      const concat = (base: Float64Array, extra: ArrayLike<number>): Float64Array => {
-        const merged = new Float64Array(base.length + extra.length);
-        merged.set(base, 0);
-        for (let i = 0; i < extra.length; i++) {
-          merged[base.length + i] = extra[i] ?? 0;
-        }
-        return merged;
-      };
-
-      let updated: WaveformSignal;
-      if (existing) {
-        updated = {
-          ...existing,
-          values: concat(existing.values, values),
-          time: concat(existing.time, xValues),
-        };
-      } else {
-        // First chunk for this signal: derive simId and name from the cache key.
-        const separatorIdx = signalId.indexOf("::");
-        const simId = separatorIdx >= 0 ? signalId.slice(0, separatorIdx) : signalId;
-        const name = separatorIdx >= 0 ? signalId.slice(separatorIdx + 2) : signalId;
-        updated = {
-          simId,
-          name,
-          analysis: "transient",
-          quantity: "dimensionless",
-          unit: "",
-          domain: "time",
-          time: new Float64Array(xValues),
-          values: new Float64Array(values),
-        };
-      }
-
-      signalCache.set(signalId, updated);
-
-      // Also mark the signal as streaming if not already tracked.
-      const streamingSignals = state.streamingSignals.has(signalId)
-        ? state.streamingSignals
-        : new Set(state.streamingSignals).add(signalId);
-
-      return { signalCache, streamingSignals };
     });
   },
 }));

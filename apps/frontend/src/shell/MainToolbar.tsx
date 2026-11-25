@@ -41,7 +41,6 @@ export interface MainToolbarProps {
 }
 
 export function MainToolbar({ onAction }: MainToolbarProps) {
-  const status = useIpcStore((state) => state.status);
   const runStartedAt = useIpcStore((state) => state.runStartedAt);
   const tEnd = useSimSettingsStore((state) => state.settings.tEnd);
 
@@ -50,7 +49,11 @@ export function MainToolbar({ onAction }: MainToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => attachHorizontalWheelScroll(toolbarRef.current), []);
 
-  const busy = status === "busy" || runStartedAt !== null;
+  // A run in flight, and nothing else. This used to be
+  // `status === "busy" || runStartedAt !== null`, where `status` was the kernel
+  // connection's; there is no kernel (#162), and `runStartedAt` is set on the
+  // way into a run and cleared on the way out.
+  const busy = runStartedAt !== null;
 
   // Wall-clock elapsed, ticking while a run is in flight.
   //

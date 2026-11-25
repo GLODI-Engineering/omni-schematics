@@ -5,7 +5,6 @@ import { wireKindOf } from "./canvas/wire-kind";
 import { serialize } from "./file/serializer";
 import { ComponentParamsPanel } from "./inspector/ComponentParamsPanel";
 import { Inspector } from "./inspector/Inspector";
-import { getIpcClient } from "./ipc/transport";
 import { QuickInsert } from "./library/QuickInsert";
 import { loadCatalogFromManifest } from "./library/catalog";
 import { createBlockFromMetadata } from "./library/insert";
@@ -56,7 +55,6 @@ import { ShellDialogs } from "./shell/ShellDialogs";
 import { StartupModal } from "./shell/StartupModal";
 import { ToastHost } from "./shell/ToastHost";
 import { useGraphStore, useIpcStore, useLibraryStore, useToastStore, useUiStore } from "./store";
-import type { KernelStatus } from "./store/ipc";
 
 import "./styles/app.css";
 
@@ -992,7 +990,6 @@ export default function App() {
   const paramPanelBlockId = useUiStore((state) => state.paramPanelBlockId);
   const closeParamPanel = useUiStore((state) => state.closeParamPanel);
   const setCatalog = useLibraryStore((state) => state.setCatalog);
-  const setStatus = useIpcStore((state) => state.setStatus);
   const pushDiagnostic = useToastStore((state) => state.pushDiagnostic);
   const _setLastManifest = useIpcStore((state) => state.setLastManifest);
   const inspectorVisible = useUiStore((state) => state.secondarySideBarVisible);
@@ -1293,14 +1290,6 @@ export default function App() {
     globalThis.addEventListener("gensim:scaffold-diagnostic", onDiagnostic);
     return () => globalThis.removeEventListener("gensim:scaffold-diagnostic", onDiagnostic);
   }, [pushDiagnostic]);
-
-  useEffect(() => {
-    const ipc = getIpcClient();
-    const unsubscribeStatus = ipc.subscribe("kernel_status", (status) => {
-      setStatus(status as KernelStatus);
-    });
-    return unsubscribeStatus;
-  }, [setStatus]);
 
   // Which editor surface this shell shows.
   //

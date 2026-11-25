@@ -81,17 +81,6 @@ export function onHostMessage(handler: (message: WebviewBoundMessage) => void): 
 }
 
 /**
- * Publish the kernel sidecar's port + token onto the globals that
- * `ipc/client.ts` reads. Mirrors what the Tauri bootstrap does with
- * `get_kernel_config`.
- */
-export function applyKernelConfig(kernel: { port: number; token: string }): void {
-  const globals = globalThis as Record<string, unknown>;
-  globals.__KERNEL_PORT__ = kernel.port;
-  globals.__KERNEL_TOKEN__ = kernel.token;
-}
-
-/**
  * Ask the extension host for a workspace file's text.
  *
  * Used to show what ports a scripted block's source looks like it expects.

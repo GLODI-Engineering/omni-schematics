@@ -19,7 +19,6 @@
 
 export type {
   HostBoundMessage,
-  KernelConfig,
   RunEventSummary,
   RunFailureKind,
   RunRequest,

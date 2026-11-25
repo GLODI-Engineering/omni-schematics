@@ -2,8 +2,9 @@
 
 Hosts the General Simulator frontend (`apps/frontend`) inside VS Code, so
 schematic capture and simulation live next to the Python / C / Octave files
-that back `octfunc` / `octblock` / `cscript` blocks, with VS Code's own
-language tooling.
+that back `pyblock` / `octfunc` / `cscript` blocks, with VS Code's own language
+tooling. Those are the engine's business, not this extension's: nothing here
+runs an interpreter.
 
 ## What it contributes
 
@@ -13,17 +14,19 @@ language tooling.
 | Webview view | `omniSchematics.library` | `library/LibraryActivity.tsx` (no `PrimarySideBar` wrapper — VS Code supplies the sidebar chrome) |
 | Custom editor | `omniSchematics.schematic` for `*.gsim_sch` | `canvas/Canvas.tsx` + the rest of `canvas/**` in a `WebviewPanel`; real `CustomEditorProvider` save / save-as / revert / hot-exit backup |
 | Command | `General Simulator: Show Waveforms` | `waveform/WaveformTab.tsx` in a webview **panel** — see `src/waveformPanel.ts` for why this is not a second custom editor |
-| Command | `General Simulator: Restart Simulation Kernel` | restarts the kernel-sidecar child process |
-| Command | `General Simulator: Show Kernel Log` | the extension's output channel |
+| Command | `Omni Schematics: Show Log` | the extension's output channel |
 | Command | `General Simulator: New Schematic` | creates and opens a `.gsim_sch` |
 
 ## Architecture
 
 ```
 VS Code extension host (Node)
-├── KernelSidecar          src/kernel.ts      spawns `<kernelPython> -m kernel_sidecar --port 0`
-│                                             and parses `KERNEL_READY port=… token=…`
-├── GsimHost               src/host.ts        webview registry + cross-webview drag broker
+├── GsimHost               src/host.ts        webview registry, drag broker, and the run path
+│   ├── solver-path.ts                        finds the general-simulator binary
+│   ├── solver-run.ts                         spawns it, streams stdout and stderr apart
+│   ├── event-log.ts                          reads what the run's rules found
+│   ├── result-manifest.ts                    writes the .gsim_sim_result
+│   └── samples-read.ts                       serves byte ranges of the container
 ├── LibraryViewProvider    src/libraryView.ts WebviewView in the Activity Bar
 ├── SchematicEditorProvider src/schematicEditor.ts CustomEditorProvider for *.gsim_sch
 └── WaveformPanel          src/waveformPanel.ts   singleton results panel
@@ -34,11 +37,12 @@ webviews (Vite bundles from apps/frontend)
 └── waveform.html  -> src/vscode/waveform-main.tsx
 ```
 
-The frontend still talks to `kernel-sidecar` over a plain
-`ws://127.0.0.1:<port>` WebSocket (`apps/frontend/src/ipc/client.ts`) — that is
-host-agnostic and unchanged. Only *who spawns the sidecar and how the webview
-learns its port + token* differs: the extension host injects
-`window.__GSIM_INIT__.kernel` and pushes `gsim/kernelConfig` on every restart.
+The frontend used to talk to a `kernel-sidecar` process over a plain
+`ws://127.0.0.1:<port>` WebSocket, which the extension host spawned on
+activation and whose port and token it injected as
+`window.__GSIM_INIT__.kernel`. There is no such process (#162) and no socket:
+everything that crosses a boundary here is `postMessage`, declared once in
+`packages/webview-protocol/src/index.ts`.
 
 ## Cross-webview drag and drop
 
@@ -102,8 +106,9 @@ resolving; the Vite bundle loading under the injected CSP; React mounting and
 rendering real DOM; the catalog loading; dirty-state via
 `onDidChangeCustomDocument` and `saveCustomDocument` writing bytes to disk; the
 full `GsimHost` drag fan-out; the canvas drop handler inserting a block from a
-genuine `DragEvent` with an empty `DataTransfer`; and the kernel sidecar
-spawning and completing its handshake.
+genuine `DragEvent` with an empty `DataTransfer`; and a run against a real
+`general-simulator` binary reaching a real result, with no interpreter on the
+machine.
 
 **What it does not prove:** the browser's own pointer hit-testing that decides
 which iframe receives `dragover`/`drop` during a *physical* mouse drag between
@@ -140,14 +145,18 @@ what catches a bundle that has quietly reintroduced the need for it.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `omniSchematics.kernelPython` | `""` | **Required.** Virtualenv directory, or an interpreter inside one, that has the kernel packages installed. Empty means no kernel: the start fails naming this setting. Build one with `node scripts/make-kernel-venv.mjs`. |
-| `omniSchematics.autoStartKernel` | `true` | Start the sidecar on activation. |
+| `omniSchematics.generalSimulatorPath` | `""` | The `general-simulator` binary. The only setting a run reads. Empty means search: `GENSIM_GENERAL_SIMULATOR_PATH`, then `PATH`, then a sibling checkout. |
+| `omniSchematics.solverTimeoutSeconds` | `600` | Abandon a run still going after this long; `0` waits indefinitely. |
+| `omniSchematics.octaveCliPath` | `""` | The `octave-cli` binary, for `octfunc` / `octblock` blocks. Its directory goes to the front of the solver's `PATH`. |
+| `omniSchematics.pythonPath` | `[]` | Extra directories on the solver's `PYTHONPATH`, so a `pyblock` can import your own modules. Does not choose an interpreter. |
+| `omniSchematics.environment` | `{}` | Extra environment variables for the solver and everything it starts. Applied last, so it wins. |
+| `omniSchematics.overrideVsCodeKeybindings` | `true` | Let the schematic's chords beat VS Code's while a schematic is focused. |
 
-There is no discovery and no fallback (#141). The extension runs
-`<interpreter> -m kernel_sidecar --port 0 --token <hex> --connect-timeout 0` and
-nothing else, so a kernel that will not start is a question about that one
-environment rather than about the editor.
+Two settings are gone (#162): `omniSchematics.kernelPython`, the Python
+environment the kernel ran in, and `omniSchematics.autoStartKernel`, which
+started it on activation. So are `GENSIM_KERNEL_PORT` and
+`GENSIM_KERNEL_TOKEN`, which attached the editor to a kernel you had started
+yourself.
 
-`GENSIM_KERNEL_PORT` + `GENSIM_KERNEL_TOKEN` override auto-spawn entirely: set
-both and the extension attaches to a kernel you started yourself instead of
-spawning one, which is how the integration tests drive it.
+Nothing is started at activation any more. The extension spawns one child
+process, `general-simulator`, when you press Run.

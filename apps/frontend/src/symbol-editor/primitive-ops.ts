@@ -1,10 +1,12 @@
 import type { Primitive } from "../canvas/nodes/primitive-renderer";
 
-/** Shift every coordinate field of *primitive* by (dx, dy). Mirrors the
- * per-kind field handling gsim_model.symbol.Primitive.translate() uses on
- * the Python side (packages/gsim-model/src/gsim_model/symbol.py) — kept
- * independent since this operates on the frontend's own Primitive union,
- * not the Python dataclasses. */
+/** Shift every coordinate field of *primitive* by (dx, dy).
+ *
+ * This mirrored the per-kind field handling of
+ * `gsim_model.symbol.Primitive.translate()`, and was kept independent of it
+ * because it operates on the frontend's own `Primitive` union rather than on
+ * Python dataclasses. That package is deleted (#162), so this is the only
+ * implementation and has nothing to stay in step with. */
 export function translatePrimitive(primitive: Primitive, dx: number, dy: number): Primitive {
   switch (primitive.type) {
     case "line":

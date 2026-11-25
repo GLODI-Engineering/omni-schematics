@@ -1038,25 +1038,6 @@ textarea:focus-visible {
   flex-shrink: 0;
 }
 
-.signal-row__streaming {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #22c55e;
-  animation: signal-pulse 1s ease-in-out infinite;
-}
-
-@keyframes signal-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-
 /* ── Signal Browser context menu ─────────────────────────────────────────── */
 
 .signal-browser__context-menu {

@@ -9,16 +9,16 @@ the practical counterpart to the architecture specs in `docs/specs/`.
 ## Table of contents
 
 1. [Environment setup](#1-environment-setup)
-2. [Python workspace](#2-python-workspace)
+2. [There is no Python workspace](#2-there-is-no-python-workspace)
 3. [TypeScript / Node workspace](#3-typescript--node-workspace)
-4. [Backend development](#4-backend-development)
+4. [There is no backend to develop](#4-there-is-no-backend-to-develop)
 5. [Frontend development](#5-frontend-development)
 6. [Schema system](#6-schema-system)
 7. [Block catalog](#7-block-catalog)
 8. [Testing reference](#8-testing-reference)
 9. [CI gates](#9-ci-gates)
 10. [Pre-commit hooks](#10-pre-commit-hooks)
-11. [IPC message reference](#11-ipc-message-reference)
+11. [There is no IPC message reference](#11-there-is-no-ipc-message-reference)
 12. [Type system notes](#12-type-system-notes)
 13. [Agent / AI workflow](#13-agent--ai-workflow)
 14. [Debugging tips](#14-debugging-tips)
@@ -31,12 +31,17 @@ the practical counterpart to the architecture specs in `docs/specs/`.
 ### Required tools
 
 ```
-Python  ≥ 3.11
-uv      ≥ 0.5       (python package manager + workspace runner)
 Node.js ≥ 20 LTS
 pnpm    = 9.12.0    (enforced by packageManager field)
 Rust    stable      (crates/waveform-store, and the sibling gsim-core)
 ```
+
+Python is **not** on that list, and that is the point of the milestone #162
+closed. Nothing in this repository is a Python package, nothing it builds needs
+an interpreter, and nothing it ships spawns one. The only Python here is
+`examples/build_*.py`, the generators that author the committed example
+documents with `gsim-tools`; they want **CPython ≥ 3.11** in a venv of your own
+and are needed only if you change an example.
 
 Install pnpm via corepack (already bundled with Node):
 
@@ -45,68 +50,62 @@ corepack enable
 corepack prepare pnpm@9.12.0 --activate
 ```
 
-Install uv:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
 ### First-time bootstrap
 
 ```bash
 git clone https://github.com/GLODI-Engineering/omni-schematics && cd omni-schematics
 
-# Python: create .venv and install all workspace members + dev deps
-uv sync
-
-# Node: install all packages across the pnpm workspace
+# Everything: all packages across the pnpm workspace
 pnpm install
 
-# Install git hooks (ruff, mypy, pytest pre-commit gate)
-uv run pre-commit install --install-hooks
+# Install git hooks (biome, invariants, conventional commits)
+pre-commit install --install-hooks
 
 # Playwright browser binaries
 npx playwright install
 ```
 
-After this, `.venv/` is usable directly or via `uv run <cmd>`.
+One command, where there used to be two plus a `uv sync`. If you also want to
+run an example generator:
+
+```bash
+python -m venv .venv
+.venv/bin/pip install 'gsim-tools @ git+https://github.com/GLODI-Engineering/gsim-tools'
+.venv/bin/pip install <path-to>/gsim_py-*.whl     # to compile in-process as well
+```
+
+`scripts/check-examples.mjs` picks that interpreter up from `.venv/` or from
+`GSIM_PYTHON`, and says "generator did not run" rather than failing when there
+is none.
 
 ---
 
-## 2. Python workspace
+## 2. There is no Python workspace
 
-The workspace root is `pyproject.toml`. Members:
+There was one, rooted at `pyproject.toml` and holding four members:
+`kernel-sidecar` (the IPC server process), `simulator` (solver adapters and
+post-processing), `gsim-model` (`.gsim_sym` component authoring) and the Python
+half of `schemas`. All four are deleted, with the root `pyproject.toml`,
+`uv.lock`, `conftest.py`, `scripts/make-kernel-venv.mjs`, `scripts/build.sh`,
+`scripts/dev.sh`, `tests/backend/`, `.github/workflows/backend.yml` and
+`ci.yml`'s `python` job (#162).
 
-| Member | Path | Purpose |
-|--------|------|---------|
-| `kernel-sidecar` | `apps/kernel-sidecar/` | IPC server process |
-| `simulator` | `packages/simulator/` | Solver adapters + postprocess. **Not a compiler** since #158: the editor compiles with `gsim-core` in WebAssembly (`packages/gsim-wasm`) and this process is handed netlist text. |
-| `gsim-model` | `packages/gsim-model/` | `.gsim_sym` component authoring. Its Python document model went with #158; the engine declares the document. |
-| `schemas` | `packages/schemas/` | (reserved for Python schema gen) |
+Where each piece went, because none of it was dropped on the floor:
 
-Read from `pyproject.toml`'s `[tool.uv.workspace] members` on 2026-11-25. Five rows this table
-used to carry are gone. `blocks` has no `packages/blocks/`, and `engine-xyce` never existed as
-a directory at all — it described a Xyce subprocess wrapper for a direction this project
-dropped. `components`, `kernel-core` and `synthesis` were real directories holding no code:
-every `.py` in them was an empty `__init__.py` and nothing imported them, so #155 deleted
-them. What they were reserved for — device models and netlist emission — lives in the Rust
-engine, which is the point of the engine being Rust.
+| What it did | Where it is now |
+|---|---|
+| compiled a `.gsim_sch` to a netlist | `gsim-core`, built to WebAssembly and committed in `packages/gsim-wasm` (#158) |
+| found and ran the solver | `apps/vscode-extension/src/solver-path.ts` and `solver-run.ts` (#159) |
+| decimated a waveform | `crates/waveform-store`, committed as WebAssembly in `packages/waveform-wasm` (#157) |
+| read the solver's rule events | `apps/vscode-extension/src/event-log.ts` |
+| computed Bode margins | `apps/frontend/src/waveform/bode-margins.ts` |
+| served windows of samples over HTTP | nothing: the viewer reads the `.gsim_samples` container directly (#157, #163) |
+| wrote `manifest.json` + `data.h5` | the solver writes the container; the host writes the `.gsim_sim_result` beside it |
+| ran a Python REPL for the Workspace tab | `gsim-tools` in a venv you own (#161) |
 
-### Running Python tools
-
-Always use `uv run` to stay in the workspace virtual environment:
-
-```bash
-uv run pytest                        # run all tests in testpaths
-uv run ruff check .                  # lint everything
-uv run ruff format .                 # format everything
-uv run mypy apps/ packages/ --ignore-missing-imports
-```
-
-### Adding a Python dependency
-
-Add to the relevant member's `pyproject.toml` under `[project.dependencies]`,
-then run `uv sync` at the workspace root.
+Scripting a schematic is still Python and is still supported. It happens in
+*your* environment, with `gsim-tools`, and the README's **Scripting a
+schematic** section is the reference.
 
 ---
 
@@ -148,93 +147,35 @@ npx vitest                             # watch mode
 
 ---
 
-## 4. Backend development
+## 4. There is no backend to develop
 
-### Module map
+The module map that was here described `apps/kernel-sidecar/` and
+`packages/simulator/` — a WebSocket server, an IPC dispatcher, a simulate
+handler, solver adapters, an IR-1/IR-2 lowering pipeline and a result writer.
+None of it exists (#162); §2 above says where each part went.
 
-```
-apps/kernel-sidecar/src/kernel_sidecar/
-├── __main__.py            Entry point (argparse: --port, --token, --workdir, --connect-timeout)
-├── server.py              Async WS server; HTTP/WS dispatch; connect-timeout
-├── config/
-│   └── settings.py        JSON settings file (atomic write-tmp+rename)
-├── ipc/
-│   ├── envelope.py        Message dataclass; MessageType StrEnum
-│   ├── dispatch.py        Handler registry; routes by message type
-│   ├── handshake.py       Token verification (hmac.compare_digest)
-│   └── handlers/
-│       └── simulate.py    Full pipeline orchestration (background task)
-                           (waveform/ is gone -- #157: the viewer reads the solver's
-                           .gsim_samples container through the extension host, so the
-                           sidecar serves no LOD frames and has no HTTP surface at all)
-
-packages/simulator/src/simulator/
-├── compiler/              Empty of compiling since #158 -- see its __init__.py. What is
-│                          left is `simulation_extract`, which belongs to the old ir1
-│                          pipeline and is reached by nothing in the product.
-├── ir/
-│   ├── ir1.py             IR1 dataclasses (IR1Block, IR1Connection, IR1Graph)
-│   └── ir2.py             IR2 dataclasses (state_layout, output_layout, eval_order)
-├── equation_templates/
-│   ├── protocol.py        BlockEquations ABC (state_vars, derivatives)
-│   └── loader.py          Discovers + imports all equations.py under packages/blocks/
-├── solvers/
-│   ├── protocol.py        SolverBackend ABC; CancelToken; ProgressCallback; ResultBundle
-│   ├── scipy_solver.py    ScipySolver (Radau, rtol=1e-6, atol=1e-9, dense_output)
-│   ├── path_discovery.py  find_solver(): explicit → settings → env var → PATH → error
-│   └── xyce_solver.py     XyceSolver stub (raises NotImplementedError on solve())
-├── selection/
-│   └── auto_select.py     select_backend(): routes control IR-2 → ScipySolver
-└── postprocess/
-    ├── result_writer.py   ResultBundle → manifest.json + time.npy + signals/*.npy
-    └── __init__.py
-```
-
-### Key flows
-
-#### Simulation pipeline
+A run, end to end, with nothing between the document and the engine:
 
 ```
 the webview (apps/frontend/src/shell/run.ts)
   ├─ initEngine()                      → gsim-core, as WebAssembly
   ├─ compileSchematic(engine, model)   → netlist text + the compiler's notes
-  └─ execute({type: "simulate", netlist, ...})
+  └─ postToHost({ type: "gsim/runSimulation", request })
        │
        ▼
-handle_simulate (IPC handler)
-  │ spawns background task
-  ▼
-_do_simulate
-  ├─ GeneralSimulatorSolver.from_discovery()
-  ├─ backend.solve(netlist, opts)   → ResultBundle
-  └─ result_writer.write(bundle)    → the result container + manifest
+the extension host (apps/vscode-extension/src/run-simulation.ts)
+  ├─ resolveSolver()                   → the general-simulator binary
+  ├─ spawn it with --format samples --events, streaming both pipes
+  ├─ readEventLog()                    → what the run *found*
+  └─ write .gsim_sim_result beside the .gsim_samples the solver produced
+       │
+       ▼
+the viewer (apps/frontend/src/results/, crates/waveform-store as WebAssembly)
+  └─ plan the byte ranges a window needs → the host reads them → draw
 ```
 
-Nothing between the document and the compiler, on either side: that is the point
-of #158, and the reason `scripts/check-examples.mjs` imports
-`packages/gsim-wasm/compile.js` rather than reimplementing the route.
-
-#### There is no execute path
-
-`handle_execute` and the `kernel/` package it drove are gone (#161). The kernel
-ran a Python REPL for the editor's Workspace tab -- a persistent namespace with
-`np`, `scipy`, `plt`, `pd` and `sympy` pre-imported, stdout streamed back per
-request, and matplotlib figures captured off an Agg canvas as base64 PNGs.
-
-Scripting a schematic is now `gsim_tools` in an environment the user owns; see
-the README's **Scripting a schematic** section. The kernel answers `simulate`
-and nothing else.
-
-### Startup sequence
-
-```
-__main__.py
-  ├─ parse --port, --token, --workdir, --connect-timeout
-  ├─ bind ws://127.0.0.1:<port>
-  ├─ print "KERNEL_READY port=<N> token=<hex>"   ← the extension host watches stdout
-  └─ serve (single-connection rule: second client → code 4000)
-       └─ verify_handshake → dispatch → handlers
-```
+Three processes used to be four, and the one that left was the only
+interpreter.
 
 ---
 
@@ -329,23 +270,20 @@ apps/frontend/src/
 │       ├── IndexedDbAdapter.ts IndexedDB, for the webview's own secondary state
 │       ├── idb-schema.ts       Object-store schema + version migrations
 │       └── select-adapter.ts   Returns the one adapter there is; see its own doc comment
-├── ipc/
-│   ├── client.ts            WebSocket client; streaming; Promise resolution
-│   ├── binary-frame.ts      128-byte header + raw bytes decoder
-│   ├── types.ts             TypeScript envelope types
-│   ├── transport.ts         Boot-time: stub vs real WS based on VITE_IPC_TRANSPORT
-│   ├── error-map.ts         Translates known kernel tracebacks to user messages
-│   └── stub/
-│       ├── stub-kernel.ts   In-process fake kernel (VITE_IPC_TRANSPORT=stub)
-│       └── fixtures.ts      Canned responses + stub waveform manifest
+├── ipc/                    (the socket client, the binary frame decoder, the
+│   │                        transport and the stub kernel are gone -- #162)
+│   ├── types.ts             What a run says about its signals
+│   ├── vscode-host.ts       postMessage to the extension host, and the init payload
+│   ├── vscode-protocol.ts   The host-bound half of @gensim/webview-protocol
+│   └── vscode-theme.ts      Follows VS Code's own theme variables
 ├── waveform/
-│   ├── WaveformTab.tsx      uPlot host; auto-opens on simulate_result
+│   ├── WaveformTab.tsx      uPlot host; auto-opens when a run finishes
 │   ├── SignalLegend.tsx     Trace legend; toggle visibility
 │   ├── cursor.ts            Crosshair cursor; instantaneous value readout
 │   ├── decimator.ts         crates/waveform-store in WebAssembly: the one decimator
 │   └── register.ts          Registers core.waveform in BottomTabRegistry
 ├── output/
-│   ├── OutputTab.tsx        Streams execute_stream chunks from IPC store
+│   ├── OutputTab.tsx        The run's own output, as the store received it
 │   ├── LogView.tsx          Virtualized log; auto-scroll; per-stream filter
 │   └── register.ts          Registers core.output in BottomTabRegistry
 ├── problems/
@@ -553,25 +491,15 @@ runtime — no registration needed on the Python side.
 
 ### Backend tests
 
-| File | Epic | Tests | What it covers |
-|------|------|-------|----------------|
-| `test_cli.py` | BE-01 | 6 | Argparse, help output, port/token args |
-| `test_settings.py` | BE-01 | 12 | Settings round-trip, concurrent write safety |
-| `test_server.py` | BE-02 | ~35 | Single-connection rule, unknown-type error, handler dispatch |
-| `test_envelope.py` | BE-02 | ~10 | Message dataclass round-trips |
-| `test_handshake.py` | BE-03 | 4 | Good/bad token, KERNEL_READY stdout |
-| `test_binary_frame.py` | BE-09 | 15 | Header parse, round-trip dtypes |
-| `test_template_loader.py` | BE-10 | 4 | Discovery, bad import isolation, state_count mismatch |
-| `test_equations.py` | BE-11 | 28 | Edge cases per block; closed-form checks |
-| `test_ir1_builder.py` | BE-12 | 4 | Empty model, fixture topology, sum ports, float rejects |
-| `test_ir2_lowering.py` | BE-13 | 6 | Closed-loop ok, algebraic loop rejected, layout sizes |
-| `test_scipy_compiler.py` | BE-14 | 6 | dx shape, gain/integrator numerics, determinism |
-| `test_scipy_solver.py` | BE-15 | 4 | LP step-response, rtol/atol override, cancel |
-| `test_result_writer.py` | BE-16 | 8 | Round-trip npy, manifest schema, duplicate guard |
-| `test_simulate.py` | BE-18 | 3 | Happy path, algebraic-loop error, cancel mid-solve |
-| `test_solver_selection.py` | BE-21 | 5 | Control → ScipySolver, circuit → NotImplementedError |
-| `test_path_discovery.py` | BE-22 | 6 | env-var, settings-file, PATH, not-found error |
-| `tests/backend/e2e/` | BE-23 | 3 | Real sidecar smoke, timing, circuit xfail |
+There are none, and there is no backend: the table that was here covered 150-odd
+tests over `apps/kernel-sidecar/` and `packages/simulator/`, deleted with them
+(#162). `tests/backend/e2e/` went too, and #202 is why it is not missed — its
+two end-to-end tests had never once run in CI, because the job skipped them for
+want of a solver binary and reported a tick. What replaced them is a real VS
+Code driven by `@vscode/test-electron`, with a pinned solver release
+downloaded for it and a grep over its own log so a skipped suite fails the job.
+
+---
 
 ### Frontend tests (Vitest)
 
@@ -623,9 +551,6 @@ runtime — no registration needed on the Python side.
 | `file/export.test.ts` | FE-29b | 3 |
 | `file/import.test.ts` | FE-29b | 1 |
 | `file/round-trip.test.ts` | FE-30 | 2 |
-| `ipc/client.test.ts` | FE-31 | 3 |
-| `ipc/binary-frame.test.ts` | FE-31 | 3 |
-| `ipc/stub/stub-kernel.test.ts` | FE-32 | 3 |
 | `waveform/WaveformTab.test.tsx` | FE-35 | 2 |
 | `output/register.test.tsx` | #170 | 3 |
 | `results/samples-source.test.ts` | #157 | 7 |
@@ -695,12 +620,6 @@ is what makes an e2e run reproducible.
 The full gate set (enforced by pre-commit and `.github/workflows/`):
 
 ```
-┌─ Python ──────────────────────────────────────────────┐
-│  ruff check .                  lint                   │
-│  ruff format --check .         format                 │
-│  mypy apps/ packages/ …        types                  │
-│  pytest -q                     all Python tests       │
-└───────────────────────────────────────────────────────┘
 ┌─ TypeScript ──────────────────────────────────────────┐
 │  pnpm lint:check               Biome lint             │
 │  cd apps/frontend              typecheck              │
@@ -718,10 +637,21 @@ The full gate set (enforced by pre-commit and `.github/workflows/`):
 └───────────────────────────────────────────────────────┘
 ┌─ Invariants ──────────────────────────────────────────┐
 │  ./scripts/check-invariants.sh Epetra, async, smooth  │
-│  (FE-07, planned) keymap drift check                  │
-│  (FE-02, planned) schema codegen drift check          │
+│  check-keymap.mjs              keymap drift           │
+│  codegen:check                 schema codegen drift   │
+│  gen-keybindings.mjs --check   keybinding drift       │
+│  check-gsim-wasm-fresh.mjs     the committed engine    │
+│  check-waveform-wasm-fresh.mjs the committed decimator │
+│  check-examples.mjs --check    every example compiles  │
 └───────────────────────────────────────────────────────┘
 ```
+
+There is no Python box. There was one — `ruff`, `mypy` and `pytest` over
+`apps/` and `packages/` — and it went with the packages it checked (#162).
+`release.yml` carries one more gate than `ci.yml` does: every example compiled
+through the committed WebAssembly engine **with no interpreter reachable from
+the step at all**, which is the successor to the nine-wheel compile gate that
+0.7.0 shipped without.
 
 An epic reaches `complete` status only when **all** gates are green
 for its touched code. The `progress.*.yaml` files track status.
@@ -734,56 +664,33 @@ for its touched code. The `progress.*.yaml` files track status.
 
 | Hook | What it checks |
 |------|----------------|
-| `ruff` | Python lint + format check |
-| `mypy` | Python type check |
+| `biome-check` | TS / JS / JSON lint + format |
+| `cargo-fmt` | `crates/waveform-store` formatting |
 | `check-invariants` | Architectural invariants (see AGENTS.md §2) |
+| `gotchas-index` | `docs/gotchas/INDEX.md` is regenerated |
 | `commit-msg` | Conventional Commits format |
+
+`ruff` and `mypy` were two more, over Python that no longer exists (#162).
 
 **Never bypass with `--no-verify`.** If a hook fails, fix the root
 cause. The hook caught a real problem.
 
 ---
 
-## 11. IPC message reference
+## 11. There is no IPC message reference
 
-### Frontend → Kernel
+The table that was here listed a WebSocket protocol — `handshake`, `simulate`,
+`simulate_cancel` out; `kernel_status`, `simulate_progress`, `simulate_result`,
+`waveform_chunk`, `waveform_done` back — spoken to a Python process over a
+token-gated socket on `127.0.0.1`. There is no such process and no such socket
+(#162).
 
-| `type` | `payload` | Description |
-|--------|-----------|-------------|
-| `handshake` | `{ token: string }` | First message; token from CLI |
-| `simulate` | `{ model: ModelDocument, options? }` | Run simulation |
-| `simulate_cancel` | `{ id: string }` | Cancel a running simulation |
-
-Three of these and seven replies left with the REPL (#161): `execute`,
-`execute_cancel`, `workspace_get`, `kernel_restart` and `completion_request`
-outbound, and `execute_result`, `execute_stream`, `workspace_update`,
-`workspace_value`, `plot_ready` and `completion_reply` back. An unknown `type`
-is answered with `execute_error`, which keeps its name because it is the
-dispatcher's one error channel rather than part of the REPL.
-
-### Kernel → Frontend
-
-| `type` | `payload` | Description |
-|--------|-----------|-------------|
-| `kernel_status` | `{ state: "idle"\|"busy" }` | Status transitions |
-| `execute_error` | `{ exc_type: string, message: string, traceback: string }` | Unknown message type, or an unhandled handler exception |
-| `simulate_progress` | `{ frac: number }` | Progress in [0, 1] |
-| `simulate_result` | `{ status, sim_id, signals, … }` | Simulation complete |
-| `waveform_chunk` | binary frame | A window of one signal, streamed live |
-| `waveform_done` | `{ signal_id, manifest_entry }` | One signal finished streaming |
-
-### Simulation options
-
-```typescript
-interface SimulateOptions {
-  t_start?: number;   // default 0.0
-  t_end?: number;     // default 10.0
-  n_samples?: number; // default 3000
-  method?: string;    // default "Radau"
-  rtol?: number;      // default 1e-6
-  atol?: number;      // default 1e-9
-}
-```
+What crosses a boundary now is `postMessage` between a webview and the
+extension host, and it is declared in exactly one place:
+**`packages/webview-protocol/src/index.ts`**. Both sides import that file, so
+the union *is* the reference and cannot drift from it;
+`apps/vscode-extension/src/protocol.test.ts` asserts the extension's
+types-only re-export still agrees with the package.
 
 ---
 
@@ -791,11 +698,9 @@ interface SimulateOptions {
 
 ### Python (mypy)
 
-Config is in `pyproject.toml` under `[tool.mypy]`. Key settings:
-
-- `warn_return_any = true` — returning `Any` from a typed function is an error
-- `warn_unused_ignores = true` — stale `# type: ignore` comments are errors
-- `disallow_untyped_defs = true` — all functions must be typed
+Gone with the Python (#162). `mypy`'s configuration lived in the root
+`pyproject.toml`, which is deleted; the example generators under `examples/`
+are the only Python left and are not type-checked by any gate.
 
 **Known patterns:**
 
@@ -875,52 +780,49 @@ counts.
 
 ## 14. Debugging tips
 
-### Watching sidecar output
+### Watching what a run did
+
+Everything a run says is in VS Code's Output panel, in two channels: **General
+Simulator** for the extension's own lifecycle (what it resolved, what it
+spawned, what it refused) and the run channel for the solver's own stdout and
+stderr, kept apart and labelled. `Omni Schematics: Show Log` opens the first.
+
+The exact command line is printed before every run, so a failure can be
+reproduced by pasting it into a terminal — which is the fastest way to tell an
+editor problem from an engine one.
+
+### Testing one message by hand
+
+The snippet that was here opened a WebSocket to `127.0.0.1`, sent a
+`handshake` and then a `simulate`, and printed the frames that came back. There
+is no socket and no server (#162).
+
+The equivalent is two steps, each runnable on its own, which is most of the
+reason the path was moved:
 
 ```bash
-uv run python -m kernel_sidecar --port 9001 --token deadbeef... 2>&1
+# 1. the compile, with no editor: the committed WebAssembly engine, five examples
+node scripts/check-examples.mjs
+
+# 2. the run, with no editor: exactly what the host spawns
+general-simulator netlist.cir --mode transient --tfinal 2m --dt 20n \
+  --format samples --out run.gsim_samples --events events.jsonl
 ```
 
-Set `GENSIM_LOG_LEVEL=DEBUG` to enable verbose IPC logging.
-
-### Testing a single IPC message
-
-```python
-import asyncio, websockets, json, secrets
-
-TOKEN = secrets.token_hex(32)
-# (start sidecar with --port 9001 --token TOKEN)
-
-async def main():
-    async with websockets.connect("ws://127.0.0.1:9001") as ws:
-        await ws.send(json.dumps({"id":"h","type":"handshake","payload":{"token":TOKEN}}))
-        print(await ws.recv())
-        await ws.send(
-            json.dumps(
-                {
-                    "id": "r1",
-                    "type": "simulate",
-                    "payload": {"netlist": "* rc\nR1 in out 1k\nC1 out 0 1u\n.tran 1u 1m\n.end\n"},
-                }
-            )
-        )
-        while True:
-            msg = json.loads(await ws.recv())
-            print(msg)
-            if msg["type"] in ("simulate_result", "execute_error"):
-                break
-
-asyncio.run(main())
-```
+Step 2's argument list is `solver-run.ts`'s `transientArgs`, and the host
+prints it verbatim before every run.
 
 ### Frontend stub mode
 
 ```bash
-VITE_IPC_TRANSPORT=stub pnpm --filter @gensim/frontend dev
+pnpm --filter @gensim/frontend dev
 ```
 
-The stub kernel responds with canned data — no Python process needed.
-Useful for UI-only work.
+The dev server needs nothing running beside it. `VITE_IPC_TRANSPORT=stub`
+used to select a stub kernel that answered with canned data, which was how
+UI-only work avoided starting a Python process; there is no process to avoid
+(#162), and the browser harness simply has no run path — pressing Run outside
+VS Code reports that there is no host to run on.
 
 ### Running a single Playwright test
 
@@ -938,7 +840,6 @@ Add `--debug` for Playwright inspector.
 |---------|---------|-----|
 | Float coordinate in model | Serialiser throws `TypeError` | Use `Math.round()` before writing position |
 | Mutating React Flow state directly | Canvas desyncs from graph store silently | Always go through graph-store mutations |
-| Blocking the event loop in a handler | Simulate cancel never arrives | Use `asyncio.create_task` for long-running work |
 | Adding `type: ignore` for `import-untyped` with `--ignore-missing-imports` | Immediate "unused type: ignore" mypy error | The flag already silences import errors; remove the comment |
 | `json.load()` as `→ dict` | `no-any-return` error | Assign to explicit `result: dict[str, Any]` first |
 | Missing None guard after `payload.get(key)` in a background task | `Any | None` passed where concrete type expected | Add a local None guard even if the outer function checked it |

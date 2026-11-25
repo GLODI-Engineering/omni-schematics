@@ -3,7 +3,6 @@
  * Provider (`omniSchematics.schematic`, registered for `*.gsim_sch`).
  *
  * Responsibilities:
- * - bootstrap the kernel sidecar connection from the extension host,
  * - install the cross-webview drag bridge so library drags land here,
  * - own the `.gsim_sch` document lifecycle handshake (load / dirty / save /
  *   revert) against the Custom Editor API on the host side.
@@ -15,7 +14,6 @@ import { replayForwardedChord } from "./forwarded-chord";
 import App from "../App";
 import { installCrossWebviewDnd } from "../canvas/dnd";
 import { serialize } from "../file/serializer";
-import { initKernelFromVsCode } from "../ipc/transport";
 import { getWebviewInit, onHostMessage, postToHost } from "../ipc/vscode-host";
 import { followVsCodeTheme } from "../ipc/vscode-theme";
 import { loadCatalogFromManifest } from "../library/catalog";
@@ -99,7 +97,6 @@ function installDocumentBridge(): () => void {
 
 function boot(): void {
   followVsCodeTheme();
-  initKernelFromVsCode();
   installCrossWebviewDnd();
 
   if (Object.keys(useLibraryStore.getState().catalog).length === 0) {

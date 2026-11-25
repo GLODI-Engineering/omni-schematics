@@ -1,6 +1,6 @@
 /**
- * Shared extension-host state: the kernel sidecar, the live webview registry,
- * and the cross-webview drag broker.
+ * Shared extension-host state: the run a webview asked for, the live webview
+ * registry, and the cross-webview drag broker.
  *
  * ## Why a broker at all
  *
@@ -29,8 +29,6 @@ import path from "node:path";
 
 import * as vscode from "vscode";
 
-import { KernelSidecar } from "./kernel";
-import { buildKernelEnvironment } from "./kernel-environment";
 import {
   type HostBoundMessage,
   type RunRequest,
@@ -44,6 +42,7 @@ import {
 import { type LevelledChannel, createRunOutputChannel, writeRunOutput } from "./run-output";
 import { runSimulation } from "./run-simulation";
 import { SamplesReadError, readSamplesRanges } from "./samples-read";
+import { buildSolverEnvironment } from "./solver-environment";
 import { resolveSolver } from "./solver-path";
 import {
   SYMBOLS_DIR,
@@ -93,7 +92,6 @@ export function relativeSource(uri: string | undefined): string | undefined {
 }
 
 export class GsimHost implements vscode.Disposable {
-  readonly kernel: KernelSidecar;
   private readonly webviews = new Set<RegisteredWebview>();
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -146,21 +144,10 @@ export class GsimHost implements vscode.Disposable {
      */
     readonly runOutput: LevelledChannel = createRunOutputChannel(vscode.window),
   ) {
-    this.kernel = new KernelSidecar(log);
     this.disposables.push(
-      this.kernel,
       this.onShowWaveformsEmitter,
       this.onDidWebviewReadyEmitter,
       this.onDidReceiveEmitter,
-      this.kernel.onDidChange((config) => {
-        this.broadcast(
-          config
-            ? { type: "gsim/kernelConfig", kernel: config }
-            : // `reason` is what makes a failed Run click explainable rather
-              // than merely failed (#130).
-              { type: "gsim/kernelStopped", reason: this.kernel.lastFailure ?? undefined },
-        );
-      }),
     );
   }
 
@@ -370,15 +357,15 @@ export class GsimHost implements vscode.Disposable {
               configured: settings.get<string>("generalSimulatorPath"),
               workspaceRoot,
             }),
-          // The settings' environment, the same one the kernel's children got:
-          // `octaveCliPath` is a directory on PATH because `octave-ffi` looks
-          // there and nowhere else, `pythonPath` reaches `pyblock`, and
-          // `environment` is the escape hatch. The solver used to inherit this
-          // from the sidecar that spawned it; it inherits it from here now.
+          // The settings' environment: `octaveCliPath` is a directory on PATH
+          // because `octave-ffi` looks there and nowhere else, `pythonPath`
+          // reaches `pyblock`, and `environment` is the escape hatch. The
+          // solver used to inherit this from the sidecar that spawned it; it
+          // inherits it from here now.
           spawn: (binary, args) =>
             spawnChild(binary, args, {
               cwd: directory,
-              env: buildKernelEnvironment({
+              env: buildSolverEnvironment({
                 base: process.env,
                 settings: {
                   generalSimulatorPath: settings.get<string>("generalSimulatorPath"),
@@ -473,7 +460,7 @@ export class GsimHost implements vscode.Disposable {
     if (failures.length > 0) {
       void vscode.window.showWarningMessage(
         `${failures.length} component file(s) in ${SYMBOLS_DIR} could not be read. ` +
-          "See General Simulator: Show Kernel Log.",
+          "See Omni Schematics: Show Log.",
       );
     }
     return metadata;
@@ -491,10 +478,6 @@ export class GsimHost implements vscode.Disposable {
     }
 
     switch (message.type) {
-      case "gsim/restartKernel":
-        void this.kernel.restart();
-        return true;
-
       // --- user-authored components --------------------------------------
       case "gsim/saveSymbol":
         void this.persistSymbol(message.name, message.metadata);
@@ -597,10 +580,10 @@ export class GsimHost implements vscode.Disposable {
           });
         return true;
 
-      // #139. A separate channel from `this.log`: that one is the kernel
-      // process's own diary -- what was spawned, its stderr, the handshake --
-      // and a run's output is what the user asked for. Mixing a solver's
-      // results into a lifecycle log makes both harder to read.
+      // #139. A separate channel from `this.log`: that one is the extension's
+      // own diary -- what it resolved, what it spawned, what it refused -- and
+      // a run's output is what the user asked for. Mixing a solver's results
+      // into a lifecycle log makes both harder to read.
       case "gsim/output":
         writeRunOutput(this.runOutput, message.lines);
         return true;
@@ -608,10 +591,6 @@ export class GsimHost implements vscode.Disposable {
       case "gsim/ready":
         this.readyRoles.add(message.role);
         this.onDidWebviewReadyEmitter.fire(message.role);
-        // Late-arriving webviews need the current kernel config immediately.
-        if (this.kernel.current) {
-          void source.postMessage({ type: "gsim/kernelConfig", kernel: this.kernel.current });
-        }
         if (message.role === "waveform" && this.lastSimId) {
           void source.postMessage({ type: "gsim/showSimulation", simId: this.lastSimId });
         }

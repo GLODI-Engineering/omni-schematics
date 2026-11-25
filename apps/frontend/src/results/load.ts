@@ -21,7 +21,6 @@ export function applyResult(result: LoadedResult): void {
     axes: new Map(),
     couplingGroups: new Map(),
     signalCache: new Map(),
-    streamingSignals: new Set(),
     // A file holds one run, so there is no history to inherit — and
     // carrying the previous file's over would offer to overlay a run from
     // a different model entirely.

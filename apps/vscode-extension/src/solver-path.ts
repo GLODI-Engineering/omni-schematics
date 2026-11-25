@@ -27,7 +27,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { solverEnvVar } from "./kernel-environment";
+import { solverEnvVar } from "./solver-environment";
 
 /** Where a resolved binary came from, so a log line can say. */
 export type SolverSource =

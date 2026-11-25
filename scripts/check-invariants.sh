@@ -54,7 +54,7 @@ check "no-epetra" \
 #    See: docs/agent-rules/architecture-invariants.md#optimistic-canvas
 # -----------------------------------------------------------------------------
 check "canvas-non-blocking" \
-    "Canvas must not synchronously await solver/compiler/kernel" \
+    "Canvas must not synchronously await the solver or the compiler" \
     grep -rEn \
         --include='*.ts' --include='*.tsx' \
         '(await[[:space:]]+(compile|solverCall|runSimulation|runSim)|blockOnSolver|synchronousCompile)' \

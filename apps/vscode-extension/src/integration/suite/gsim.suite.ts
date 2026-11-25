@@ -80,8 +80,7 @@ suite("Omni Schematics — VS Code integration", () => {
     const commands = await vscode.commands.getCommands(true);
     for (const id of [
       "omniSchematics.showWaveforms",
-      "omniSchematics.restartKernel",
-      "omniSchematics.showKernelLog",
+      "omniSchematics.showLog",
       "omniSchematics.newSchematic",
       "omniSchematics.openSchematic",
     ]) {
@@ -392,37 +391,12 @@ suite("Omni Schematics — VS Code integration", () => {
   });
 
   // -------------------------------------------------------------------------
-  suite("kernel sidecar", () => {
-    test("the extension host spawns kernel-sidecar and completes the handshake", async function () {
-      // #141: there is one way to start a kernel -- from the environment
-      // `omniSchematics.kernelPython` names -- so this test needs one to exist.
-      // CI builds it with `scripts/make-kernel-venv.mjs` and exports the path;
-      // a developer without one gets a skip rather than a failure about
-      // something they did not break.
-      if (!process.env.GSIM_KERNEL_PYTHON) {
-        this.skip();
-        return;
-      }
-      this.timeout(180_000);
-
-      const config = await api.startKernel();
-      assert.ok(config, "kernel sidecar started");
-      assert.ok(config.port > 0 && config.port <= 65535, `bound a real port (${config.port})`);
-      assert.match(config.token, /^[0-9a-f]{32}$/, "token round-tripped through KERNEL_READY");
-      assert.deepEqual(api.kernelConfig(), config, "the host cached the config");
-      // Reaching here at all is the protocol assertion: the host refuses a
-      // handshake whose `protocol=` it does not share (#134), so a kernel built
-      // from this tree by `make-kernel-venv` has just satisfied that gate.
-    });
-  });
-
-  // -------------------------------------------------------------------------
   suite("run output reaches VS Code's Output panel (#139)", () => {
     /**
-     * The whole point of testing this here rather than in a unit test: the
-     * webview opens its own socket to the kernel, so output only reaches the
-     * host because the webview forwards it. That hop is a real postMessage
-     * across a real webview boundary, and only a real VS Code has one.
+     * The whole point of testing this here rather than in a unit test: what
+     * the webview knows about a run reaches the host only because the webview
+     * forwards it. That hop is a real postMessage across a real webview
+     * boundary, and only a real VS Code has one.
      *
      * What this cannot assert is colour. VS Code renders a LogOutputChannel's
      * levels itself and exposes neither the channel's contents nor its
@@ -493,9 +467,8 @@ suite("Omni Schematics — VS Code integration", () => {
      *   the Output channel, reads its event log, writes the result document
      *   -> the webview is told where it landed.
      *
-     * Nothing in that sentence is a Python process, and nothing here starts
-     * one: `omniSchematics.autoStartKernel` is false in this workspace and the
-     * kernel is never touched.
+     * Nothing in that sentence is a Python process, and there is no longer
+     * anything in the extension that could start one (#162).
      *
      * Skipped, loudly, without a binary. `GSIM_GENERAL_SIMULATOR_PATH` names
      * one, and the launcher puts it in the workspace's own

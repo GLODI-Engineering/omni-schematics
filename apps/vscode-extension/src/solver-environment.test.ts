@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildKernelEnvironment, solverEnvVar } from "./kernel-environment";
+import { buildSolverEnvironment, solverEnvVar } from "./solver-environment";
 
 const build = (
-  settings: Parameters<typeof buildKernelEnvironment>[0]["settings"],
+  settings: Parameters<typeof buildSolverEnvironment>[0]["settings"],
   base: NodeJS.ProcessEnv = {},
   workspaceRoot?: string,
-) => buildKernelEnvironment({ base, settings, workspaceRoot, delimiter: ":" });
+) => buildSolverEnvironment({ base, settings, workspaceRoot, delimiter: ":" });
 
 describe("solverEnvVar", () => {
   it("uses underscores, because a hyphen cannot be a shell identifier", () => {

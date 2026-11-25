@@ -9,10 +9,12 @@
  *
  * So a saved component is written to `.gsim/symbols/<name>.gsim_sym` in the
  * workspace folder. One file per component, the format
- * `docs/specs/gsim-symbol-format-spec.md` defines and
- * `packages/gsim-model/src/gsim_model/gsim_sym.py` already reads and writes
- * on the Python side — so a component authored in the GUI can be loaded by a
- * script, and one authored by a script shows up in the library.
+ * `docs/specs/gsim-symbol-format-spec.md` defines — a file format and not this
+ * editor's private state, so a component authored in the GUI can be read by a
+ * script and one written by a script shows up in the library. The reader that
+ * made that concrete used to live in this repository, as
+ * `gsim_model.gsim_sym`; it is deleted with the rest of the Python (#162) and
+ * the spec is what a script follows now.
  *
  * In the workspace and not in global storage, deliberately: a component is
  * part of the design it belongs to, it should travel with the project in

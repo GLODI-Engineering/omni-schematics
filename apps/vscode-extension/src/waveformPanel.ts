@@ -1,36 +1,28 @@
 /**
  * Waveform / results viewer.
  *
- * ## Why a panel and not a second Custom Editor
+ * ## Why a panel, when `.gsim_sim_result` has a Custom Editor of its own
  *
- * The task suggested registering a second `CustomEditorProvider` for a results
- * file. Investigation of the actual pipeline says otherwise:
+ * There is one, `resultsEditor.ts`, and it is the right thing for a result a
+ * user opens by hand. This panel is for the run that *just finished*: it is
+ * triggered in the schematic webview, which hosts only the schematic, so a
+ * finished run needs somewhere to appear without the user going to find a
+ * file first.
  *
- * - `packages/simulator/src/simulator/postprocess/result_writer.py` *does*
- *   persist results, but as a **directory**: `<workdir>/results/<sim_id>/`
- *   containing `manifest.json`, `time.npy` and `signals/<block>__<port>.npy`.
- * - `apps/kernel-sidecar/.../server.py` puts that `workdir` under
- *   `$XDG_DATA_HOME/general-simulator/sidecar-workdir` (or
- *   `~/.local/share/...`) — an app-private cache **outside the user's
- *   workspace**, so it never appears in the Explorer to be double-clicked.
- * - The frontend never reads those files directly: `ipc/client.ts`'s
- *   `waveformGet(simId, signals)` fetches
- *   `http://127.0.0.1:<port>/results/<simId>/manifest.json?token=…` from the
- *   **running** sidecar's token-gated slice server, keyed by an in-memory
- *   `sim_id`.
- * - There is no single-file extension to register on; the only filename is the
- *   generic `manifest.json`, and claiming a glob over every manifest.json would hijack
- *   unrelated files in the user's workspace.
+ * It is also not one file. A run writes `.gsim/runs/<run id>/` beside the
+ * schematic (#159) and the picture is made from two of the files in there —
+ * the `.gsim_samples` container and the `.gsim_sim_result` that indexes it —
+ * so a document lifecycle (dirty / save / revert) over "the result" would be
+ * a lie for read-only derived data. Hence a singleton webview panel, opened by
+ * `General Simulator: Show Waveforms`, attached to whichever schematic editor
+ * last finished a simulation.
  *
- * A file-backed custom editor would therefore advertise a document lifecycle
- * (dirty / save / revert) that does not exist for read-only derived data that
- * is only readable while a specific kernel session is alive. So: a singleton
- * webview panel, opened by `General Simulator: Show Waveforms`, attached to
- * whichever schematic editor last finished a simulation.
- *
- * If a persisted single-file results bundle (a `.gsim_wave` export) is ever
- * added, registering a second Custom Editor for *that* becomes the right call —
- * it would reuse the same `waveform/WaveformTab` surface this panel hosts.
+ * This comment used to argue the stronger case, that there was nothing to
+ * register an editor *on*: results were written to a directory of
+ * `manifest.json` + `.npy` files under `$XDG_DATA_HOME`, outside the
+ * workspace, readable only through a running sidecar's token-gated HTTP
+ * server. None of that is true any more — the files are in the workspace, the
+ * container is self-describing, and the sidecar is gone (#162).
  */
 import * as vscode from "vscode";
 
@@ -79,15 +71,7 @@ export class WaveformPanel implements vscode.Disposable {
       this.panel = null;
     });
 
-    await renderWebview(
-      this.extensionUri,
-      panel.webview,
-      {
-        role: "waveform",
-        kernel: this.host.kernel.current ?? undefined,
-      },
-      this.host.log,
-    );
+    await renderWebview(this.extensionUri, panel.webview, { role: "waveform" }, this.host.log);
   }
 
   dispose(): void {

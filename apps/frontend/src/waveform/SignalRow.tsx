@@ -9,7 +9,6 @@ export interface SignalRowProps {
   simId: string;
   signalName: string;
   meta?: SignalMeta;
-  isStreaming: boolean;
   onContextMenu: (event: MouseEvent, simId: string, signalName: string) => void;
 }
 
@@ -26,7 +25,7 @@ function quantityIcon(quantity: string): string {
   return QUANTITY_ICONS[quantity] ?? "~";
 }
 
-export function SignalRow({ simId, signalName, meta, isStreaming, onContextMenu }: SignalRowProps) {
+export function SignalRow({ simId, signalName, meta, onContextMenu }: SignalRowProps) {
   const quantity = meta?.quantity ?? "–";
   const unit = meta?.unit ?? "–";
   const icon = quantity !== "–" ? quantityIcon(quantity) : "~";
@@ -60,7 +59,6 @@ export function SignalRow({ simId, signalName, meta, isStreaming, onContextMenu 
       </span>
       <span className="signal-row__name">{signalName}</span>
       <span className="signal-row__unit">{unit}</span>
-      {isStreaming && <span className="signal-row__streaming" aria-label="streaming" />}
     </div>
   );
 }

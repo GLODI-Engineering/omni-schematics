@@ -20,7 +20,6 @@ describe("Axes — loading-state render loop regression", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
   });
 
@@ -55,7 +54,6 @@ describe("Axes — loading-state render loop regression", () => {
       ]),
       couplingGroups: new Map(),
       signalCache: new Map(), // deliberately empty — signals still "loading"
-      streamingSignals: new Set(),
     });
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -78,7 +76,6 @@ describe("FE-160 signal drag-and-drop onto axes", () => {
       axes: new Map(),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
   });
 
@@ -92,7 +89,6 @@ describe("FE-160 signal drag-and-drop onto axes", () => {
       ]),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
   }
 
@@ -136,7 +132,6 @@ describe("FE-160 signal drag-and-drop onto axes", () => {
       ]),
       couplingGroups: new Map(),
       signalCache: new Map(),
-      streamingSignals: new Set(),
     });
     const { container } = render(<Axes axesId="ax-1" />);
     const target = container.querySelector(".axes-container") as HTMLElement;

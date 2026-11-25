@@ -9,10 +9,8 @@
  * `waveform/populate.test.ts` with `populateWaveformViewer`.
  */
 
-import { act, render } from "@testing-library/react";
-import React from "react";
+import { act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { RunButton } from "./RunButton";
 import { triggerCancel, triggerRun } from "./run";
 
 // ---------------------------------------------------------------------------
@@ -29,7 +27,6 @@ vi.mock("./run-host", () => ({
 const mockSetProblems = vi.fn();
 const mockSetActiveEditorTab = vi.fn();
 const mockAppendOutput = vi.fn();
-const mockSetSimProgress = vi.fn();
 const mockSetRunStartedAt = vi.fn();
 const mockSetLastNetlist = vi.fn();
 const mockOpenDiagnostics = vi.fn();
@@ -76,7 +73,6 @@ vi.mock("../store", () => ({
       setProblems: mockSetProblems,
       setActiveEditorTab: mockSetActiveEditorTab,
       appendOutput: mockAppendOutput,
-      setSimProgress: mockSetSimProgress,
       setRunStartedAt: mockSetRunStartedAt,
       setLastNetlist: mockSetLastNetlist,
       importedNetlist: null,
@@ -106,7 +102,6 @@ describe("Simulate flow", () => {
     mockSetProblems.mockReset();
     mockSetActiveEditorTab.mockReset();
     mockAppendOutput.mockReset();
-    mockSetSimProgress.mockReset();
     mockSetRunStartedAt.mockReset();
     isModelValid = true;
   });
@@ -159,10 +154,12 @@ describe("Simulate flow", () => {
   });
 
   it("clears the busy state whatever the outcome, so the button comes back", async () => {
+    // `runStartedAt` is the busy marker, and the only one: `simProgress` went
+    // with the kernel that was the only thing ever to report a fraction (#162).
     await act(async () => {
       await triggerRun();
     });
-    expect(mockSetSimProgress).toHaveBeenLastCalledWith(null);
+    expect(mockSetRunStartedAt).toHaveBeenLastCalledWith(null);
 
     mockRequestRun.mockResolvedValue({
       ok: false,
@@ -172,7 +169,7 @@ describe("Simulate flow", () => {
     await act(async () => {
       await triggerRun();
     });
-    expect(mockSetSimProgress).toHaveBeenLastCalledWith(null);
+    expect(mockSetRunStartedAt).toHaveBeenLastCalledWith(null);
   });
 
   it("a run that found an error says so, even though it exited cleanly", async () => {
@@ -222,27 +219,5 @@ describe("Simulate flow", () => {
       triggerCancel();
     });
     expect(mockCancelRun).toHaveBeenCalled();
-  });
-});
-
-describe("RunButton", () => {
-  it("reflects idle status with run label", () => {
-    render(React.createElement(RunButton, { status: "idle", onRun: () => {}, onCancel: () => {} }));
-    expect(document.body.textContent).toMatch(/run|simulate/i);
-  });
-
-  it("reflects busy status with stop/cancel label", () => {
-    render(React.createElement(RunButton, { status: "busy", onRun: () => {}, onCancel: () => {} }));
-    expect(document.body.textContent).toMatch(/stop|cancel/i);
-  });
-
-  it("reflects error status visually", () => {
-    const { container } = render(
-      React.createElement(RunButton, { status: "error", onRun: () => {}, onCancel: () => {} }),
-    );
-    expect(
-      container.querySelector("[data-status='error'], .error, [aria-label*='error' i]") ||
-        document.body.textContent?.match(/error/i),
-    ).toBeTruthy();
   });
 });

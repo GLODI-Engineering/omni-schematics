@@ -49,7 +49,7 @@ behavior:
   causality:         source              # source | causal | acausal | sink
   domain:            signal              # signal | electrical | thermal | mechanical | event | mixed
   state_count:       0                   # integer ≥ 0, or "dynamic"
-  equation_template: signal.constant     # resolved by packages/simulator/
+  equation_template: signal.constant     # resolved by the engine
 
 main_param: value          # optional — the Alt+Enter target
 ```
@@ -79,7 +79,7 @@ Treat these as a public API:
 ## How the simulator uses this file
 
 The frontend stops at `symbol`, `ports`, `params`, search hints, and
-`main_param`. The simulator's lowering stage (`packages/simulator/`) reads:
+`main_param`. The engine's lowering stage reads:
 
 - `behavior.causality` — to validate port directionality during IR-1
   topology construction.
