@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "model": {
+    "id": "empty",
+    "name": "Empty",
+    "grid": 20,
+    "params": [],
+    "blocks": [],
+    "wires": [],
+    "subckt_defs": [],
+    "lines": [],
+    "nets": [],
+    "simulation": {
+      "default_analysis": "tran",
+      "analyses": [
+        {
+          "id": "tran",
+          "type": "TRAN",
+          "t_start": 0.0,
+          "t_end": 0.005,
+          "t_step": 1e-07
+        }
+      ]
+    },
+    "metadata": {}
+  }
+}
