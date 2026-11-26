@@ -115,6 +115,62 @@ describe("sourceStub", () => {
     expect(parsed.note).toContain("cscript_arity");
   });
 
+  /**
+   * #236 — the stub declared a `cscript_output` the engine does not call, and it worked on
+   * Linux by accident.
+   *
+   * The engine's ABI, `general-simulator`'s `crates/cscript-ffi/src/lib.rs`, `type OutputFn`:
+   *
+   * ```rust
+   * type OutputFn = unsafe extern "C" fn(
+   *     state: *mut c_void,
+   *     input: *const f64,
+   *     in_len: i32,
+   *     dt: f64,
+   *     output: *mut f64,
+   *     out_len: i32,
+   * );
+   * ```
+   *
+   * The stub declared `(state, t, dt, in, in_len, out, out_len)`: a parameter the engine never
+   * passes, in an order the engine does not use. On x86-64 System V, integer/pointer and
+   * floating-point arguments are assigned from separate register files, so counting only the
+   * integer class both signatures put `state`, `in`, `in_len` and `out` in the same registers
+   * and `dt` in the same float register — and the wrong declaration produced numbers correct to
+   * the last digit. Measured: the two libraries agree exactly against the same RC low-pass.
+   *
+   * Windows x64 assigns the first four arguments to RCX, RDX, R8, R9 *positionally regardless
+   * of class*. Under the stub's signature the engine's `in` pointer lands in the slot the callee
+   * reads as `dt`, and the callee builds its `in` pointer out of the integer `in_len`, then
+   * dereferences it in a loop. The owner's machine is Windows.
+   *
+   * Asserted against a literal copy of the ABI rather than through a compile, because this
+   * machine has no Windows toolchain and a Linux compile cannot see the bug at all.
+   */
+  it("declares the cscript_output the engine actually calls, in the engine's order", () => {
+    const stub = sourceStub(block("extensibility.cscript", { lib: "build/ctrl.so" }));
+    expect(stub).toContain(
+      "void cscript_output(void *state, const double *in, int in_len, double dt,",
+    );
+    expect(stub).toContain("double *out, int out_len)");
+    // The parameter the engine never passes must be gone, not merely reordered.
+    expect(stub).not.toMatch(/cscript_output\([^)]*\bdouble t\b/s);
+  });
+
+  it("says a cscript block never receives absolute time, because nothing else will", () => {
+    const stub = sourceStub(block("extensibility.cscript", { lib: "build/ctrl.so" }));
+    expect(stub).toMatch(/absolute time/i);
+    expect(stub).toMatch(/as an input/i);
+  });
+
+  it("writes a build line that links libm and does not imply a single source", () => {
+    const stub = sourceStub(block("extensibility.cscript", { lib: "build/ctrl.so" }));
+    expect(stub).toContain("-lm");
+    // A real block is a thin adapter plus one or two shared sources, built with `-I` for their
+    // headers. A build line naming one `.c` teaches the wrong shape on the first contact.
+    expect(stub).toMatch(/-I/);
+  });
+
   it("writes a pyfunc whose signature is the block's input names, by position", () => {
     const b = block("extensibility.pyfunc", { path: "blocks/ctrl.py", function: "ctrl" });
     const parsed = derivePortsFor(b.type, sourceStub(b), "ctrl");
