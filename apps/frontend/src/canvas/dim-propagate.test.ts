@@ -26,10 +26,28 @@ describe("FE-65: dim-propagate", () => {
     expect(dims.get("w2")).toEqual([1]);
   });
 
-  it("test_propagate_vector: a constant=[1,2,3] → gain → scope chain produces dim [3]", () => {
+  /*
+   * The three tests that stood here asserted vector widths -- [3] through a
+   * gain, [5] out of a mux, [2]+[3] out of a demux -- from a
+   * `signal-flow.source.constant` carrying `value: [1, 2, 3]`.
+   *
+   * That document cannot exist. The catalogue declares `source.const` as
+   * `{"out": "[1]"}` with `value` of type `number`: this engine has no vector
+   * constant. The tests passed only because the catalogue had no signatures at
+   * all before gsim-core 0.6.3 and the editor's own `BUILTIN_PORT_SIGS`
+   * fallback inferred a width from the array literal -- an inference about a
+   * sheet nobody could draw.
+   *
+   * They are replaced below by what is true and worth guarding: propagation
+   * carries the declared width and does not invent one. The vector case is a
+   * real gap, filed as gsim-core#96 (a port cannot declare a width that depends
+   * on a parameter, so `state_space`'s `rows(c)` is inexpressible), and belongs
+   * back here as soon as a component can say it carries a vector.
+   */
+  it("carries the declared width along a chain, and invents none", () => {
     const model: PropagateModel = {
       blocks: [
-        { id: "c1", type: "signal-flow.source.constant", params: { value: [1, 2, 3] } },
+        { id: "c1", type: "signal-flow.source.constant", params: { value: 3 } },
         { id: "g1", type: "signal-flow.math.gain", params: { k: 2 } },
         { id: "s1", type: "signal-flow.sink.scope" },
       ],
@@ -40,51 +58,28 @@ describe("FE-65: dim-propagate", () => {
     };
 
     const dims = expectDimMap(propagate(model));
-    expect(dims.get("w1")).toEqual([3]);
-    expect(dims.get("w2")).toEqual([3]);
+    // The source declares [1]; the gain is `in: inherit` / `out: from(in)`, so
+    // the width it passes on is the one it was given rather than one of its own.
+    expect(dims.get("w1")).toEqual([1]);
+    expect(dims.get("w2")).toEqual([1]);
   });
 
-  it("test_propagate_mux: a 2-input mux fed by dim [3] and dim [2] sources produces dim [5] on its output wire", () => {
+  it("does not read a width out of a parameter's array literal", () => {
+    // The precise regression: an array in `params.value` must not become a
+    // width, because the card the engine compiles takes a scalar there. A
+    // propagation that guessed [3] here would draw a label no run could match.
     const model: PropagateModel = {
       blocks: [
         { id: "c1", type: "signal-flow.source.constant", params: { value: [1, 2, 3] } },
-        { id: "c2", type: "signal-flow.source.constant", params: { value: [4, 5] } },
-        { id: "mux", type: "routing.mux", params: { n_inputs: 2 } },
         { id: "s1", type: "signal-flow.sink.scope" },
       ],
-      wires: [
-        { id: "w1", from: { block: "c1", port: "out" }, to: { block: "mux", port: "in0" } },
-        { id: "w2", from: { block: "c2", port: "out" }, to: { block: "mux", port: "in1" } },
-        { id: "w3", from: { block: "mux", port: "out" }, to: { block: "s1", port: "in" } },
-      ],
+      wires: [{ id: "w1", from: { block: "c1", port: "out" }, to: { block: "s1", port: "in" } }],
     };
 
-    const dims = expectDimMap(propagate(model));
-    expect(dims.get("w1")).toEqual([3]);
-    expect(dims.get("w2")).toEqual([2]);
-    expect(dims.get("w3")).toEqual([5]);
+    expect(expectDimMap(propagate(model)).get("w1")).toEqual([1]);
   });
 
-  it("test_propagate_demux: a demux with outputs=[2,3] fed dim [5] produces dim [2] and dim [3]", () => {
-    const model: PropagateModel = {
-      blocks: [
-        { id: "c1", type: "signal-flow.source.constant", params: { value: [10, 20, 30, 40, 50] } },
-        { id: "demux", type: "routing.demux", params: { outputs: [2, 3] } },
-        { id: "s1", type: "signal-flow.sink.scope" },
-        { id: "s2", type: "signal-flow.sink.scope" },
-      ],
-      wires: [
-        { id: "w-in", from: { block: "c1", port: "out" }, to: { block: "demux", port: "in" } },
-        { id: "w-out0", from: { block: "demux", port: "out0" }, to: { block: "s1", port: "in" } },
-        { id: "w-out1", from: { block: "demux", port: "out1" }, to: { block: "s2", port: "in" } },
-      ],
-    };
-
-    const dims = expectDimMap(propagate(model));
-    expect(dims.get("w-in")).toEqual([5]);
-    expect(dims.get("w-out0")).toEqual([2]);
-    expect(dims.get("w-out1")).toEqual([3]);
-  });
+  it.todo("a vector source widens a chain — needs gsim-core#96");
 
   it("test_propagate_signal_specification_pins: signal_specification dim=[4] pins downstream inherit chain to [4]", () => {
     const model: PropagateModel = {

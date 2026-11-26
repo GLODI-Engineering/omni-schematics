@@ -67,7 +67,13 @@ describe("FE-65: dim-annotation", () => {
     render(<CanvasOverlay showDimLabels blocks={makeSignalBlocks()} wires={wires} />);
 
     expect(screen.getByTestId("canvas-dim-overlay")).toBeTruthy();
-    expect(screen.getByTestId("dim-label-w-sig").textContent).toBe("[3]");
+    // [1], not [3]: the fixture's source is a `signal-flow.source.constant`,
+    // which the catalogue declares as `{"out": "[1]"}` with a scalar `value`.
+    // This read [3] until gsim-core 0.6.3 gave every signal port a signature,
+    // because the editor's fallback table guessed a width from an array in
+    // `params` that the compiled card cannot carry. The overlay is now right
+    // about what it shows; see gsim-core#96 for the vector case.
+    expect(screen.getByTestId("dim-label-w-sig").textContent).toBe("[1]");
   });
 
   it("dim labels toggle via the Ctrl+Alt+D shortcut", () => {
