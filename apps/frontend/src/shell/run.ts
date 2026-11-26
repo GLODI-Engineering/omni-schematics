@@ -430,6 +430,16 @@ export async function triggerRun(): Promise<void> {
     // meant #193's period-aware step, which lives in `namedAnalysis`, never
     // reached the Run button. Part of #184.
     const declared = namedAnalysis();
+    if (!declared.ok) {
+      // Same refusal as the Run-dropdown path (#244), and it has to be here
+      // too: this is the button a person presses. A sheet whose `t_step` the
+      // editor cannot read would otherwise run at the settings panel's step --
+      // 10 us against a declared 100 ns is a 100 kHz converter sampled once per
+      // switching period, always at the same phase, which draws the flat line
+      // of a converged run of a dead circuit.
+      reportRunFailure("This sheet does not say how long to run", declared.reason, "editor");
+      return;
+    }
     analysis = declared.type;
     window = { tEnd: declared.tEnd, tStep: declared.tStep };
   }
