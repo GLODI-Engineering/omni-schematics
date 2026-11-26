@@ -150,7 +150,7 @@ jobs:
     # so `playwright install --with-deps` failed before a single test ran.
     #
     # That constraint is lifted: `playwright-core` added ubuntu26.04 to its
-    # supported distributions in 1.62, and #233 moved this repository to 1.65.1.
+    # supported distributions in 1.61.0, and #233 moved this repository to 1.65.1.
     # The pin is now a choice rather than a necessity, and it is left in place so
     # that a runner-image change and a Playwright change do not land together.
     runs-on: ubuntu-24.04

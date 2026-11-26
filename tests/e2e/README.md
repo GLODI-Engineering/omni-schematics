@@ -19,7 +19,7 @@ exactly that one. A browser that is not the pinned one is a quiet source of
 results that do not mean what they say — see #233, which this repository
 already lived through: Playwright 1.60 knew nothing of Ubuntu 26.04, refused to
 install at all, and two symlinks in `~/.cache/ms-playwright/` were made to
-point the pinned path at a different build. Playwright 1.62 added that
+point the pinned path at a different build. Playwright 1.61.0 added that
 distribution and the bump removed the problem.
 
 If `playwright install chromium` ever refuses again — "Playwright does not
