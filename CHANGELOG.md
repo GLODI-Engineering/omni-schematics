@@ -1,5 +1,69 @@
 # Changelog
 
+## 2026-11-26 — Omni Schematics (0.10.0)
+
+**A float stays a float, the engine resolves its own expressions, and a sheet
+says how its code blocks are built.**
+
+### Install it
+
+1. `omni-schematics-0.10.0.vsix` from this release.
+2. A `general-simulator` binary, **v0.10.0** —
+   [here](https://github.com/GLODI-Engineering/general-simulator/releases).
+3. `"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"`
+
+### A float stays a float
+
+The editor wrote `48` where the file said `48.0`, and that is not a formatting
+preference. Python reads `48` as an `int` and `48.0` as a `float`; Rust and
+JavaScript widen both to a double and cannot tell them apart afterwards. So
+**the editor was changing a float into an integer in the file**, for every
+Python consumer of it — `gsim-tools`, the example generators, anything you
+write to script a sheet.
+
+Nothing in the format said which was which, and the fix is that the catalogue
+already did: `component-library.json` carries `"type": "number"` or
+`"integer"` on every parameter, which until now was only a widget hint. The
+writer reads it, so a parameter declared real is written real.
+
+A number nothing declares is left exactly as it arrived, rather than guessed
+at.
+
+### What this does *not* fix
+
+A saved sheet is **still not byte-identical** to the one its generator emits,
+and there are two reasons left, neither about float-ness:
+
+- this writer sorts a document's keys and the other two write them in the
+  schema's order, which puts the first difference at byte 5 in every example;
+- Python, Rust and JavaScript each spell the same double differently once an
+  exponent is involved — `1e-09`, `1e-9`, `0.00001` for values that are equal.
+
+### The engine resolves §5.2, and the bundle carries it
+
+The committed WebAssembly bundle moves to
+[**gsim-core 0.7.0**](https://github.com/GLODI-Engineering/gsim-core/releases/tag/v0.7.0),
+so `{3 + 4}`
+reaches the netlist as `7`, substitution happens at every use site, and a
+parameter cycle is rejected with the loop named.
+
+Worth knowing: 0.7.0 breaks two engine interfaces and **changes no netlist any
+of the five shipped examples emits** — every re-recorded netlist differs only
+in the line naming the generator's version.
+
+The inspector still carries its own expression evaluator, because `compile()`
+resolves a block parameter without reporting what it resolved to. That is
+`gsim-core#106`, and the editor's copy stays until it closes — it is the only
+implementation the inspector can reach, so deleting it would delete the
+resolved-value readout.
+
+### A sheet says how its code blocks are built
+
+§20 of the format, and the schema behind it: a document carries the
+description of how its C, Python and Octave blocks are compiled, so a block
+whose source changed cannot be run against yesterday's artifact without
+anything saying so.
+
 ## 2026-11-26 — Omni Schematics (0.9.3)
 
 **You say where your compiler is, old results stop filling the disk, and a
@@ -93,7 +157,7 @@ things that used to give a confident wrong answer now refuse instead.
 3. `"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"`
 
 The editor compiles with its own committed copy of the engine, built from
-[gsim-core v0.6.3](https://github.com/GLODI-Engineering/gsim-core/releases/tag/v0.6.3)
+[gsim-core v0.6.3](gsim-core v0.6.3)
 — you do not install that, it is inside the `.vsix`. This file names exactly
 one gsim-core release and the release workflow checks it against what the
 bundle was built from, so **this link moves with every engine bump**.
