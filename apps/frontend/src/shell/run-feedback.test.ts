@@ -160,21 +160,89 @@ describe("an analysis this solver cannot run", () => {
     useIpcStore.setState({ problems: [] });
   });
 
-  it("is refused by name, rather than run as a transient", async () => {
-    // `general-simulator --mode` takes dc or transient and nothing else. An AC
-    // sweep sent as a transient run would answer a question nobody asked.
+  /** Run with `analysisType` set to `type`, then put the store back. */
+  const runAs = async (type: string): Promise<void> => {
     const settings = await import("../store/sim-settings");
     const previous = settings.useSimSettingsStore.getState().settings;
     settings.useSimSettingsStore.setState({
-      settings: { ...previous, analysisType: "AC" },
+      settings: { ...previous, analysisType: type },
     } as never);
     try {
       await triggerRun();
-      expect(mockRequestRun).not.toHaveBeenCalled();
-      const problems = useIpcStore.getState().problems;
-      expect(problems[0]?.message).toMatch(/--mode dc or --mode transient/);
     } finally {
       settings.useSimSettingsStore.setState({ settings: previous } as never);
     }
+  };
+
+  it("refuses an AC sweep by name, rather than running it as a transient", async () => {
+    // The engine is a piecewise-linear time-domain solver. An AC sweep sent as
+    // a transient run would answer a question nobody asked.
+    await runAs("AC");
+    expect(mockRequestRun).not.toHaveBeenCalled();
+    expect(useIpcStore.getState().problems[0]?.message).toMatch(/no AC sweep/);
+  });
+
+  it("refuses a DC sweep, and says why it is not merely a flag away", async () => {
+    await runAs("DC");
+    expect(mockRequestRun).not.toHaveBeenCalled();
+    expect(useIpcStore.getState().problems[0]?.message).toMatch(/no DC sweep over a source/);
+  });
+});
+
+describe("an operating point", () => {
+  beforeEach(() => {
+    setBlocks(2);
+    useIpcStore.setState({ problems: [] });
+    // A routed run reaches the host, so this block needs a host that answers.
+    // The refusing block above does not: nothing gets that far.
+    mockRequestRun.mockResolvedValue({
+      ok: true,
+      runId: "run-op",
+      manifestPath: "/tmp/op/result.gsim_sim_result",
+      samplesPath: "/tmp/op/run.gsim_samples",
+      signals: [],
+      events: [],
+    });
+  });
+
+  const runAs = async (type: string): Promise<void> => {
+    const settings = await import("../store/sim-settings");
+    const previous = settings.useSimSettingsStore.getState().settings;
+    settings.useSimSettingsStore.setState({
+      settings: { ...previous, analysisType: type },
+    } as never);
+    try {
+      await triggerRun();
+    } finally {
+      settings.useSimSettingsStore.setState({ settings: previous } as never);
+    }
+  };
+
+  it("is run rather than refused: the engine has solved one all along", async () => {
+    // #184: three of the four analyses had no route, but OP was never a missing
+    // capability -- `--mode dc` is an operating point. It was a routing gap.
+    await runAs("OP");
+    expect(mockRequestRun).toHaveBeenCalled();
+    expect(useIpcStore.getState().problems).toEqual([]);
+  });
+
+  it("asks for `dc`, and sends no window with it", async () => {
+    await runAs("OP");
+    const request = mockRequestRun.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(request.mode).toBe("dc");
+    expect(request.analysis).toBe("OP");
+    // A single solve has no window; sending one would put `--tfinal` on a
+    // command line that ignores it.
+    expect(request.tEnd).toBeUndefined();
+    expect(request.tStep).toBeUndefined();
+  });
+
+  it("still sends a window for a transient, so the routing did not flatten both", async () => {
+    await runAs("TRAN");
+    const request = mockRequestRun.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(request.mode).toBe("transient");
+    expect(request.analysis).toBe("TRAN");
+    expect(typeof request.tEnd).toBe("number");
+    expect(typeof request.tStep).toBe("number");
   });
 });

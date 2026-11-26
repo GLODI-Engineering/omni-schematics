@@ -145,31 +145,56 @@ export function hasAnythingToSimulate(): boolean {
   return (model.blocks?.length ?? 0) > 0;
 }
 
+/** How an analysis in the document maps onto the engine's command line. */
+type AnalysisRoute =
+  | { ok: true; mode: "transient" | "dc"; analysis: "TRAN" | "OP" }
+  | { ok: false; reason: string };
+
 /**
- * The analysis the editor is asking for, and whether this solver can run it.
+ * The analysis the editor is asking for, and how this solver runs it.
  *
- * `general-simulator --mode` takes `dc` or `transient` and that is the whole
- * of its analysis surface: there is no AC sweep, no DC sweep over a source,
- * and `solver-run.ts` builds a transient command line. The editor's analysis
- * dropdown still offers AC, DC and OP, because the sidecar used to hand those
- * to ngspice or Xyce.
+ * `general-simulator --mode` takes `dc` or `transient` and that is the whole of
+ * its analysis surface. Two of the editor's four map onto it:
  *
- * So a non-transient analysis is refused here, by name, rather than being sent
- * as a transient run that would answer a question nobody asked. That is a
- * narrowing against the sidecar and it is #184.
+ *   - **TRAN** is `--mode transient`, with a window.
+ *   - **OP** is `--mode dc`, which solves a single operating point and emits
+ *     one row. The engine has always been able to do this; the editor simply
+ *     never asked, which is the half of #184 that was a routing gap rather
+ *     than a missing capability.
+ *
+ * The other two are not routing gaps and are still refused by name:
+ *
+ *   - **DC sweep** over a named source has no flag. It is a loop over `--mode
+ *     dc` runs with one source edited between them, which belongs in the
+ *     engine's CLI rather than being improvised here by rewriting a netlist
+ *     between runs.
+ *   - **AC** is not a loop over anything. The engine is a piecewise-linear
+ *     time-domain solver; a small-signal frequency sweep is a different
+ *     analysis, not a different output format.
+ *
+ * Refusing by name beats sending a transient run that would answer a question
+ * nobody asked.
  */
-function transientOrRefuse(analysisType: string): { ok: true } | { ok: false; reason: string } {
+function routeAnalysis(analysisType: string): AnalysisRoute {
   const normalised = analysisType.toUpperCase();
   if (normalised === "TRAN" || normalised === "TRANSIENT") {
-    return { ok: true };
+    return { ok: true, mode: "transient", analysis: "TRAN" };
   }
+  if (normalised === "OP") {
+    return { ok: true, mode: "dc", analysis: "OP" };
+  }
+  const what =
+    normalised === "AC"
+      ? "no AC sweep: it is a piecewise-linear time-domain solver, and a small-signal " +
+        "frequency sweep is a different analysis rather than a different output format"
+      : "no DC sweep over a source: sweeping one means running it repeatedly with that " +
+        "source edited between runs, which the engine's command line has no flag for";
   return {
     ok: false,
     reason:
-      `This analysis is ${normalised}, and the general-simulator binary the editor runs ` +
-      "takes --mode dc or --mode transient only — it has no AC sweep, no DC sweep over a " +
-      "source, and no operating-point output. Set the analysis to transient, or run the " +
-      "deck yourself with a solver that has one.",
+      `This analysis is ${normalised}, and the general-simulator binary the editor runs has ` +
+      `${what}. It runs transient and operating-point analyses; set the analysis to one of ` +
+      "those, or run the deck yourself with a solver that has the one you want.",
   };
 }
 
@@ -355,6 +380,9 @@ export async function triggerRun(): Promise<void> {
   const ipc = useIpcStore.getState();
   let netlist: string;
   let analysis: string;
+  // The window to run over. An imported deck has none of its own that this
+  // engine reads, so it keeps the store's; a compiled document brings its own.
+  let window = { tEnd: settings.tEnd, tStep: settings.tStep };
 
   // Compiled before the solver is touched, and this ordering is the point of
   // #158. The compiler is in the editor now, so a document that cannot
@@ -391,21 +419,32 @@ export async function triggerRun(): Promise<void> {
       return;
     }
     netlist = compiled;
-    analysis = settings.analysisType;
+    // The document's own `simulation` block, not the legacy sim-settings store.
+    //
+    // The Simulation panel writes analyses to the *document* (`model.simulation
+    // .analyses`), and nothing in the UI writes `settings.analysisType` at all --
+    // no component references it. So reading the store here meant Run ignored
+    // both the analysis and the window the sheet declared: a sheet asking for an
+    // operating point, or for a 20 ms window at 5 ns, got the store's defaults
+    // and no indication that its own declaration had been passed over. It also
+    // meant #193's period-aware step, which lives in `namedAnalysis`, never
+    // reached the Run button. Part of #184.
+    const declared = namedAnalysis();
+    analysis = declared.type;
+    window = { tEnd: declared.tEnd, tStep: declared.tStep };
   }
 
-  const supported = transientOrRefuse(analysis);
-  if (!supported.ok) {
-    reportRunFailure("This solver cannot run that analysis", supported.reason);
+  const route = routeAnalysis(analysis);
+  if (!route.ok) {
+    reportRunFailure("This solver cannot run that analysis", route.reason);
     return;
   }
 
   await runOnHost({
-    mode: "transient",
+    mode: route.mode,
     netlist,
-    tEnd: settings.tEnd,
-    tStep: settings.tStep,
-    analysis: "TRAN",
+    ...(route.mode === "transient" ? { tEnd: window.tEnd, tStep: window.tStep } : {}),
+    analysis: route.analysis,
     source: documentUri(),
   });
 }
@@ -441,18 +480,19 @@ export async function triggerRunAnalysis(analysisId: string): Promise<void> {
   }
 
   const analysis = namedAnalysis(analysisId);
-  const supported = transientOrRefuse(analysis.type);
-  if (!supported.ok) {
-    reportRunFailure("This solver cannot run that analysis", supported.reason);
+  const route = routeAnalysis(analysis.type);
+  if (!route.ok) {
+    reportRunFailure("This solver cannot run that analysis", route.reason);
     return;
   }
 
   await runOnHost({
-    mode: "transient",
+    mode: route.mode,
     netlist,
-    tEnd: analysis.tEnd,
-    tStep: analysis.tStep,
-    analysis: "TRAN",
+    // An operating point has no window, and sending one would put `--tfinal`
+    // on a command line that ignores it.
+    ...(route.mode === "transient" ? { tEnd: analysis.tEnd, tStep: analysis.tStep } : {}),
+    analysis: route.analysis,
     source: documentUri(),
   });
 }

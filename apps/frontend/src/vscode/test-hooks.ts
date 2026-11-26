@@ -25,7 +25,6 @@ import {
 } from "../results/container-plot";
 import { type RunOutputLine, reportRunOutput } from "../shell/run-output";
 import { useGraphStore, useIpcStore, useLibraryStore } from "../store";
-import { useSimSettingsStore } from "../store/sim-settings";
 import { useToastStore } from "../store/toast";
 import { useWaveformStore } from "../store/waveform";
 
@@ -304,13 +303,22 @@ const PROBES: Record<string, Probe> = {
     // A longer, finer run when the test asks for one. The container's stripes
     // are a fixed number of rows, so a 1,000-sample run is a *single* stripe
     // and every window of it reads that one stripe -- true, and useless for
-    // asserting that a narrower window costs less. `triggerRun` takes t_end
-    // and t_step from this store, so setting it here is the same rung the
-    // Simulation panel sets.
+    // asserting that a narrower window costs less.
+    //
+    // Written to the *document*, which is where the Simulation panel writes and
+    // where `triggerRun` now reads (#184). This used to set the sim-settings
+    // store and claim in a comment that it was "the same rung the Simulation
+    // panel sets" -- it was not: no component writes `analysisType` at all, and
+    // the panel edits `model.simulation.analyses`. The hook now drives the same
+    // path a person does.
     if (typeof args.tEnd === "number" && typeof args.tStep === "number") {
-      useSimSettingsStore
-        .getState()
-        .updateSettings({ tEnd: args.tEnd, tStep: args.tStep, analysisType: "TRAN" });
+      const graph = useGraphStore.getState();
+      const simulation = graph.document.model.simulation ?? {};
+      graph.setSimulation({
+        ...simulation,
+        default_analysis: "test_tran",
+        analyses: [{ id: "test_tran", type: "TRAN", t_end: args.tEnd, t_step: args.tStep }],
+      } as never);
     }
     const { triggerRun } = await import("../shell/run");
     await triggerRun();

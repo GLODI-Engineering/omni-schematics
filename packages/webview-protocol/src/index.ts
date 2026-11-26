@@ -232,11 +232,21 @@ export type OpenBlockSourceResult =
  * reason rather than sending something the host would have to guess at.
  */
 export interface RunRequest {
-  mode: "transient";
+  /**
+   * Which of the engine's two analyses to run.
+   *
+   * `general-simulator --mode` takes exactly these two: `transient` runs the
+   * timestep loop, `dc` solves a single operating point and emits one row.
+   * They are not variations on one command line -- `--tfinal` and `--dt` mean
+   * nothing to `dc` -- which is why this is a discriminator and not a flag.
+   */
+  mode: "transient" | "dc";
   /** The netlist, as the engine compiled it. The host writes it to a file verbatim. */
   netlist: string;
-  tEnd: number;
-  tStep: number;
+  /** The transient window. Absent for `dc`, which has no window. */
+  tEnd?: number;
+  /** The transient step. Absent for `dc`, which takes a single solve. */
+  tStep?: number;
   /**
    * URI of the `.gsim_sch` this came from, when it came from one.
    *
@@ -246,7 +256,12 @@ export interface RunRequest {
    * does not know where the workspace root is.
    */
   source?: string;
-  /** Analysis name recorded in the result document: `TRAN`, and what a reader shows. */
+  /**
+   * Analysis name recorded in the result document -- `TRAN` or `OP` -- and what
+   * a reader shows. Distinct from `mode`: `mode` is the engine's command line,
+   * this is the document's vocabulary, and the two need not stay in step if the
+   * engine ever grows an analysis the format already names.
+   */
   analysis: string;
 }
 
