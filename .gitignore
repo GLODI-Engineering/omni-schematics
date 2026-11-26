@@ -54,9 +54,6 @@ test-results/
 working-tools/
 Misc/
 
-# Archon master-loop ephemeral render cache + per-epic state
-.archon/workflows/.runs/
-.archon/state/
 
 # Claude Code per-agent worktrees
 .claude/worktrees/
