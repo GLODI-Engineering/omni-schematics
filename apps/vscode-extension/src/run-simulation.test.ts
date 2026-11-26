@@ -15,6 +15,7 @@
  *     GSIM_GENERAL_SIMULATOR_PATH=/path/to/general-simulator \
  *       pnpm --filter ./apps/vscode-extension test
  */
+import * as cp from "node:child_process";
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -461,5 +462,225 @@ describe("the real general-simulator", () => {
       expect(validateGsimSimResultDocument(document)).toBe(true);
     },
     60_000,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// #234 — where the solver is spawned, which is where a relative lib=/path=
+// resolves.
+// ---------------------------------------------------------------------------
+
+describe("the working directory a run is spawned in", () => {
+  it("is the schematic's own folder, not the run directory", async () => {
+    const directory = runDirectory();
+    const sheetFolder = fs.mkdtempSync(path.join(os.tmpdir(), "gsim-sheet-"));
+    scratch.push(sheetFolder);
+    let seen: string | undefined;
+    const result = await runSimulation(request, {
+      runDirectory: directory,
+      schematicFolder: sheetFolder,
+      resolve: () => found,
+      spawn: (b, args, cwd) => {
+        seen = cwd;
+        return fakeSolver()(b, args);
+      },
+      onOutput: collect().onOutput,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(seen).toBe(sheetFolder);
+  });
+
+  it("says which directory it used, so a reader can reproduce the run by hand", async () => {
+    const directory = runDirectory();
+    const sheetFolder = fs.mkdtempSync(path.join(os.tmpdir(), "gsim-sheet-"));
+    scratch.push(sheetFolder);
+    const sink = collect();
+    await runSimulation(request, {
+      runDirectory: directory,
+      schematicFolder: sheetFolder,
+      resolve: () => found,
+      spawn: (b, args) => fakeSolver()(b, args),
+      onOutput: sink.onOutput,
+    });
+
+    // The command line is logged verbatim already; without the directory it
+    // was logged from, a line whose netlist carries `lib=./ctrl.so` cannot be
+    // pasted into a terminal and reproduced.
+    expect(texts(sink.lines).some((text) => text.includes(sheetFolder))).toBe(true);
+  });
+
+  it("falls back to the run directory for a sheet that has never been saved", async () => {
+    const directory = runDirectory();
+    let seen: string | undefined;
+    const result = await runSimulation(request, {
+      runDirectory: directory,
+      schematicFolder: undefined,
+      resolve: () => found,
+      spawn: (b, args, cwd) => {
+        seen = cwd;
+        return fakeSolver()(b, args);
+      },
+      onOutput: collect().onOutput,
+    });
+
+    // A sheet of resistors has nothing to resolve, so this must keep working.
+    expect(result.ok).toBe(true);
+    expect(seen).toBe(directory);
+  });
+
+  it("refuses an unsaved sheet whose code block names a relative path", async () => {
+    const directory = runDirectory();
+    const sink = collect();
+    const result = await runSimulation(
+      {
+        ...request,
+        source: undefined,
+        netlist: `${NETLIST}G1 kind=pyblock path=./ctrl.py in=VPROBE outputs=y\n`,
+      },
+      {
+        runDirectory: directory,
+        schematicFolder: undefined,
+        resolve: () => found,
+        spawn: () => {
+          throw new Error("the solver must not be spawned for a run that cannot resolve its paths");
+        },
+        onOutput: sink.onOutput,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.summary).toMatch(/save the schematic/i);
+    // The block and its path, because "a code block" does not say which one.
+    expect(`${result.detail}`).toContain("G1");
+    expect(`${result.detail}`).toContain("./ctrl.py");
+  });
+
+  it("lets an unsaved sheet whose code block is absolute through", async () => {
+    const directory = runDirectory();
+    const result = await runSimulation(
+      {
+        ...request,
+        source: undefined,
+        netlist: `${NETLIST}G1 kind=pyblock path=/tmp/ctrl.py in=VPROBE outputs=y\n`,
+      },
+      {
+        runDirectory: directory,
+        schematicFolder: undefined,
+        resolve: () => found,
+        spawn: (b, args) => fakeSolver()(b, args),
+        onOutput: collect().onOutput,
+      },
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #234 end to end: a sheet saved beside its own C block runs, and the block's
+// output is in the result.
+//
+// A `cscript` block rather than Python or Octave, because this is the one of
+// the three that needs nothing of the engine build and nothing installed
+// beyond a C compiler -- which every runner that builds this repository's Rust
+// crate already has. Skipped, loudly, without a solver or a compiler.
+// ---------------------------------------------------------------------------
+function systemCompiler(): string | null {
+  for (const candidate of ["cc", "gcc", "clang"]) {
+    const probe = cp.spawnSync(candidate, ["--version"], { stdio: "ignore" });
+    if (probe.status === 0) return candidate;
+  }
+  return null;
+}
+
+describe("a sheet saved beside its own code block", () => {
+  const binary = realSolver();
+  const compiler = systemCompiler();
+  const guarded = binary && compiler ? it : it.skip;
+
+  guarded(
+    "runs, and the block's output is in the result",
+    async () => {
+      // A space *and* an accent in the folder name, deliberately: this machine's own project
+      // path is `Github Works/Électronique`, and a check that only passes on an ASCII path
+      // would be green here and red where the owner works. Both survive provided the child is
+      // spawned with an argv rather than through a shell -- which `host.ts` does, and which is
+      // what this exercises.
+      const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gsim-code-block-"));
+      scratch.push(scratchRoot);
+      const sheetFolder = path.join(scratchRoot, "Sheet Électronique");
+      fs.mkdirSync(sheetFolder);
+      // `cscript_arity` so the engine checks the shape before the first step,
+      // and the engine's real ABI -- there is no `t` in it.
+      fs.writeFileSync(
+        path.join(sheetFolder, "gain.c"),
+        [
+          "int cscript_arity(int *in_len, int *out_len) {",
+          "    *in_len = 1; *out_len = 1; return 0;",
+          "}",
+          "void *cscript_start(void) { return 0; }",
+          "void cscript_output(void *state, const double *in, int in_len, double dt,",
+          "                    double *out, int out_len) {",
+          "    (void)state; (void)in_len; (void)dt; (void)out_len;",
+          "    out[0] = 2.0 * in[0];",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const built = cp.spawnSync(
+        compiler as string,
+        ["-shared", "-fPIC", "-O0", "-o", "libgain.so", "gain.c"],
+        { cwd: sheetFolder, encoding: "utf8" },
+      );
+      expect(built.status, built.stderr).toBe(0);
+
+      // `lib=./libgain.so` -- relative, which is what every real sheet writes
+      // and is the whole subject of #234.
+      const deck = [
+        "* A textbook RC low-pass whose capacitor voltage feeds one code block.",
+        "V1 n1 0 SIN(0 1 1k)",
+        "R1 n1 n2 1k",
+        "C1 n2 0 1u",
+        "VPROBE kind=phys2sig node=n2",
+        "G1 kind=cscript lib=./libgain.so in=VPROBE outputs=y",
+        "",
+      ].join("\n");
+
+      const directory = runDirectory();
+      const sink = collect();
+      const result = await runSimulation(
+        {
+          mode: "transient" as const,
+          netlist: deck,
+          tEnd: 1e-4,
+          tStep: 1e-5,
+          analysis: "TRAN",
+          source: "sheet.gsim_sch",
+        },
+        {
+          runDirectory: directory,
+          schematicFolder: sheetFolder,
+          resolve: () => ({ binary: binary as string, source: "the path passed in" }),
+          spawn: (b, args, cwd) => spawn(b, args, { cwd }),
+          onOutput: sink.onOutput,
+        },
+      );
+
+      if (!result.ok) {
+        throw new Error(
+          `${result.summary}\n${result.detail ?? ""}\n${texts(sink.lines).join("\n")}`,
+        );
+      }
+      // Not "it exited 0": the block's own output column has to be in the
+      // result, which is what proves the library was found and called.
+      expect(result.signals).toContain("G1");
+      // And the run's own four files still land in the run directory, which is
+      // the half of #234 that `cwd` used to be doing.
+      for (const file of [NETLIST_FILE, SAMPLES_FILE, RESULT_FILE]) {
+        expect(fs.existsSync(path.join(directory, file)), file).toBe(true);
+      }
+    },
+    120_000,
   );
 });

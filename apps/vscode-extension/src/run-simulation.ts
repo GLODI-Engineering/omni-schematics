@@ -42,6 +42,7 @@ import type {
 
 import { type EventLog, emptyEventLog, parseEventLogText, worstSeverity } from "./event-log";
 import { buildManifest, serializeManifest } from "./result-manifest";
+import { workingDirectoryFor } from "./run-working-directory";
 import { type SamplesIndex, readSamplesIndex } from "./samples-index";
 import { type ResolvedSolver, SolverNotFound } from "./solver-path";
 import { type SolverOutcome, describeOutcome, runTransient, transientArgs } from "./solver-run";
@@ -78,10 +79,26 @@ const RULE_EXIT_CODES = new Set([2, 3]);
 export interface RunDependencies {
   /** Where this run's four files go. Created if it does not exist. */
   runDirectory: string;
+  /**
+   * The folder holding the `.gsim_sch`, and so the directory the solver is spawned in.
+   *
+   * Every relative path a netlist carries -- a code block's `lib=`/`path=` above all -- is
+   * written relative to the sheet, and the solver used to be spawned in `.gsim/runs/<id>/`
+   * instead, where none of them resolved (#234). `undefined` for a sheet that has never been
+   * saved; see `run-working-directory.ts` for what then happens.
+   */
+  schematicFolder?: string;
   /** The binary, or a throw carrying everywhere it was looked for. */
   resolve: () => ResolvedSolver;
-  /** How the solver is started. The host bakes the settings' environment in. */
-  spawn: (binary: string, args: string[]) => ChildProcess;
+  /**
+   * How the solver is started. The host bakes the settings' environment in.
+   *
+   * `cwd` is decided here rather than by the caller, because it is a property of the run -- see
+   * `workingDirectoryFor` -- and deciding it at the call site is what made #234 invisible: the
+   * host passed the run directory, which is where the run's *output* goes, and nobody noticed
+   * it was also where the netlist's *inputs* were being looked for.
+   */
+  spawn: (binary: string, args: string[], cwd: string) => ChildProcess;
   /** Lines for the Output panel, as they arrive. */
   onOutput: (lines: RunOutputLine[]) => void;
   /** Called once with the child, so Stop can signal it. */
@@ -216,6 +233,23 @@ export async function runSimulation(
     return { ok: false, kind: "could-not-start", summary: "Could not resolve the solver", detail };
   }
 
+  // Before the directory is created or anything is spawned: a sheet that cannot resolve its own
+  // code block's path has no run to make, and saying so costs nothing.
+  const workingDirectory = workingDirectoryFor({
+    netlist: request.netlist,
+    schematicFolder: deps.schematicFolder,
+    runDirectory,
+  });
+  if (!workingDirectory.ok) {
+    onOutput([line("error", workingDirectory.summary), line("error", workingDirectory.detail)]);
+    return {
+      ok: false,
+      kind: "could-not-start",
+      summary: workingDirectory.summary,
+      detail: workingDirectory.detail,
+    };
+  }
+
   const netlistPath = path.join(runDirectory, NETLIST_FILE);
   const samplesPath = path.join(runDirectory, SAMPLES_FILE);
   const eventsPath = path.join(runDirectory, EVENTS_FILE);
@@ -254,8 +288,13 @@ export async function runSimulation(
   // The exact command, verbatim, before it runs. A run that fails is far
   // easier to explain when the user can paste the line into a terminal, and it
   // is the reason `transientArgs` is a separate function at all.
+  //
+  // The directory is logged beside it, because the command is only reproducible *from* it: every
+  // path in the arguments is absolute, but a relative `lib=`/`path=` inside the netlist is not,
+  // and that is the whole subject of #234.
   onOutput([
     line("info", `found at ${solver.binary} (from ${solver.source})`),
+    line("info", workingDirectory.note),
     line("info", [solver.binary, ...transientArgs(transient)].join(" ")),
   ]);
 
@@ -264,7 +303,7 @@ export async function runSimulation(
     request: transient,
     onLine: ({ stream, text }) => onOutput([forStream(stream, text)]),
     spawn: (binary, args) => {
-      const child = deps.spawn(binary, args);
+      const child = deps.spawn(binary, args, workingDirectory.cwd);
       deps.onChild?.(child);
       return child;
     },
