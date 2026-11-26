@@ -94,6 +94,15 @@ export class SolverNotFound extends Error {
         `which leaves the binary at target/release/general-simulator${
           platform === "win32" ? ".exe" : ""
         }.`,
+        "",
+        // Said here as well as in the setting's own description, because this message is
+        // what a stuck user actually reads: both documented ways of getting an engine --
+        // download a release, or run the line above -- produce one that cannot run a
+        // kind=pyblock or kind=pyfunc block at all, and finding that out from a failed run
+        // of a sheet you have just drawn is the worst available order (#238).
+        "For a sheet with a Python block, add --features python to that line; a release build",
+        "and the line above both omit it deliberately, and `general-simulator --capabilities`",
+        "says which kind of binary you have.",
       ].join("\n"),
     );
     this.name = "SolverNotFound";

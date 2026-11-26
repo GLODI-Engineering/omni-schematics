@@ -883,3 +883,201 @@ describe("a code block whose library is older than its source", () => {
     expect(said).toMatch(/convention/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #238 — a run says what is missing before it starts, not after it fails.
+// ---------------------------------------------------------------------------
+
+describe("the toolchain preflight", () => {
+  /** A world where the named programs behave as told; anything else is not on PATH. */
+  const probeWorld = (
+    programs: Record<string, { code: number | null; stdout?: string; stderr?: string }>,
+  ) => ({
+    platform: "linux" as NodeJS.Platform,
+    run: (program: string, _args: string[], _cwd: string) => {
+      const behaviour = programs[program];
+      return behaviour === undefined
+        ? { started: false, code: null, stderr: "spawn ENOENT", stdout: "" }
+        : {
+            started: true,
+            code: behaviour.code,
+            stderr: behaviour.stderr ?? "",
+            stdout: behaviour.stdout ?? "",
+          };
+    },
+    scratch: () => "/tmp/probe",
+    discard: () => {},
+    write: () => {},
+    produced: () => Boolean(programs.clang || programs.cc || programs.gcc),
+  });
+
+  const octaveBlock = {
+    blockId: "G1",
+    language: "octave" as const,
+    sourceCandidates: ["dbl.m"],
+    inferredSource: false,
+  };
+
+  it("refuses an Octave sheet on a machine with no octave-cli, naming the setting", async () => {
+    const sink = collect();
+    const result = await runSimulation(
+      { ...request, codeBlocks: [octaveBlock] },
+      {
+        runDirectory: runDirectory(),
+        resolve: () => found,
+        // Nothing on PATH at all, so `octave-cli --version` cannot start.
+        probeIo: probeWorld({}),
+        spawn: () => {
+          throw new Error("the solver must not be reached when the preflight refuses");
+        },
+        onOutput: sink.onOutput,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.summary).toMatch(/cannot run this sheet's octave block/i);
+    const said = texts(sink.lines).join("\n");
+    expect(said).toContain("omniSchematics.octaveCliPath");
+    expect(said).toContain("octave-cli");
+  });
+
+  it("refuses a Python sheet against an engine that says it cannot run one", async () => {
+    const sink = collect();
+    const result = await runSimulation(
+      {
+        ...request,
+        codeBlocks: [
+          {
+            blockId: "G1",
+            language: "python" as const,
+            sourceCandidates: ["ctrl.py"],
+            inferredSource: false,
+          },
+        ],
+      },
+      {
+        runDirectory: runDirectory(),
+        resolve: () => found,
+        probeIo: probeWorld({
+          "/fake/general-simulator": {
+            code: 0,
+            stdout: "program=general-simulator\nversion=0.9.0\npython=no\n",
+          },
+        }),
+        spawn: () => {
+          throw new Error("the solver must not be reached when the preflight refuses");
+        },
+        onOutput: sink.onOutput,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const said = texts(sink.lines).join("\n");
+    expect(said).toContain("--features python");
+    // The trap: `pythonPath` looks like the setting for this and is not.
+    expect(said).toContain("omniSchematics.pythonPath");
+  });
+
+  it("warns rather than refusing when the engine is too old to be asked", async () => {
+    const sink = collect();
+    const result = await runSimulation(
+      {
+        ...request,
+        codeBlocks: [
+          {
+            blockId: "G1",
+            language: "python" as const,
+            sourceCandidates: ["ctrl.py"],
+            inferredSource: false,
+          },
+        ],
+      },
+      {
+        runDirectory: runDirectory(),
+        resolve: () => found,
+        // An engine from before `--capabilities`: it rejects the flag.
+        probeIo: probeWorld({
+          "/fake/general-simulator": { code: 1, stderr: "error: unrecognized argument" },
+        }),
+        spawn: (b, args) => fakeSolver()(b, args),
+        onOutput: sink.onOutput,
+      },
+    );
+
+    // The run proceeds: "older than the flag" and "cannot run Python" are different facts, and
+    // refusing on the first would stop a run that may well work.
+    expect(result.ok).toBe(true);
+    expect(texts(sink.lines).join("\n")).toMatch(/too old to say/i);
+  });
+
+  it("does not probe at all for a sheet with no code blocks", async () => {
+    const result = await runSimulation(request, {
+      runDirectory: runDirectory(),
+      resolve: () => found,
+      probeIo: {
+        platform: "linux",
+        run: () => {
+          throw new Error("a sheet of passives must not pay for a probe");
+        },
+        scratch: () => {
+          throw new Error("a sheet of passives must not pay for a probe");
+        },
+        discard: () => {},
+        write: () => {},
+        produced: () => false,
+      },
+      spawn: (b, args) => fakeSolver()(b, args),
+      onOutput: collect().onOutput,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not need a compiler for a C block whose library is already fresh", async () => {
+    // The commonest run of a finished project, and refusing it would be a regression on every
+    // machine without a toolchain.
+    const sheetFolder = fs.mkdtempSync(path.join(os.tmpdir(), "gsim-fresh-"));
+    scratch.push(sheetFolder);
+    fs.writeFileSync(path.join(sheetFolder, "gain.c"), "/* source */\n");
+    fs.writeFileSync(path.join(sheetFolder, "libgain.so"), "not really a library");
+    const now = Date.now() / 1000;
+    fs.utimesSync(path.join(sheetFolder, "gain.c"), now - 60, now - 60);
+    fs.utimesSync(path.join(sheetFolder, "libgain.so"), now, now);
+
+    const result = await runSimulation(
+      {
+        ...request,
+        codeBlocks: [
+          {
+            blockId: "G1",
+            language: "c" as const,
+            artifact: "./libgain.so",
+            sourceCandidates: ["gain.c"],
+            inferredSource: true,
+          },
+        ],
+      },
+      {
+        runDirectory: runDirectory(),
+        schematicFolder: sheetFolder,
+        resolve: () => found,
+        probeIo: {
+          platform: "linux",
+          run: () => {
+            throw new Error("nothing needs building, so nothing should look for a compiler");
+          },
+          scratch: () => {
+            throw new Error("nothing needs building, so nothing should look for a compiler");
+          },
+          discard: () => {},
+          write: () => {},
+          produced: () => false,
+        },
+        spawn: (b, args) => fakeSolver()(b, args),
+        onOutput: collect().onOutput,
+      },
+    );
+    expect(result.ok).toBe(true);
+  });
+});

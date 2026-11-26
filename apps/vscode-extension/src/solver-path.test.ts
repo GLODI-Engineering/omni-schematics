@@ -111,6 +111,11 @@ describe("resolveSolver", () => {
     // And it says what to do, including how to get a binary at all.
     expect(found.message).toContain("omniSchematics.generalSimulatorPath");
     expect(found.message).toContain("cargo build --release -p general-simulator-cli");
+    // And that the build line it just gave cannot run a Python block. Both documented ways of
+    // getting an engine omit `--features python` deliberately, and this message is what a stuck
+    // user actually reads (#238).
+    expect(found.message).toContain("--features python");
+    expect(found.message).toContain("--capabilities");
     // The download first, and the sibling repositories named with the build:
     // a bare clone of general-simulator does not build, because its workspace
     // depends on three repositories by path, so cargo stops at "failed to load
