@@ -412,21 +412,17 @@ describe("the real engine on this machine", () => {
  * let you say where yours is.
  */
 describe("you name your own compiler", () => {
-  it("prefers the block's, then the setting's, then discovery", () => {
-    expect(chooseCompiler({ block: "/opt/mingw/bin/gcc", setting: "clang" })).toEqual({
+  it("prefers the machine's setting, then discovery", () => {
+    expect(chooseCompiler({ setting: "/opt/mingw/bin/gcc" })).toEqual({
       program: "/opt/mingw/bin/gcc",
-      source: "block",
+      source: "setting",
     });
-    expect(chooseCompiler({ setting: "clang" })).toEqual({ program: "clang", source: "setting" });
     expect(chooseCompiler({})).toEqual({ source: "discovered" });
   });
 
   it("treats blank and whitespace as unset, so an empty setting does not name a compiler", () => {
-    expect(chooseCompiler({ block: "   ", setting: "clang" })).toEqual({
-      program: "clang",
-      source: "setting",
-    });
-    expect(chooseCompiler({ block: "", setting: "" })).toEqual({ source: "discovered" });
+    expect(chooseCompiler({ setting: "   " })).toEqual({ source: "discovered" });
+    expect(chooseCompiler({ setting: "" })).toEqual({ source: "discovered" });
   });
 
   it("tries a named compiler alone, and does not quietly use another that works", () => {

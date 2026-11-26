@@ -596,6 +596,7 @@ export class GsimHost implements vscode.Disposable {
           // The default is to refuse, which is why the fallback is spelled here rather than
           // left to `undefined`: a missing setting must not mean "run it anyway".
           staleCodeBlock: settings.get<"refuse" | "warn" | "ignore">("staleCodeBlock", "refuse"),
+          compilerPath: settings.get<string>("compilerPath"),
           spawn: (binary, args, cwd) =>
             spawnChild(binary, args, {
               cwd,
