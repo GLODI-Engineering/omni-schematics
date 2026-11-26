@@ -557,9 +557,16 @@ export class GsimHost implements vscode.Disposable {
           // reaches `pyblock`, and `environment` is the escape hatch. The
           // solver used to inherit this from the sidecar that spawned it; it
           // inherits it from here now.
-          spawn: (binary, args) =>
+          // `cwd` comes from `runSimulation`, not from here: it is the schematic's own folder,
+          // because every relative path a netlist carries is written relative to the sheet
+          // (#234). This used to pass the run directory, which is where the run's *output*
+          // goes -- and nobody noticed it was also where the netlist's *inputs* were looked
+          // for, so a sheet saved beside its own `ctrl.py` ran in a directory where `ctrl.py`
+          // does not exist.
+          schematicFolder: folderOf(request.source)?.fsPath,
+          spawn: (binary, args, cwd) =>
             spawnChild(binary, args, {
-              cwd: directory,
+              cwd,
               env: buildSolverEnvironment({
                 base: process.env,
                 settings: {

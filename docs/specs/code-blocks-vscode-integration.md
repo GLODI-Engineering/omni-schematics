@@ -109,6 +109,24 @@ How each concern is met:
 
 ### Cross-cutting prerequisite: the working directory (blocker 1)
 
+**Done, as #234, and not the way this section describes it.** There is no sidecar and no
+`simulate.py`: the extension spawns the solver itself (#159/#162). The fix turned out to be
+nearly free, because the run's four files were already named by absolute paths — `runSimulation`
+builds every one with `path.join(runDirectory, …)` — so `cwd` was never what put them in
+`.gsim/runs/<id>/`. It was doing nothing except quietly deciding where the netlist's *inputs*
+were looked for. The solver is now spawned in the schematic's own folder;
+`apps/vscode-extension/src/run-working-directory.ts` is the pure function that decides it, and
+`RunDependencies.spawn` takes the directory rather than the caller choosing it — the decision
+used to live at a call site in `host.ts`, which has no unit test, and that is how a `cwd` wrong
+for two of its three purposes went unnoticed. No `source_dir` field was needed:
+`RunRequest.source` already carries the document URI and `host.ts` already had `folderOf`.
+
+An untitled document falls back to the run directory and is refused only when a code block on it
+names a relative path, naming the block and the path — a sheet of resistors has nothing to
+resolve, and refusing it would be a regression.
+
+The original reasoning is kept below because the conclusion was right.
+
 The engine resolves relative `path=` against its process cwd (`GeneralSimulatorSolver.solve` docstring: "a *relative* `path=` token resolves against" the subprocess working directory; octave `addpath` also canonicalizes against the process cwd). The sidecar must run `solve(..., cwd=<dir of the .gsim_sch>)`.
 
 - The webview already has `documentUri` (`WebviewInit`). Add the document's directory to the simulate payload from `apps/frontend` (I did not read the frontend request builder; infer a `source_dir` field), read it in `simulate.py` and pass `cwd=` to the four `solve` calls. The plumbing exists in the solver and in `run_cancellable` (`_subprocess_run.py` passes `cwd`).
