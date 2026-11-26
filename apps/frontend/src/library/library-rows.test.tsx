@@ -52,7 +52,9 @@ describe("#213: a row names one component and nothing else", () => {
     const { container } = render(
       <SidebarItem entry={step} onInsert={() => {}} qualifier="signal_flow.source.step" />,
     );
-    expect(screen.getByRole("button", { name: "Step (signal_flow.source.step)" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Step (legacy spelling) (signal_flow.source.step)" }),
+    ).toBeTruthy();
     expect(container.querySelector(".library-item__qualifier")?.textContent).toBe(
       "signal_flow.source.step",
     );
@@ -60,17 +62,30 @@ describe("#213: a row names one component and nothing else", () => {
 });
 
 describe("#213: two blocks with the same label are told apart", () => {
-  it("qualifies only the labels that actually collide", () => {
-    const entries = Object.values(CATALOG);
-    const qualifiers = qualifiersForCollidingLabels(entries);
-    expect(qualifiers.get("signal.step")).toBe("signal.step");
-    expect(qualifiers.get("signal_flow.source.step")).toBe("signal_flow.source.step");
-    expect(qualifiers.get("sinks.scope")).toBe("sinks.scope");
-    expect(qualifiers.get("signal_flow.sink.scope")).toBe("signal_flow.sink.scope");
+  it("has nothing left to qualify: the engine stopped shipping colliding labels", () => {
+    // This asserted the opposite until gsim-core 0.6.3, which renamed the two
+    // legacy entries to "Step (legacy spelling)" and "Scope (legacy spelling)"
+    // (gsim-core#83). Fixing the data beats working around it at display time,
+    // so the stronger thing to guard now is that the data stays fixed: a new
+    // collision upstream fails here rather than quietly turning the workaround
+    // back on.
+    const qualifiers = qualifiersForCollidingLabels(Object.values(CATALOG));
+    expect([...qualifiers.keys()]).toEqual([]);
+  });
+
+  it("still qualifies a collision, for the day one is introduced", () => {
+    // The mechanism is tested on a pair of its own rather than on catalogue
+    // entries, so that it keeps being tested after the catalogue is corrected.
+    const qualifiers = qualifiersForCollidingLabels([
+      { name: "a.thing", label: "Thing" },
+      { name: "b.thing", label: "Thing" },
+      { name: "c.other", label: "Other" },
+    ]);
+    expect(qualifiers.get("a.thing")).toBe("a.thing");
+    expect(qualifiers.get("b.thing")).toBe("b.thing");
     // A label nothing else shares is left alone — qualifying every row would
     // double the text in a 282 px panel for no information.
-    expect(qualifiers.get("math.table_lookup")).toBeUndefined();
-    expect(qualifiers.get("passive.resistor")).toBeUndefined();
+    expect(qualifiers.get("c.other")).toBeUndefined();
   });
 
   it("gives the panel's two Step rows different accessible names", () => {
@@ -83,9 +98,12 @@ describe("#213: two blocks with the same label are told apart", () => {
     const steps = screen.getAllByRole("button", { name: /^Step/ });
     const names = steps.map((button) => button.getAttribute("aria-label"));
     expect(names).toHaveLength(2);
+    // Distinct, which is the thing that matters, and distinct in the engine's
+    // own labels rather than through a qualifier appended here: gsim-core
+    // 0.6.3 named the legacy spelling for what it is.
     expect(new Set(names).size).toBe(2);
-    expect(names).toContain("Step (signal.step)");
-    expect(names).toContain("Step (signal_flow.source.step)");
+    expect(names).toContain("Step");
+    expect(names).toContain("Step (legacy spelling)");
   });
 });
 
