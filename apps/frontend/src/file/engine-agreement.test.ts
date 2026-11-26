@@ -534,19 +534,21 @@ describe("alias resolution is the editor's, not the engine's", () => {
   });
 });
 
-// This block's name used to be "§5.2 param expressions are the editor's alone", which was a
-// claim about the *format*. It is no longer true of the format:
-// `GLODI-Engineering/gsim-core#94` implemented §5.2, so the engine resolves `{3 + 4}` to `7`,
-// substitutes at every §5.3 use site, rejects a cycle with the loop in the message, and returns
-// the resolved table as `compile().params`.
+// §5.2 is the engine's now, and the bundle committed here carries it.
 //
-// It is still true of the *bundle committed here*, and that is what this block now says. The
-// bundle is built from a pinned gsim-core commit, and `check-gsim-wasm-fresh.mjs
-// --against-engine` requires that commit to be the engine's default-branch HEAD — so the
-// committed bundle cannot carry #94 until it has merged and `scripts/build-gsim-wasm.mjs` has
-// been re-run. Until then the assertion below is the honest one, and the parity test that
-// replaces it sits beside it, skipped, with the one-line unblock.
-describe("§5.2 param expressions: the committed bundle predates gsim-core#94", () => {
+// This block's name was once "§5.2 param expressions are the editor's alone" -- a claim about
+// the format -- and then "the committed bundle predates gsim-core#94", a claim about this
+// bundle. Both have expired: `GLODI-Engineering/gsim-core#94` implemented §5.2, the bundle was
+// rebuilt against 0.7.0, and the assertions below are measured against that bundle.
+//
+// What the engine does *not* yet do is report a resolved value per block. `compile().params`
+// carries the resolved model table -- `{Rload: 1000, Rhalf: 500}` -- and the netlist carries
+// the resolved number at every use site. But a block param written `{3 + 4}` reaches the deck
+// as `7` without `7` appearing anywhere the editor can read it. So the inspector's
+// resolved-value readout still cannot be served from the engine, and
+// `params/param_expression.ts` is still the only implementation reachable from the UI. It is
+// not dead code and deleting it would delete the readout; see `GLODI-Engineering/gsim-core#106`.
+describe("§5.2 param expressions: the engine resolves them, and this bundle has it", () => {
   function compileWithRloadSetTo(value: string) {
     const document = JSON.parse(readFileSync(join(EXAMPLES, "buck_converter.gsim_sch"), "utf8"));
     const resistor = document.model.blocks.find((block: { id: string }) => block.id === "rload");
@@ -560,29 +562,38 @@ describe("§5.2 param expressions: the committed bundle predates gsim-core#94", 
     );
   }
 
-  it("emits an expression into the netlist verbatim, because this bundle has no §5.2 evaluator", () => {
-    const compiled = compileWithRloadSetTo("{3 + 4}");
-    // Not `7` — this bundle is gsim-core 0.6.3, which `document/model.rs` says does not
-    // evaluate the syntax. So `params/param_expression.ts` is still the only implementation
-    // *reachable from this editor*, and deleting it before the bundle moves would delete the
-    // one that works. See #199.
-    expect(compiled.netlist).toContain("{3 + 4}");
-    expect(compiled.netlist).not.toMatch(/^rload\s+\S+\s+\S+\s+7$/m);
-  });
-
-  // Unblock: remove `.skip`, delete the test above, and delete
-  // `apps/frontend/src/params/param_expression.ts` with its call sites — in the same commit as
-  // the bundle rebuild, so the editor never has two answers to one question at once.
-  it.skip("[after the bundle rebuild] evaluates §5.2 and hands back the resolved table", () => {
+  it("evaluates an expression into the netlist rather than emitting it verbatim", () => {
     const compiled = compileWithRloadSetTo("{3 + 4}");
     expect(compiled.netlist).toMatch(/^rload\s+\S+\s+\S+\s+7$/m);
     expect(compiled.netlist).not.toContain("{3 + 4}");
-    // And the asymmetry #199 is about is gone: the inspector's resolved-value readout reads
-    // this rather than evaluating the grammar a second time.
-    expect(compiled.params).toBeDefined();
   });
 
-  it.skip("[after the bundle rebuild] rejects a parameter cycle with the loop in the message", () => {
+  it("hands back the resolved model table, and it is not empty when the model declares params", () => {
+    // Asserted against a model that *has* params, because `params` on a model without any is
+    // `{}` -- which is `toBeDefined()` and would make this pass while testing nothing.
+    const document = JSON.parse(readFileSync(join(EXAMPLES, "buck_converter.gsim_sch"), "utf8"));
+    document.model.params = [
+      { name: "Rload", value: 1000 },
+      { name: "Rhalf", value: "{Rload / 2}" },
+    ];
+    const compiled = JSON.parse(
+      (engine as unknown as { compile: (model: string, target: string) => string }).compile(
+        JSON.stringify(document.model),
+        "general-simulator",
+      ),
+    );
+    expect(compiled.params).toEqual({ Rload: 1000, Rhalf: 500 });
+  });
+
+  it("does not report a block param's resolved value, which is why gsim-core#106 is open", () => {
+    // The gap, asserted so it is noticed when it closes rather than discovered later: the
+    // netlist has the number and the reported table does not.
+    const compiled = compileWithRloadSetTo("{3 + 4}");
+    expect(compiled.netlist).toContain(" 7");
+    expect(Object.values(compiled.params ?? {})).not.toContain(7);
+  });
+
+  it("rejects a parameter cycle with the loop in the message", () => {
     const document = JSON.parse(readFileSync(join(EXAMPLES, "buck_converter.gsim_sch"), "utf8"));
     document.model.params = [
       { name: "A", value: "{B + 1}" },
