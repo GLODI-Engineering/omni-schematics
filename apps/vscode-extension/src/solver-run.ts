@@ -46,8 +46,20 @@ export interface TransientRequest {
    * file at all, which is an empty log rather than an error.
    */
   eventsPath?: string;
-  tEnd: number;
-  tStep: number;
+  /**
+   * Which analysis to ask the engine for.
+   *
+   * `transient` runs the timestep loop and needs a window; `dc` solves a single
+   * operating point and takes neither `--tfinal` nor `--dt`. Passing them to
+   * `dc` is not harmless noise -- it is a command line that says one thing and
+   * means another, and the first person to read a failed run's log would have
+   * to know to ignore them.
+   */
+  mode: "transient" | "dc";
+  /** The transient window, in seconds. Required by `transient`, unused by `dc`. */
+  tEnd?: number;
+  /** The fixed step, in seconds. Required by `transient`, unused by `dc`. */
+  tStep?: number;
   /** Abandon the run after this long. `undefined` waits indefinitely. */
   timeoutMs?: number;
 }
@@ -66,19 +78,13 @@ export type SolverOutcome =
  * explain when the exact command is in the Output panel.
  */
 export function transientArgs(request: TransientRequest): string[] {
-  const args = [
-    request.netlistPath,
-    "--mode",
-    "transient",
-    "--tfinal",
-    String(request.tEnd),
-    "--dt",
-    String(request.tStep),
-    "--format",
-    "samples",
-    "--out",
-    request.samplesPath,
-  ];
+  const args = [request.netlistPath, "--mode", request.mode];
+  if (request.mode === "transient") {
+    // Only under `transient`: `--mode dc` rejects neither, it simply solves one
+    // point, so a window here would be a line that reads like it did something.
+    args.push("--tfinal", String(request.tEnd), "--dt", String(request.tStep));
+  }
+  args.push("--format", "samples", "--out", request.samplesPath);
   if (request.eventsPath !== undefined) {
     args.push("--events", request.eventsPath);
   }

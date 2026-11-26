@@ -36,6 +36,11 @@ schematic and checks the canvas actually gained a block that rendered, with no c
 error. It is the broad net: one catalogue entry whose symbol throws, or whose insert
 silently does nothing, fails the run and names itself.
 
+**`operating-point.mjs`** asks for an operating point on a 10 V source across two
+1 kΩ resistors and asserts the **numbers** — 5 V at the midpoint, 5 mA through the
+source — not that a container appeared. A structural check would have passed against
+a transient run of the same sheet, which is exactly what this is here to tell apart.
+
 **`journey.mjs`** is one person's path through the editor, with each step asserting the
 document really changed rather than that a click was dispatched:
 

@@ -246,6 +246,7 @@ export async function runSimulation(
     netlistPath,
     samplesPath,
     eventsPath,
+    mode: request.mode,
     tEnd: request.tEnd,
     tStep: request.tStep,
     timeoutMs: deps.timeoutMs,

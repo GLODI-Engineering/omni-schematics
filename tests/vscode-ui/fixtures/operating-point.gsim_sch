@@ -1,0 +1,152 @@
+{
+  "schema_version": 2,
+  "model": {
+    "id": "divider",
+    "name": "Resistive divider",
+    "grid": 20,
+    "params": [],
+    "blocks": [
+      {
+        "id": "vin",
+        "type": "source.voltage.dc",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          100,
+          200
+        ],
+        "rotation": 90,
+        "mirror": "none",
+        "params": {
+          "V": 10.0
+        },
+        "ic": {}
+      },
+      {
+        "id": "r1",
+        "type": "passive.resistor",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          300,
+          140
+        ],
+        "rotation": 90,
+        "mirror": "none",
+        "params": {
+          "R": 1000.0
+        },
+        "ic": {}
+      },
+      {
+        "id": "r2",
+        "type": "passive.resistor",
+        "paradigm": "physical-network",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          300,
+          300
+        ],
+        "rotation": 90,
+        "mirror": "none",
+        "params": {
+          "R": 1000.0
+        },
+        "ic": {}
+      },
+      {
+        "id": "gnd",
+        "type": "routing.ground",
+        "paradigm": "routing",
+        "domain": "physical-electrical",
+        "fidelity": "ideal",
+        "position": [
+          100,
+          380
+        ],
+        "rotation": 0,
+        "mirror": "none",
+        "params": {},
+        "ic": {}
+      }
+    ],
+    "wires": [
+      {
+        "id": "w1",
+        "from": {
+          "block": "vin",
+          "port": "p"
+        },
+        "to": {
+          "block": "r1",
+          "port": "p"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false,
+        "net": null
+      },
+      {
+        "id": "w2",
+        "from": {
+          "block": "r1",
+          "port": "n"
+        },
+        "to": {
+          "block": "r2",
+          "port": "p"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false,
+        "net": null
+      },
+      {
+        "id": "w3",
+        "from": {
+          "block": "r2",
+          "port": "n"
+        },
+        "to": {
+          "block": "gnd",
+          "port": "gnd"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false,
+        "net": null
+      },
+      {
+        "id": "w4",
+        "from": {
+          "block": "vin",
+          "port": "n"
+        },
+        "to": {
+          "block": "gnd",
+          "port": "gnd"
+        },
+        "kind": "physical-electrical",
+        "waypoints": [],
+        "pinned": false,
+        "net": null
+      }
+    ],
+    "subckt_defs": [],
+    "lines": [],
+    "nets": [],
+    "simulation": {
+      "default_analysis": "op1",
+      "analyses": [
+        {
+          "id": "op1",
+          "type": "OP"
+        }
+      ]
+    },
+    "metadata": {}
+  }
+}

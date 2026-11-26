@@ -6,8 +6,16 @@ import { type SolverLine, describeOutcome, runTransient, transientArgs } from ".
 const request = {
   netlistPath: "/tmp/deck.cir",
   samplesPath: "/tmp/run.gsim_samples",
+  mode: "transient" as const,
   tEnd: 0.02,
   tStep: 5e-9,
+};
+
+/** The same run as an operating point: one solve, so no window. */
+const operatingPoint = {
+  netlistPath: "/tmp/deck.cir",
+  samplesPath: "/tmp/op.gsim_samples",
+  mode: "dc" as const,
 };
 
 /**
@@ -26,6 +34,39 @@ const collect = () => {
   const lines: SolverLine[] = [];
   return { lines, onLine: (line: SolverLine) => lines.push(line) };
 };
+
+describe("an operating point is `--mode dc`, and carries no window", () => {
+  it("asks for dc and omits --tfinal and --dt", () => {
+    // The engine solves one point under `--mode dc`; `--tfinal` and `--dt` mean
+    // nothing to it. Passing them anyway would put a window on a command line
+    // that ignores it, which the next person reading a failed run's log would
+    // have to know to disregard.
+    expect(transientArgs(operatingPoint)).toEqual([
+      "/tmp/deck.cir",
+      "--mode",
+      "dc",
+      "--format",
+      "samples",
+      "--out",
+      "/tmp/op.gsim_samples",
+    ]);
+  });
+
+  it("still writes the container, so a result reaches the viewer the same way", () => {
+    const args = transientArgs(operatingPoint);
+    expect(args).toContain("--format");
+    expect(args[args.indexOf("--format") + 1]).toBe("samples");
+  });
+
+  it("carries the event stream when one is asked for", () => {
+    // A rule can fire at an operating point as readily as during a run.
+    expect(transientArgs({ ...operatingPoint, eventsPath: "/tmp/op.events.jsonl" })).toEqual([
+      ...transientArgs(operatingPoint),
+      "--events",
+      "/tmp/op.events.jsonl",
+    ]);
+  });
+});
 
 describe("transientArgs", () => {
   it("asks the solver for the container, not for CSV", () => {
