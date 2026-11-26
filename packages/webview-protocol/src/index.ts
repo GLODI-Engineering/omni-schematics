@@ -245,6 +245,28 @@ export type OpenBlockSourceResult =
  * Paths are **relative to the schematic**, like every path a block carries, and the host
  * resolves them against the schematic's own folder — the same directory it spawns the solver in
  * (#234).
+ *
+ * ## This field is provisional, and `sourceCandidates` is a guess
+ *
+ * Say it here rather than leave it to be discovered: **`sourceCandidates` is a list the webview
+ * derives by convention** (`blocks/<stem>.c`, then beside the library, then the sheet's folder,
+ * then `src/`, each with a `.cpp` alternative), and a convention that travels in a protocol
+ * message looks exactly like a fact to whoever reads it next. It is not a fact. A project with
+ * its sources in `code/` and its artifacts in `code/runs/<case>/` matches none of those folders,
+ * and this field will say so by listing candidates none of which exist.
+ *
+ * It shipped ahead of the tidier design on purpose: the staleness refusal removes a silent wrong
+ * result today, and `GLODI-Engineering/omni-schematics#222` — the `source` parameter that would
+ * make the link something the **document states** — is a cross-repo change needing a component
+ * library entry in the engine and a release behind it. Blocking a wrong-answer fix on that is
+ * the wrong trade.
+ *
+ * So: **expect this field to be replaced** by a document-stated source once #222 lands, and do
+ * not build anything on it that needs `sourceCandidates` to be true rather than plausible.
+ * `inferredSource` is what carries the distinction to a consumer, and the one feature built on
+ * this field so far — the staleness check — says "could not find the source, and the list I
+ * looked in is this editor's convention rather than something the document states" instead of
+ * implying it checked.
  */
 export interface RunCodeBlock {
   /** The block's id on the sheet, which is also the name the netlist gives it. */
