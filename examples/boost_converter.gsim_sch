@@ -36,7 +36,7 @@
         "rotation": 0,
         "mirror": "none",
         "params": {
-          "IC": 0,
+          "IC": 0.0,
           "L": 0.00022
         },
         "ic": {}
@@ -54,10 +54,10 @@
         "rotation": 0,
         "mirror": "none",
         "params": {
-          "body_g_breakdown": 0,
+          "body_g_breakdown": 0.0,
           "body_g_off": 1e-09,
-          "body_g_on": 5,
-          "body_v_breakdown": -100,
+          "body_g_on": 5.0,
+          "body_v_breakdown": -100.0,
           "body_v_f": 0.6,
           "r_on": 0.01,
           "v_gs_th": 0.5
@@ -79,7 +79,7 @@
         "params": {
           "per": 1e-05,
           "pw": 5e-06,
-          "td": 0,
+          "td": 0.0,
           "tf": 1.0000000000000001e-07,
           "tr": 1.0000000000000001e-07,
           "v1": 0.0,
@@ -117,10 +117,10 @@
         "rotation": 0,
         "mirror": "none",
         "params": {
-          "g_breakdown": 0,
+          "g_breakdown": 0.0,
           "g_off": 1e-09,
-          "g_on": 5,
-          "v_breakdown": -100,
+          "g_on": 5.0,
+          "v_breakdown": -100.0,
           "v_f": 0.6
         },
         "ic": {}
@@ -139,7 +139,7 @@
         "mirror": "none",
         "params": {
           "C": 0.00047,
-          "IC": 0
+          "IC": 0.0
         },
         "ic": {}
       },
