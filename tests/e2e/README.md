@@ -6,30 +6,49 @@ drag from one terminal to another made the canvas create one.
 
 ## Running it
 
-Playwright ships no bundled Chromium for every distribution — on Ubuntu
-26.04 `playwright install chromium` refuses outright — so point it at the
-browser already installed:
-
 ```sh
-PLAYWRIGHT_BROWSER_CHANNEL=chrome npx playwright test --project=chromium
+pnpm exec playwright install chromium   # once: the revision package.json pins
+pnpm e2e
 ```
 
-Leave the variable unset and it uses Playwright's own pinned build, which is
-what CI does.
+That is all, and the first line matters: **run the suite against the browser
+Playwright pins, not one that happens to be installed.** The pinned revision
+comes from the `@playwright/test` version in `package.json`
+(`playwright-core/browsers.json` is where it is written down), and CI installs
+exactly that one. A browser that is not the pinned one is a quiet source of
+results that do not mean what they say — see #233, which this repository
+already lived through: Playwright 1.60 knew nothing of Ubuntu 26.04, refused to
+install at all, and two symlinks in `~/.cache/ms-playwright/` were made to
+point the pinned path at a different build. Playwright 1.61.0 added that
+distribution and the bump removed the problem.
+
+If `playwright install chromium` ever refuses again — "Playwright does not
+support chromium on \<distro\>" — the first thing to try is a newer
+Playwright. Only if that fails, fall back to the machine's own Chrome:
+
+```sh
+PLAYWRIGHT_BROWSER_CHANNEL=chrome pnpm e2e
+```
+
+and treat a failure under it as unconfirmed until CI agrees. `playwright.config.ts`
+says the same thing where the variable is read.
 
 Useful subsets:
 
 ```sh
 # one file
-... npx playwright test tests/e2e/schematic-basics.spec.ts
+pnpm exec playwright test tests/e2e/schematic-basics.spec.ts
 
 # watch it happen
-... npx playwright test tests/e2e/sogi-pll.spec.ts --headed
+pnpm exec playwright test tests/e2e/sogi-pll.spec.ts --headed
 
-# the catalog sweep is ~10 minutes; take a slice instead
-SWEEP_LIMIT=40 ... npx playwright test schematic-catalog-sweep
-SWEEP_FILTER=converter ... npx playwright test schematic-catalog-sweep
+# the catalog sweep is the slowest single spec; take a slice instead
+SWEEP_LIMIT=40 pnpm exec playwright test schematic-catalog-sweep
+SWEEP_FILTER=converter pnpm exec playwright test schematic-catalog-sweep
 ```
+
+One spec fails on a healthy checkout: `dim-mismatch`, which is blocked on
+gsim-core#64. Anything else failing is yours.
 
 ## The three layers
 
