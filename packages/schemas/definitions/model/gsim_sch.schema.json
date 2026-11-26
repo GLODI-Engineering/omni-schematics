@@ -81,6 +81,111 @@
         }
       ]
     },
+    "CodeDefine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "description": "One -D on a compile line. Exactly one of `from` and `literal` carries the value; neither, or both, is refused. See §20.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "The macro name. An identifier, so it cannot become something else on a compile line."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "The `model.params` entry this define's value comes from — the same table the netlist is generated from, which is the whole point. A dotted name is reserved for binding to a drawn component's own parameter and is refused today."
+        },
+        "literal": {
+          "description": "A constant that is not a circuit quantity, written out by the author. Spelled differently from `from` so a reader can see at a glance which constants the circuit owns.",
+          "oneOf": [{ "type": "number" }, { "type": "boolean" }, { "type": "string" }]
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "The author declaring that this define may be absent, and the only way it may be. An absent parameter with no `optional` is refused; with it, the define is omitted and its name recorded, so a deliberate absence never looks like a missed one."
+        }
+      }
+    },
+    "CodeBuildStep": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "kind"],
+      "description": "One product of a build. A shared-library step carries no output path: its artifact is the `lib` of the block(s) whose `build` names it, so the artifact is named in exactly one place. `additionalProperties` is true on purpose — a step kind a reader does not implement has to survive a save, and is refused at compile rather than dropped.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Unique within the plan." },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "`shared-library` is the only kind defined in v2. Free text rather than an enum, so an unrecognised kind round-trips instead of failing to parse."
+        },
+        "lang": {
+          "enum": ["c", "c++"],
+          "description": "Required for a shared-library step. It decides which compiler driver the builder invokes, and inferring it from a file extension is a guess."
+        },
+        "sources": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Every file on the compile line — the thin cscript_* adapter AND the shared sources it needs. Relative to the schematic's directory; no absolute path and no `..` segment."
+        },
+        "includes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Appended to the plan's own `includes`."
+        },
+        "defines": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CodeDefine" },
+          "description": "Appended to the plan's own `defines`; an entry whose `name` repeats a plan-level one replaces it in place rather than adding a second -D."
+        },
+        "flags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Opaque compiler-specific text, never interpreted. A sheet that uses it builds only where those flags are understood."
+        },
+        "libs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "A bare library name (\"m\"), not a flag."
+        },
+        "needs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Step ids that must have run first. A reader hands the steps to a builder already in dependency order."
+        }
+      }
+    },
+    "CodeBuild": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "How this sheet's code blocks are built. On the model rather than on a block, because five blocks sharing two sources need one place to say so, and because a step whose product no block claims belongs to no block at all. See §20.",
+      "properties": {
+        "includes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Include directories every step gets."
+        },
+        "defines": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CodeDefine" },
+          "description": "Defines every step gets — the circuit's own numbers, written once."
+        },
+        "flags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Opaque compiler flags every step gets."
+        },
+        "libs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Libraries every step links."
+        },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CodeBuildStep" }
+        }
+      }
+    },
     "ParamEntry": {
       "type": "object",
       "additionalProperties": false,
@@ -148,6 +253,16 @@
           "type": "string",
           "minLength": 1,
           "description": "For a spice-subckt.* Block: the `id` of the SubcktDef in `model.subckt_defs` this block instantiates. This is the serialized field name — `def_ref` is only the name used on the builder's input spec (NewSubcktInstanceSpec) and on SubcktInstance (def-to-def nesting), never on a Block."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The file the user edits to change this block's behaviour. For an extensibility.cscript block this is the thing its `lib` parameter does NOT name, because `lib` is the compiled artifact. Display and navigation only — never emitted into a netlist, because general-mna rejects an unknown field on a kind=cscript card outright. Relative to the schematic's own directory. See §20."
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The `id` of the step in `model.code_build.steps` that produces this block's artifact. Permitted only on an extensibility.cscript block; a build on anything else is refused. See §20."
         },
         "subsystem": {
           "oneOf": [{ "$ref": "#/$defs/SubsystemModel" }, { "type": "null" }]
@@ -574,7 +689,8 @@
         "subckt_defs": {
           "type": "array",
           "items": { "$ref": "#/$defs/SubcktDef" }
-        }
+        },
+        "code_build": { "$ref": "#/$defs/CodeBuild" }
       }
     },
     "Model": {
@@ -611,7 +727,8 @@
         "subckt_defs": {
           "type": "array",
           "items": { "$ref": "#/$defs/SubcktDef" }
-        }
+        },
+        "code_build": { "$ref": "#/$defs/CodeBuild" }
       }
     }
   }

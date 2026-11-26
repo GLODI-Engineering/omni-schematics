@@ -35,6 +35,7 @@ extension `.gsim`.
 17. [Validation rules](#17-validation-rules)
 18. [v2 limitations](#18-v2-limitations)
 19. [Validation errors quick reference](#19-validation-errors-quick-reference)
+20. [Code-block build description (`code_build`)](#20-code-block-build-description-code_build)
 
 ---
 
@@ -1323,6 +1324,242 @@ A roundtrip CI gate (FE-RT-01 / BE-RT-01) reads a file, writes it back, and asse
 | `Dimension unresolved on wire "<id>"` | Inference reached fixed point without resolving | Add a `signal-flow.attributes.signal_specification` block to pin the dim, or replace an `inherit` source. |
 | `Dimension loop: <a> → <b> → ... → <a>` | Cycle of `inherit`-only blocks | Break the cycle with a Signal Specification. |
 | `Subsystem variant "<t>" not implemented in v2` | A block uses `hierarchy.subsystem.iterator` or a function-call subsystem | Use atomic/virtual/enabled/triggered; iterator + function-call are v3. |
+| `define '<D>' is built from model parameter '<P>', and that parameter is absent` | A `code_build` define's `from` names no `model.params` entry (§20.4) | Add the parameter, fix the spelling, or mark the define `optional` if it is genuinely meant to be absent. |
+| `... that parameter is absent -- this sheet declares <n>, named ...` | Same refusal, listing the names the sheet does declare | Usually a typo in `from`. |
+| `... a .gsim_sch §5.1 expression or reference that this crate does not evaluate` | A define's parameter holds `"{...}"` or a bare reference, which the reader does not resolve (§20.4) | Give the parameter a numeric value, or wait for the reader to evaluate §5.2. |
+| `build step '<S>' has kind '<K>', which this version does not build` | A step kind outside §20.1 | Remove the step, or use `shared-library`. Refused rather than skipped, because skipping leaves an artifact nobody built (§20.5). |
+| `build step '<S>' no block names it and no other step needs it` | A step nothing would ever run | Point a block's `build` at it, or delete it. |
+
+---
+
+## 20. Code-block build description (`code_build`)
+
+How this sheet's C blocks are built. The reasoning behind every rule below is in
+`GLODI-Engineering/gsim-core`'s decision record 0009, "A document-carried build for code blocks,
+and the define that has to be derivable"; this section is the format.
+
+A `cscript` block's `lib` parameter names the **compiled artifact**, not a source. Without this
+section nothing in a document says what that artifact was compiled from, with which include
+directories, or with which `-D` defines — and a C block is rebuilt per operating point with
+defines derived from the same `params` table (§5) the netlist is generated from. A build that
+omits one produces a block whose constants disagree with the circuit it is wired into, and the
+run then reports a plausible wrong answer. Hence §20.4.
+
+### 20.1 Shape
+
+`model.code_build` is optional. Absent — which is every document written before this section —
+means nothing builds this sheet's code blocks, and the sheet compiles exactly as it did.
+
+```json
+"code_build": {
+  "includes": ["code", "code/generated"],
+  "defines": [
+    { "name": "L_F", "from": "L_f" },
+    { "name": "FSW", "from": "fsw" },
+    { "name": "N_PHASES", "literal": 3 }
+  ],
+  "libs": ["m"],
+  "steps": [
+    { "id": "ctrl", "kind": "shared-library", "lang": "c",
+      "sources": ["code/cscript_ctrl.c", "code/control_law.c"] },
+    { "id": "mod",  "kind": "shared-library", "lang": "c",
+      "sources": ["code/cscript_mod.c", "code/control_law.c"],
+      "flags": ["-ffast-math"] }
+  ]
+}
+```
+
+A block points at the step that produces its artifact, and names the file its author edits:
+
+```json
+{ "id": "CTRL", "type": "extensibility.cscript",
+  "params": { "lib": "runs/case3/ctrl", "input_names": ["e"], "output_names": ["d"] },
+  "source": "code/cscript_ctrl.c",
+  "build": "ctrl" }
+```
+
+| Field | Where | Required | Notes |
+|---|---|---|---|
+| `includes` / `defines` / `flags` / `libs` | plan and step | no | A step's are **appended** to the plan's. One level of composition; a step can add, never subtract. |
+| `steps` | plan | no | Handed to a builder in dependency order (§20.3). |
+| `id` | step | yes | Unique within the plan. |
+| `kind` | step | yes | `shared-library` is the only kind in v2. Free text, not an enum — see §20.5. |
+| `lang` | step | yes for `shared-library` | `c` or `c++`. Not inferred from a file extension. |
+| `sources` | step | yes for `shared-library` | Every file on the compile line, the adapter **and** the shared sources. |
+| `needs` | step | no | Step ids that must have run first. |
+| `source` | block | no | The file the user edits. Never emitted into a netlist. |
+| `build` | block | no | A step id. Permitted only on `extensibility.cscript`. |
+
+Every path is relative to **the schematic's own directory** — the same base the solver's working
+directory uses, so a relative `lib=` in the compiled netlist and a relative `sources` entry mean
+the same thing. An absolute path, and any `..` segment, is refused: a build description may not
+reach outside the tree it travels in, and an absolute path breaks the moment the project is
+cloned or opened over a remote.
+
+A `shared-library` step has **no output path.** Its artifact is the `lib` of the block(s) whose
+`build` names it, so the artifact is named in exactly one place. Two blocks may name one step —
+they then share a library — but their `lib` must agree. A step no block names and nothing
+`needs` is refused, because nothing would ever run it.
+
+### 20.2 A define is a binding
+
+A `defines` entry carries its value in exactly one of two fields, and they do not look alike:
+
+| Form | Meaning |
+|---|---|
+| `{ "name": "L_F", "from": "L_f" }` | the value of `model.params["L_f"]` — the table the netlist is generated from |
+| `{ "name": "N_PHASES", "literal": 3 }` | a constant that is not a circuit quantity, written out by the author |
+
+Neither field, or both, is refused. There is no third form, and in particular **no form in which
+a number lives both in the build and on a drawn component**: two places holding one quantity,
+one of them edited, is what this section exists to prevent.
+
+`from` names a model parameter by its bare name. A dotted `"L1.L"` is *reserved* for binding a
+define to a drawn component's own parameter and is refused today, rather than read as a name that
+happens to contain a dot.
+
+A define's value is formatted by the same code that formats it onto an element card. A reader
+that formats it separately is a reader whose `-D` and whose netlist disagree on `2.8e-06`.
+
+### 20.2a The whole loop, in one example
+
+A constant is declared **once**, in `model.params` (§5) — the same table a device value
+references and a sweep sweeps. There is no parallel table for build constants, because the whole
+claim is that the build and the netlist read the same dictionary.
+
+```json
+"params": [
+  { "name": "L_f", "value": 2.8e-6, "unit": "H"  },
+  { "name": "fsw", "value": 250000, "unit": "Hz" }
+]
+```
+
+The schematic uses it for a device value, by §5.1 reference:
+
+```json
+{ "id": "L1", "type": "passive.inductor", "params": { "L": "L_f" } }
+```
+
+The C source names it as a macro, and carries no number at all:
+
+```c
+#include "gsim_cscript.h"
+
+void cscript_output(void *state, const double *in, int in_len, double dt,
+                     double *out, int out_len) {
+    /* L_F and FSW are the sheet's own constants. Nothing here is a literal. */
+    out[0] = in[0] * dt / (L_F * FSW);
+}
+```
+
+The plan is the one place that says which sheet constant answers to which macro:
+
+```json
+"defines": [{ "name": "L_F", "from": "L_f" }, { "name": "FSW", "from": "fsw" }]
+```
+
+And one compile produces both sides:
+
+```text
+L1 n1 n2 L_f                          <- the netlist card
+-DL_F=2.8e-6 -DFSW=250000             <- the compile line for the same run
+```
+
+Change `L_f` and both change, because both came from the same read. Misspell the `from` and
+neither exists, because the compile refused (§20.4).
+
+**The value reaches the macro as a `-D` on the compile line**, not by rewriting the source. The
+user's `.c` is compiled untouched, so §20's defines do not disturb a `$gcc` diagnostic's file and
+line, a debugger's line table, or a language server reading the file on disk — and the command
+line the builder prints says which constants the artifact was built with, in a form that can be
+pasted into a terminal. A structured constant (a table, an array, a struct initialiser) is the
+case `-D` does not serve, and the format's answer is a generated header written by a step kind
+rather than a second spelling of `defines`; `ParamValue` cannot express a table today, so there
+is nothing yet to carry. The reasoning, and the option that was rejected, is in `gsim-core`'s
+decision record 0009.
+
+**The `defines` list is written in the document, not discovered from the source.** A reader does
+not scan a `.c` for macro names: the build set would then depend on the contents of a file
+outside the document, so a sheet could not be reviewed, diffed or compiled without its sources
+present, and a source edited to drop a macro would silently change the build. A front end may
+*offer* to fill the list from a source once, for the user to accept — the same gesture the
+Inspector already uses for `input_names` / `output_names` — but what it fills in is the
+declaration, and the declaration is what refuses.
+
+### 20.3 Order, and the canonical list
+
+Steps are handed to a builder topologically sorted: a step appears after everything it `needs`.
+A `needs` naming no step, and a cycle, are both refused.
+
+A step's effective define list is the plan's `defines` in document order, then the step's own in
+document order, where a repeated `name` **replaces** the earlier entry in place rather than
+adding a second `-D`. A list that repeats a name *within itself* is refused; a step overriding a
+plan-level define is the one legitimate repeat. Each entry renders as `NAME=VALUE`. A define
+with no value is not expressible.
+
+This order is normative because it is an equality test: a build may leave a record beside its
+artifact carrying its resolved list, and a later run compares the two to catch an artifact built
+for another operating point.
+
+### 20.4 A define that cannot be derived refuses the whole compile
+
+**Normative.** A reader of `.gsim_sch` that resolves a build description **must** refuse to
+produce a build, and must refuse to produce the netlist that build belongs to, when any
+non-`optional` define cannot be resolved to a value. It must not omit the define, substitute a
+default, substitute an empty value, or warn and continue. The refusal must name the define and
+the parameter it would have been derived from.
+
+A failed compile is obvious and costs a minute. A wrong constant is a plausible waveform that
+can survive a whole study, and a reader that decided otherwise would produce exactly that. This
+is a property of the format, not a reader's policy.
+
+Note that a parameter whose value is a §5.1 expression or reference is **underivable for a reader
+that does not evaluate §5.2** and must be refused by it, naming the unevaluated text — not
+emitted verbatim onto a compile line.
+
+A define whose value is legitimately absent is declared on the define:
+
+```json
+{ "name": "DEBUG_LOG", "from": "debug_log", "optional": true }
+```
+
+`optional` forgives exactly one thing: the parameter not being there. The define is then omitted
+and its name recorded alongside the resolved list, so a build made without it never looks like a
+build that forgot it. Absence on the author's side is a decision; absence on the document's side
+is a mistake, and nothing in this format lets the second look like the first. An `optional`
+define whose parameter *is* present but unusable is still refused.
+
+### 20.5 An unknown step kind round-trips and refuses
+
+Two separate obligations, and a reader owes both.
+
+A step whose `kind` this version does not implement **must survive a round trip verbatim** —
+`CodeBuildStep` is `additionalProperties: true` and `kind` is a string rather than an enum
+precisely so that a reader older than the sheet does not delete the user's build on save.
+
+And it **must be refused at compile**, not skipped. A skipped build step leaves an artifact
+nobody built, which loads and runs. This is the one place the format departs from "keep what you
+do not understand and carry on", and the reason is that here, carrying on has a consequence.
+
+### 20.6 What this version does not cover
+
+- **Python and Octave blocks have no build**, and need none — nothing compiles a `.py` or a
+  `.m`. They have the same constants problem, and the format's answer to it is a future step
+  kind that writes the bound defines to a file the script imports, not a second mechanism.
+- **A multi-step graph** — compile a host program, run it to generate a header, then compile the
+  block — is expressible (`steps`, `needs`, `kind`) and not implemented. A second `kind` adds it
+  without a breaking change.
+- **A sweep is a sequence, not a fan-out.** A swept parameter (§13.2) bound to a define changes
+  the define's value per sweep point, which falls out of §20.2 for free. What a document cannot
+  express is a *distinct artifact per point*, because `lib` is one string — so N points are N
+  builds over one artifact, in sequence.
+- **A build inside a subsystem is out of reach.** A `build` on a block inside `subsystem` has no
+  plan to resolve against until flattening exists, and whether an inner plan merges or shadows is
+  undecided.
+- **`flags` is opaque and therefore not portable.** `sources`, `includes`, `defines`, `libs` and
+  `lang` are the portable core; a sheet that uses `flags` builds where those flags are
+  understood. A document carrying a build is also code-adjacent, so a reader that spawns a
+  compiler should gate that behind whatever trust decision it already makes about a workspace.
 
 ---
 
