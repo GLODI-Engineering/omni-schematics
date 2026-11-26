@@ -92,30 +92,32 @@ export interface CompilerChoice {
   /** The one program to try. Absent means: discover one. */
   program?: string;
   /**
-   * `block` — the sheet's own `compiler` parameter, for a block that needs a particular one.
    * `setting` — `omniSchematics.compilerPath`, the machine's answer for every block.
    * `discovered` — nothing was named, so the candidates below are tried in order.
    */
-  source: "block" | "setting" | "discovered";
+  source: "setting" | "discovered";
 }
 
 /**
- * Whose compiler to use: the block's, then the setting's, then whatever is on `PATH`.
+ * Whose compiler to use: the machine's, then whatever is on `PATH`.
  *
  * The owner's decision, and the reasoning is his: installing a toolchain is the user's
  * business, and the editor's business is letting them say where it is. So a `.vsix` ships no
  * compiler and this is the whole of the policy.
  *
+ * **A block cannot name one, deliberately.** A compiler is a fact about a machine, not about a
+ * circuit, and a `.gsim_sch` travels in version control -- so a sheet naming `/opt/mingw/bin/gcc`
+ * would build on one person's computer and refuse on everyone else's, for a reason that reads
+ * like a problem with the schematic. The sheet says what to build; the machine says what to
+ * build it with. (It would also not survive: a parameter on a block is dropped by a fidelity
+ * change, so the compiler would vanish when the user swapped a model.)
+ *
  * A named compiler is tried **alone**. Falling back to a different one would be the worst of
  * both: a build that succeeds with flags the user did not choose, producing a library whose
- * provenance nobody can reconstruct from the sheet. If the one you named cannot build, that is
- * the answer, and the report says which one you named and what it said.
+ * provenance nobody can reconstruct. If the one you named cannot build, that is the answer,
+ * and the report says which one you named and what it said.
  */
-export function chooseCompiler(named: { block?: string; setting?: string }): CompilerChoice {
-  const block = named.block?.trim();
-  if (block !== undefined && block !== "") {
-    return { program: block, source: "block" };
-  }
+export function chooseCompiler(named: { setting?: string }): CompilerChoice {
   const setting = named.setting?.trim();
   if (setting !== undefined && setting !== "") {
     return { program: setting, source: "setting" };

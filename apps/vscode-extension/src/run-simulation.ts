@@ -51,6 +51,7 @@ import { type ResolvedSolver, SolverNotFound } from "./solver-path";
 import { type SolverOutcome, describeOutcome, runTransient, transientArgs } from "./solver-run";
 import {
   type ProbeIo,
+  chooseCompiler,
   languagesNeeded,
   preflight,
   probeCompiler,
@@ -106,6 +107,13 @@ export interface RunDependencies {
    * `undefined` here means `"refuse"`.
    */
   staleCodeBlock?: StaleAction;
+  /**
+   * The compiler the user named, from `omniSchematics.compilerPath`.
+   *
+   * `undefined` means they named none, and the preflight discovers one. A named compiler is
+   * tried alone -- see `chooseCompiler` -- so this is not a hint that discovery may override.
+   */
+  compilerPath?: string;
   /**
    * The outside world the toolchain preflight probes (#238). Injected only so the preflight's
    * own branches are testable; defaults to real spawns and a real temporary directory.
@@ -385,7 +393,9 @@ export async function runSimulation(
   const shortfalls = preflight({
     languages: languagesNeeded(request.codeBlocks),
     cNeedsBuilding: needsBuilding,
-    compiler: () => probeCompiler(probeIo),
+    // The user's choice, not just a probe: `omniSchematics.compilerPath` was contributed and
+    // read by nothing, so the setting existed in the manifest and changed no run.
+    compiler: () => probeCompiler(probeIo, chooseCompiler({ setting: deps.compilerPath })),
     engine: () => readEngineCapabilities(probeIo, solver.binary),
     octave: () => {
       // Spawned rather than looked for on `PATH`: a name on `PATH` that cannot execute is the

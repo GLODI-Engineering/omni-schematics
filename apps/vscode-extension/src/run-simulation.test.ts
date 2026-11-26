@@ -942,6 +942,60 @@ describe("the toolchain preflight", () => {
     expect(said).toContain("octave-cli");
   });
 
+  it("builds with the compiler the user named, and looks for no other", async () => {
+    // The regression this exists for: `omniSchematics.compilerPath` was contributed in the
+    // manifest, documented in its description, and read by nothing -- `runSimulation` called
+    // `probeCompiler(probeIo)` with no choice, so naming a compiler changed no run. A setting
+    // that is advertised and ignored is worse than one that does not exist.
+    const sheetFolder = fs.mkdtempSync(path.join(os.tmpdir(), "gsim-named-"));
+    scratch.push(sheetFolder);
+    // The source exists and the library does not, so this run needs a build -- which is what
+    // makes the preflight look for a compiler at all.
+    fs.writeFileSync(path.join(sheetFolder, "gain.c"), "/* source */\n");
+
+    const tried: string[] = [];
+    await runSimulation(
+      {
+        ...request,
+        codeBlocks: [
+          {
+            blockId: "G1",
+            language: "c" as const,
+            artifact: "./libgain.so",
+            sourceCandidates: ["gain.c"],
+            inferredSource: true,
+          },
+        ],
+      },
+      {
+        runDirectory: runDirectory(),
+        schematicFolder: sheetFolder,
+        resolve: () => found,
+        compilerPath: "/opt/mingw/bin/gcc",
+        probeIo: {
+          platform: "linux",
+          run: (program) => {
+            tried.push(program);
+            return { started: false, code: null, stderr: "spawn ENOENT", stdout: "" };
+          },
+          scratch: () => fs.mkdtempSync(path.join(os.tmpdir(), "gsim-probe-")),
+          discard: () => {},
+          write: () => {},
+          produced: () => false,
+        },
+        spawn: (b, args) => fakeSolver()(b, args),
+        onOutput: collect().onOutput,
+      },
+    );
+
+    // Exactly the named one, and nothing else: falling back to `clang` would hand the user a
+    // library built by a compiler they did not choose, with flags they did not choose.
+    expect(tried).toContain("/opt/mingw/bin/gcc");
+    expect(tried).not.toContain("clang");
+    expect(tried).not.toContain("cc");
+    expect(tried).not.toContain("gcc");
+  });
+
   it("refuses a Python sheet against an engine that says it cannot run one", async () => {
     const sink = collect();
     const result = await runSimulation(
