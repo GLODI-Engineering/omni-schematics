@@ -1,5 +1,85 @@
 # Changelog
 
+## 2026-11-26 — Omni Schematics (0.9.3)
+
+**You say where your compiler is, old results stop filling the disk, and a
+saved sheet reads as a diff.**
+
+### Install it
+
+1. `omni-schematics-0.9.3.vsix` from this release.
+2. A `general-simulator` binary, **v0.9.0 or newer** — and
+   [v0.10.0](https://github.com/GLODI-Engineering/general-simulator/releases)
+   is the one to take if you write code blocks: it is where an Octave block
+   stopped being able to run a different file than the netlist names, and
+   where a failed run started saying what happened instead of printing a Rust
+   struct literal.
+3. `"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"`
+
+### The extension ships no compiler, and now you can say where yours is
+
+Installing a toolchain — MinGW-w64, Build Tools, the Xcode command line
+tools, your distribution's `gcc` or `clang` — is yours to do. The editor's job
+is to let you say where it is, and that is `omniSchematics.compilerPath`.
+
+Leave it empty and the editor looks for `clang`, then `cc`/`gcc`, then
+`cl.exe` on Windows — and **it looks by building a two-line shared library,
+not by finding a name on `PATH`**. The difference matters on Windows, where
+`cl.exe` is on the `PATH` of any machine with Visual Studio installed and
+fails at link time without a developer environment. A `PATH` lookup calls that
+success.
+
+**A compiler you name is tried alone.** If it cannot build, the run stops and
+says so, rather than quietly succeeding with a different one — a library built
+by a compiler you did not choose, with flags you did not choose, is one whose
+provenance nothing records.
+
+A block cannot name a compiler, deliberately. A compiler is a fact about a
+machine and not about a circuit, and a `.gsim_sch` travels in version control:
+a sheet naming `/opt/mingw/bin/gcc` would build on one person's computer and
+refuse on everyone else's, for a reason that reads like a problem with the
+schematic.
+
+### Fixed — the setting was read by nothing
+
+It was contributed in the manifest, documented in its own description, and
+never reached the run. A setting that is advertised and ignored is worse than
+one that does not exist: you believe you have said something and the build
+does not hear it.
+
+### Old results stop accumulating
+
+Every Run writes `.gsim/runs/<run id>/` and nothing ever removed one. The
+directory per click is deliberate — a run is reproducible from exactly those
+four files and opening last week's result is the point of the format — but the
+buck example's 10 ms run is 38 KB while a 20 ms switching run at a 5 ns step
+is hundreds of megabytes per signal. A day of iterating filled a disk, and the
+only hint was a `.gsim` directory quietly growing.
+
+`omniSchematics.keepRuns` keeps the newest, 20 by default. Three things it
+will not do: prune **before** a run, because a run that then fails would take
+the last good result with it; delete everything when set to `0`, which is you
+asking for the old behaviour; or touch a file it did not write, because that
+directory being the extension's is not a licence to delete your notes.
+
+### A saved sheet reads as a diff
+
+The editor wrote the whole document on one line. Nothing was lost, but a
+`.gsim_sch` in version control then produced one enormous changed line per
+edit, so `git diff` could say only *that* the sheet changed and never what
+changed in it — opening an example and nudging one block rewrote
+`buck_converter` from 7,535 bytes across 400-odd lines to 3,990 on one.
+
+Two spaces and a trailing newline now, which is what `examples/_builder.py`
+and the engine's own `save_document` have always written.
+
+### Known
+
+A saved sheet is still not byte-identical to the one its generator emits, and
+the reason is not formatting: Python and Rust write a float as `48.0` and
+JavaScript as `48`, so the two differ at every float-valued parameter. The
+three writers of this format disagree about a number, which is #268.
+
 ## 2026-11-26 — Omni Schematics (0.9.2)
 
 **A code block builds into the run, or tells you exactly why not** — and three
