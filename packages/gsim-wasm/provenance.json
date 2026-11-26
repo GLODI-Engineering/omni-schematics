@@ -4,7 +4,7 @@
     "repository": "https://github.com/GLODI-Engineering/gsim-core.git",
     "crate": "crates/gsim-wasm",
     "version": "0.7.0",
-    "commit": "2b1cc2af7f1c6e59df1461cb740ff5f6fc4725fa"
+    "commit": "872efdad8b6dfef6d2cc45f9401aeeccc770800c"
   },
   "built_with": {
     "wasm-pack": "wasm-pack 0.13.1",
