@@ -1197,14 +1197,16 @@ compile                           inline SubcktDefs   (document/subckt.rs)
     │                              per-block compile  (compile/spec.rs)
     ▼
 netlist text + notes + provenance
-    │                             the editor sends this over IPC:
-    │                             apps/frontend/src/shell/run.ts
+    │                             the webview posts this to the extension
+    │                             host: apps/frontend/src/shell/run.ts
     ▼
-general-simulator                 the solver, a subprocess the kernel spawns
-    │
+general-simulator                 the solver: a subprocess the extension host
+    │                             spawns, with --format samples
+    │                              (apps/vscode-extension/src/solver-run.ts)
     ▼
-result container + manifest       simulator.postprocess.result_writer
-    │
+run.gsim_samples                  written by the solver
+  + result.gsim_sim_result         manifest written by the host
+    │                              (apps/vscode-extension/src/result-manifest.ts)
     ▼
 the waveform viewer               crates/waveform-store, also WebAssembly
 ```
@@ -1216,36 +1218,17 @@ ODE. The ngspice/Xyce and scipy branches went when `general-simulator` became
 the only backend (invariant 0a); the Python stages in front of them went with
 #158, having been a second implementation of the four engine modules above.
 
-IR-1 (`packages/simulator/src/simulator/ir/ir1.py`) gains the following fields:
+A listing of IR-1 dataclasses stood here — `IR1Block`, `IR1Connection`,
+`IR1Graph`, in `packages/simulator/src/simulator/ir/ir1.py`, written in the
+future tense as fields that stage "gains". That module and that stage went
+with the rest of the Python compiler (#158), and no reader should go looking
+for them. What the engine does between `loadDocument` and netlist text is
+`compile/mod.rs` in `gsim-core`, and the shape it uses in between is the
+engine's business rather than this format's: nothing in a `.gsim_sch` file
+depends on it, which is why this spec no longer describes one.
 
-```python
-@dataclass
-class IR1Block:
-    instance_id: str
-    block_type:  str
-    paradigm:    str      # signal-flow | physical-network | converter | routing | hierarchy
-    domain:      str      # signal | physical-electrical | ...
-    fidelity:    str      # ideal | behavioral | spice | n_a
-    params:      dict[str, Any]
-    ic:          dict[str, Any]
-
-@dataclass
-class IR1Connection:
-    src:  tuple[str, str]
-    dst:  tuple[str, str]
-    kind: str             # the port-kind carried
-    net:  str | None      # named net, if any
-
-@dataclass
-class IR1Graph:
-    blocks:      list[IR1Block]
-    connections: list[IR1Connection]
-    params:      dict[str, float]            # resolved scalar values
-    nets:        list[IR1Net]
-    simulation:  IR1SimulationDirective
-```
-
-Subsystems do not survive flattening; the flat IR-1 carries only leaf blocks.
+Flattening is still a property of the format and still holds: subsystems do
+not survive it, and what reaches a netlist is leaf blocks only.
 
 ---
 

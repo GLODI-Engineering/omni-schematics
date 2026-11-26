@@ -1,16 +1,25 @@
 # Block metadata schema
 
-Every functional block in `packages/blocks/src/blocks/**/` has exactly one
-`metadata.yaml` next to its equation template. That file is the **shared
-contract** between the frontend (visual + search + inspector) and the
-simulator (causality + state + equation binding). The frontend never invents
-fields that should be here; the simulator never reads anything *outside* this
-file at catalog-load time.
+This schema is the **shared contract** for how one component is described:
+what the front end needs in order to draw it, search it and offer its
+parameters, and what the engine has to say about causality, state and ports.
+
+**Who it validates.** The engine owns which components exist — the library is
+`crates/gsim-core/data/component-library.json` in `gsim-core` — and
+`scripts/gen-engine-catalog.mjs` validates every entry the engine submits
+against this schema on its way into `apps/frontend/src/library/engine-catalog.json`.
+The engine owns *which* components there are; this owns *what shape* a
+component is described in, and validating at that boundary is what makes it a
+contract rather than a convention.
+
+The anatomy below is written as YAML because the components used to be a tree
+of `metadata.yaml` files in `packages/blocks/`, one per component. That tree is
+gone (#162) and the fields are not: an `engine-catalog.json` entry's
+`metadata` object is this same shape in JSON. A user-authored component is this
+shape too, in a `.gsim_sym` file — see `docs/specs/gsim-symbol-format-spec.md`.
 
 - **Schema:** [`block-metadata.schema.json`](./block-metadata.schema.json)
-- **Cross-references:**
-  - Epic that consumes it: `progress.yaml` FE-23
-  - Port-kind subschema: [`../model/port-kind.schema.json`](../model/port-kind.schema.json)
+- **Port-kind subschema:** [`../model/port-kind.schema.json`](../model/port-kind.schema.json)
 
 ## File anatomy
 
@@ -94,22 +103,23 @@ simulator passes the param dict into the equation template.
 
 ## Validation chain
 
-1. Each YAML is round-tripped through the JSON Schema by the catalog
-   loader (FE-23) at startup. Schema failures crash the app with the
-   offending file path + JSON pointer.
+1. `scripts/gen-engine-catalog.mjs` validates every component the engine
+   submits against this schema before writing it, and names the offending
+   component and JSON pointer when one fails. A malformed component used to
+   flow through untouched and be discovered as a blank symbol or a missing
+   port on somebody's sheet.
 2. Cross-field rules not expressible in pure JSON Schema (e.g.
    `default` must match `type`; `main_param` must exist in `params`) are
-   enforced in the loader and tested separately.
-3. The generated catalog manifest is checked into Git
-   (`apps/frontend/src/library/catalog-manifest.json`); CI fails if it
-   drifts from the YAML sources.
+   enforced by the loader in `apps/frontend/src/library/catalog-core.ts` and
+   tested separately.
+3. The generated catalogue is checked into Git
+   (`apps/frontend/src/library/engine-catalog.json`), and the
+   `engine-catalogue-drift` CI job regenerates it from the engine and fails if
+   the committed copy has drifted.
 
-## Adding a block
+## Adding a component
 
-Use the `/new-block` skill — it scaffolds the directory, the YAML, an
-equation template, the test stubs, and the frontend registration in one
-go. See `docs/agent-rules/skills/new-block/SKILL.md`.
-
-Do **not** add a block by hand-copying another block's YAML — the
-metadata schema evolves, and `/new-block` is the single place that knows
-the current required fields.
+Not here, and not by hand. A component is declared in the engine; this
+repository mirrors the engine's answer and draws it. `docs/DEVELOPMENT.md` §7
+is the procedure, and `apps/frontend/src/library/engine-catalog.json` is
+generated — editing it is drift, which the CI job above will say so about.

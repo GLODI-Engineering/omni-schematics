@@ -1,36 +1,43 @@
-# `.gsim_sim_result` — the simulation result format (v1)
+# `.gsim_sim_result` — the simulation result format (v2)
 
-> **Status:** v1, implemented.
+> **Status:** v2, implemented.
 > **Schema:** `packages/schemas/definitions/results/gsim_sim_result.schema.json`
 > (the source of truth — AGENTS.md puts cross-language schemas there).
-> **Reader/writer:** `apps/frontend/src/results/`.
+> **Reader:** `apps/frontend/src/results/`.
+> **Writer, for a run:** `apps/vscode-extension/src/result-manifest.ts`.
+> **Writer, for an export:** `apps/frontend/src/waveform/export-data.ts`.
 > **Editor:** `apps/vscode-extension/src/resultsEditor.ts`.
 
 ## 1. Why the format exists
 
-Until now a simulation result could only be looked at while the kernel
-session that produced it was still alive.
-`packages/simulator/src/simulator/postprocess/result_writer.py` writes a run
-to `<workdir>/results/<sim_id>/` as a directory of `.npy` files, and
-`apps/kernel-sidecar` puts that workdir under `$XDG_DATA_HOME` — an
-app-private cache outside the workspace, keyed by an in-memory `sim_id`, and
-reachable only through the running sidecar's token-gated slice server.
-
-So a result could not be committed, attached to a review, reopened next
-week, or compared against one from another branch. `waveformPanel.ts` says
-as much, and calls the fix by name:
+A simulation result used to be visible only while the session that produced
+it was still alive. A Python post-processor wrote each run to
+`<workdir>/results/<sim_id>/` as a directory of `.npy` files and the sidecar
+put that workdir under `$XDG_DATA_HOME` — an app-private cache outside the
+workspace, keyed by an in-memory id, reachable only through a running
+process. Both that writer and that process are gone (#162), but the problem
+they created is the reason this format exists and is worth stating: a result
+could not be committed, attached to a review, reopened next week, or compared
+against one from another branch. `waveformPanel.ts` said as much, and called
+the fix by name:
 
 > If a persisted single-file results bundle is ever added, registering a
 > second Custom Editor for *that* becomes the right call.
 
-This is that bundle. One file, in the workspace, that opens by
-double-clicking it and needs no kernel at all.
+This is that bundle. A file in the workspace that opens by double-clicking it
+and needs no process of its own.
 
 ## 2. Shape
 
+A run's result is two files: this document, and the `.gsim_samples` container
+beside it that holds the numbers. An exported one can be a single file that
+carries its own samples. `data.kind` says which arrangement a given file uses,
+and it is the only field a reader must look at before anything else.
+
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "data":    { "kind": "samples", "path": "run.gsim_samples", "pyramid": true },
   "run":     { "id": "…", "analysis": "TRAN", "source": "buck.gsim_sch", "created": "…" },
   "sweep":   { "name": "time", "unit": "s", "domain": "time", "encoding": "f64-base64", "data": "…" },
   "signals": [ { "name": "V(out)", "unit": "V", "quantity": "voltage", "encoding": "f64-base64", "data": "…" } ],
@@ -40,7 +47,8 @@ double-clicking it and needs no kernel at all.
 
 | Field | Required | Notes |
 |---|---|---|
-| `schema_version` | yes | Must be `1`. A reader rejects anything else rather than guessing. |
+| `schema_version` | yes | Must be `2`. A reader rejects anything else rather than guessing. A v1 document — samples always inline, no `data` — is upgraded to this shape before validation, so files already written stay readable. |
+| `data` | yes | Where the samples are: `inline` (in this file), `samples` (the `.gsim_samples` container at `path`), or `hdf5`. `path` is relative to this file's directory, so a result and its data move together. |
 | `run` | yes | Where it came from. `analysis` is `TRAN`/`AC`/`DC`/…; `source` is the workspace-relative `.gsim_sch`. |
 | `sweep` | yes | The shared x axis. `domain` decides the axis name and whether it is logarithmic. |
 | `signals` | yes | Each sampled at `sweep`, in the same order. `quantity` groups signals onto a shared y-axis. |
@@ -53,7 +61,12 @@ straight line. "Everything on one axes" is the wrong default the moment a
 result holds two quantities, and a file written by a script usually carries
 no layout.
 
-## 3. Sample encoding
+## 3. Sample encoding, when the samples are inline
+
+With `data.kind: "samples"` the numbers are in the container and the fields
+below do not appear: the container has its own layout and its own LOD pyramid,
+and `crates/waveform-store` reads windows out of it. What follows is the
+`inline` arrangement, which is what an export from the viewer writes.
 
 `encoding` is `f64-base64` or `json`.
 
@@ -77,7 +90,8 @@ accept both, per vector.
 
 ## 4. The invariant JSON Schema cannot state
 
-Every signal must have exactly as many samples as `sweep`. The schema
+In an `inline` document, every signal must have exactly as many samples as
+`sweep`. The schema
 cannot express a cross-field length equality, so `parseGsimSimResult`
 checks it and names the offending signal.
 
@@ -112,11 +126,13 @@ bits. Use it to cross-check; use `.gsim_sim_result` to keep.
 
 ## 7. Not done yet
 
-- **A Python writer.** The engine still writes `.npy` directories. Nothing
-  in `packages/` emits this format, so today it is produced only by the
-  viewer's export. The schema is in `packages/schemas/definitions/` so that
-  a Python writer has one contract to target, not a second one.
 - **Several sweeps in one file.** A corner sweep or a Monte Carlo run is a
-  family of results sharing a schematic. v1 holds one.
-- **Compression.** A 25,000-step, 11-signal run is about 2.9 MB. Gzip would
-  roughly halve that, at the cost of a file no longer readable with `jq`.
+  family of results sharing a schematic. v2 holds one.
+- **Compression** of an `inline` document. A 25,000-step, 11-signal run is
+  about 2.9 MB. Gzip would roughly halve that, at the cost of a file no
+  longer readable with `jq`. A run does not have this problem: its manifest
+  is a few hundred bytes whatever the run's length.
+- **A writer outside this repository.** The two writers named at the top are
+  both here, so nothing else produces the format yet. The schema sits in
+  `packages/schemas/definitions/` so that a third one has a single contract
+  to target rather than inventing a second.

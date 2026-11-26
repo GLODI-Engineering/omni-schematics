@@ -1,22 +1,30 @@
 # GSF — Gsim Symbol Format (v1)
 
-> **Status:** specification + v1 implementation target.
-> **Epics:** BE-71..BE-74 (`progress.backend.yaml`), FE-170..FE-171
-> (`progress.frontend.yaml`).
-> **Depends on:** FE-103 (catalog-driven primitive renderer) — GSF's primitive
+> **Status:** the `.gsim_sym` file format is live and this document is its
+> authority. The Python authoring API of §4 was never built and is withdrawn
+> — see the note on it.
+> **Depends on:** the catalog-driven primitive renderer — GSF's primitive
 > vocabulary is defined as *exactly* the `Primitive` union in
 > `apps/frontend/src/canvas/nodes/primitive-renderer.ts`, not a new one.
-> **Supersedes nothing:** the deferred symbol-editor design (FE-104) still
-> governs the future in-canvas drawing UI; this document is the data format
-> and the programmatic (Python) authoring API that UI will eventually target.
-> Building that UI is explicitly out of scope here — see §5.
+> **Implemented by:** `apps/vscode-extension/src/symbolLibrary.ts`, which
+> writes one `.gsim/symbols/<name>.gsim_sym` per user-authored component in
+> the workspace folder, and the `symbol.primitives` extension in
+> `packages/schemas/definitions/blocks/block-metadata.schema.json`.
+> **Supersedes nothing:** the deferred in-canvas drawing UI still governs that
+> future; this document is the data format it will target.
 
 ## 1. Why a new format, and why it isn't a new runtime store
 
-the deferred symbol-editor design already forbids a parallel persistence store for
-catalog symbols: the catalog's source of truth stays `metadata.yaml` under
-`packages/blocks/src/blocks/**`, machine-compiled into
-`apps/frontend/src/library/catalog-manifest.json`. GSF does not change that.
+The deferred symbol-editor design already forbids a parallel persistence store
+for catalog symbols, and GSF does not add one. The catalog's source of truth
+is the engine's component library — `gsim-core`'s
+`crates/gsim-core/data/component-library.json` — mirrored into
+`apps/frontend/src/library/engine-catalog.json` by
+`scripts/gen-engine-catalog.mjs` and held to it by the
+`engine-catalogue-drift` CI job. When this document was written that source
+was a tree of `metadata.yaml` files in this repository compiled into a
+`catalog-manifest.json`; both are gone, and "the catalog entry" below means an
+entry of that generated mirror.
 
 GSF is two things, both additive:
 
@@ -30,24 +38,31 @@ GSF is two things, both additive:
    requiring a hand-written entry in `component-symbols.tsx`'s
    `SCHEMATIC_SYMBOLS` table.
 2. **A portable single-component file, `.gsim_sym`**: the JSON serialization
-   of one component definition (superset of a `metadata.yaml` entry: adds a
-   top-level `name`/`type` wrapper so the file is self-describing without its
-   catalog directory path). It exists for *authoring and exchange* — build a
-   component in a scratch file, validate it, preview it, share it — before it
-   is merged into the catalog tree as a real `metadata.yaml`. It is never read
-   directly by the compiler or the frontend; `gsim_model.gsim_sym.merge_into_catalog()`
-   is the only bridge from a `.gsim_sym` file into the catalog.
+   of one component definition (a superset of a catalog entry: it adds a
+   top-level `name`/`type` wrapper so the file is self-describing without a
+   catalog path). It exists for *authoring and exchange* — build a component,
+   validate it, preview it, share it, keep it in the project's own version
+   control. This is the part that shipped:
+   `apps/vscode-extension/src/symbolLibrary.ts` writes one per component under
+   `.gsim/symbols/` in the workspace folder, and the library panel reads them
+   back. A bridge named `gsim_model.gsim_sym.merge_into_catalog()` was
+   specified here as the only route from such a file into the catalog; it was
+   never built, it was deleted with the Python workspace (#162), and a
+   `.gsim_sym` is read today by the extension rather than merged into the
+   engine's library at all.
 
-## 2. Primitive vocabulary (frozen, matches FE-103 exactly)
+## 2. Primitive vocabulary (frozen, matches the renderer exactly)
 
 ```
 line · rect · rectf · circle · arc · polygon · polyline · text
 ```
 
 Field-for-field identical to the TypeScript union at
-`primitive-renderer.ts:14-60`. No new primitive kinds. Coordinates are
-integers in block-local space, origin at the top-left of `symbol.bbox` — same
-frame `metadataToPrimitives` already uses (`primitive-renderer.ts:217-219`).
+`primitive-renderer.ts`'s `Primitive`. No new primitive kinds. Coordinates are
+integers in block-local space, origin at the top-left of `symbol.bbox` — the
+same frame `metadataToPrimitives()` in that file already uses. (Line numbers
+stood here and have been removed: they were four edits out of date, and a
+reference that drifts silently is worse than a name you have to grep for.)
 
 ## 3. Transforms are an authoring-time convenience, not a schema field
 
@@ -61,7 +76,15 @@ logic — `renderPrimitives()` already handles the full union) and keeps GSF
 files simple, portable data with no transform-evaluation step required of
 whoever reads them.
 
-## 4. Python component-creator API (`gsim_model.symbol`)
+## 4. Python component-creator API (`gsim_model.symbol`) — withdrawn, never built
+
+> **Nothing below exists.** `gsim_model` was a Python package in this
+> repository and was deleted with the rest of the Python workspace (#162)
+> without this API ever being written. It is kept here as the record of a
+> design decision — that transforms resolve at authoring time so that readers
+> and the renderer stay free of them, which §3 states and which is still the
+> rule — and not as a thing to call. Anything authoring a `.gsim_sym`
+> programmatically today writes the JSON of §1.2 directly.
 
 - Primitive builder functions/dataclasses for all eight kinds.
 - Transform methods, composable by chaining, each returning a new resolved
@@ -83,9 +106,11 @@ whoever reads them.
 
 ## 5. Explicit non-goals
 
-- No drag-and-drop / canvas drawing UI. That is FE-104's scope, deferred.
+- No drag-and-drop / canvas drawing UI. Deferred.
 - No change to `renderPrimitives()`, `symbolTransform()`, or port hit-testing
   math — GSF reuses all of it unmodified.
-- No migration of existing hardcoded `SCHEMATIC_SYMBOLS` entries. BE-74/FE-171
-  prove parity for two components (BJT, MOSFET) as a validation exercise;
-  retiring the hardcoded table block-by-block is a separate future epic.
+- No migration of the hand-written drawings. Parity for a BJT and a MOSFET was
+  proved as a validation exercise (`bjt-mosfet-symbol-parity.test.ts`);
+  retiring the hand-written artwork under
+  `apps/frontend/src/canvas/nodes/symbols/` component by component would be a
+  separate piece of work and is not planned.

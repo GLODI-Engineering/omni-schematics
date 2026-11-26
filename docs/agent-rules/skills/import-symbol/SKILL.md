@@ -1,13 +1,19 @@
 ---
 name: import-symbol
-description: Import a user-drawn draw.io SVG component symbol into the frontend — extract geometry, compute coordinate transform, update metadata YAML + catalog-manifest, write JSX render, register in SCHEMATIC_SYMBOLS, test, commit.
+description: Import a user-drawn draw.io SVG component symbol into the editor — extract geometry, read the box and ports the engine catalogue declares, compute the coordinate transform, write the drawing under canvas/nodes/symbols/, register it, verify, commit.
 ---
 
 # `/import-symbol` — Import a draw.io SVG symbol into the frontend
 
-Invoke whenever the user drops one or more `.drawio.svg` files into
-`Misc/component-drawing-specs/My-drawings/` and asks you to "import"
-them. The process has nine deterministic steps. Do not skip any.
+Invoke whenever the user hands you one or more `.drawio.svg` files and asks
+you to "import" them. The process has seven deterministic steps. Do not skip
+any.
+
+**A drawing is not the component.** What a component *is* — its ports, their
+sides and offsets, its box, its parameters, what it compiles to — is declared
+by the engine's component library and reaches the editor through the generated
+`apps/frontend/src/library/engine-catalog.json`. An import changes only how it
+looks, and that lives in exactly two files (Steps 5 and 6).
 
 ---
 
@@ -37,7 +43,7 @@ def parse_d(d):
     return [(float(p.split()[0]), float(p.split()[1]))
             for p in re.findall(r'[-\d.]+\s+[-\d.]+', d)]
 
-fname = "Misc/component-drawing-specs/My-drawings/<file>.drawio.svg"
+fname = "<path>/<file>.drawio.svg"   # wherever the user put it
 tree = ET.parse(fname)
 root = tree.getroot()
 print(f"SVG: {root.get('width')} x {root.get('height')}")
@@ -86,15 +92,37 @@ for p in root.iter('{http://www.w3.org/2000/svg}path'):
 
 ---
 
-## Step 2 — Choose the target bbox
+## Step 2 — Read the box and the port layout; do not choose them
 
-Pick `W × H` (unscaled SVG pixels) so that:
+**The catalogue decides the geometry, and the drawing obeys it.** A
+component's bounding box and the side and offset of every port are declared by
+the engine's component library (`gsim-core`'s `data/component-library.json`),
+mirrored into `apps/frontend/src/library/engine-catalog.json` by
+`scripts/gen-engine-catalog.mjs`. The mirror is generated and checked by the
+`engine-catalogue-drift` job — editing it by hand is drift, not an import.
 
-1. `W / H ≈ bw / bh` (preserve aspect ratio).
-2. Both values are round multiples of 2 (avoids half-pixel rendering).
-3. The symbol is comparable in visual size to the existing components
-   (most transistors are 80×80 or 80×110; passives are 60×40;
-   dependent sources 80×60 or 120×44).
+So read the target, rather than picking one:
+
+```bash
+node -e '
+const name = process.argv[1];
+const entry = require("./apps/frontend/src/library/engine-catalog.json")
+  .find((e) => e.metadata.name === name || (e.metadata.aliases ?? []).includes(name));
+if (!entry) throw new Error(`no catalog entry for ${name}`);
+const fid = entry.metadata.fidelities?.[0] ?? {};
+console.log("bbox  ", JSON.stringify(entry.metadata.symbol?.bbox));
+console.log("ports ", JSON.stringify(fid.ports ?? entry.metadata.ports, null, 1));
+' passive.resistor
+```
+
+`W × H` is that bbox, in unscaled local units, and the ports are at those
+sides and offsets whether the drawing likes it or not. The drawing is handed
+the box as `ctx.width`/`ctx.height` and must stay inside it and touch every
+terminal the entry declares.
+
+If the box is genuinely the wrong shape for the part, that is a change to the
+engine's component library and belongs in `gsim-core` as its own piece of
+work. It is not something an import does on the way past.
 
 ---
 
@@ -112,85 +140,48 @@ clean JSX.
 
 ---
 
-## Step 4 — Determine port positions
+## Step 4 — Check the ports you were given, do not invent them
 
-For each port stub (inner endpoint = body boundary contact point):
+Step 2 already told you where every port is. Use the transform to confirm the
+drawing's own stubs land on them:
 
-| Port exits via … | `side` | `offset` value |
+| Port exits via … | `side` | `offset` compared against |
 |---|---|---|
 | Left face (stub goes left) | `left` | `svg_y(py)` |
 | Right face (stub goes right) | `right` | `svg_y(py)` |
 | Top face (stub goes up) | `top` | `svg_x(px)` |
 | Bottom face (stub goes down) | `bottom` | `svg_x(px)` |
 
-Round offset to the nearest integer.
+Round to the nearest integer before comparing. A mismatch means the drawing
+has to move, because the catalogue entry is not yours to adjust. A drawing
+whose ink does not reach a declared terminal renders as a floating symbol with
+a wire that ends in mid-air.
 
 ---
 
-## Step 5 — Update metadata YAML(s)
+## Step 5 — Write the drawing
 
-Find all `metadata.yaml` files for the affected component:
+One file per symbol, under `apps/frontend/src/canvas/nodes/symbols/<name>.tsx`,
+default-exporting a `SymbolDrawing`. Read `resistor.tsx` or `led.tsx` first;
+they are the shape every drawing takes.
 
-```bash
-find packages/blocks/src/blocks -name metadata.yaml \
-  | xargs grep -l "<component-name>"
+```tsx
+import type { ReactNode } from "react";
+
+import { type DrawContext, FILL, STROKE, SW, type SymbolDrawing } from "../symbol-drawing";
+
+function draw(_ctx: DrawContext): ReactNode {
+  return (
+    <g>
+      {/* geometry from <filename>.drawio.svg, transformed in Step 3 */}
+      <line x1={0} y1={20} x2={20} y2={20} stroke={STROKE} strokeWidth={SW} />
+    </g>
+  );
+}
+
+const drawing: SymbolDrawing = { draw, inkHeight: 24 };
+export default drawing;
 ```
-
-In each file, update:
-
-```yaml
-symbol:
-  bbox: [W, H]        # new values
-  shape: rect         # unchanged
-  text: <LABEL>
-
-ports:
-  inputs:
-    - id: <port-id>
-      side: <side>
-      offset: <offset>
-      ...
-  outputs:
-    - id: <port-id>
-      side: <side>
-      offset: <offset>
-      ...
-```
-
----
-
-## Step 6 — Update catalog-manifest.json
-
-The manifest at `apps/frontend/src/library/catalog-manifest.json` caches
-the metadata. Update it with a Python script — never edit it by hand:
-
-```python
-import json, copy
-
-MANIFEST = "apps/frontend/src/library/catalog-manifest.json"
-with open(MANIFEST) as f:
-    data = json.load(f)
-
-NEW_BBOX  = [W, H]
-NEW_PORTS = { ... }   # same structure as the YAML ports section
-
-for entry in data:
-    if entry["metadata"].get("name") in TARGET_NAMES:
-        entry["metadata"]["symbol"]["bbox"] = NEW_BBOX
-        entry["metadata"]["ports"] = copy.deepcopy(NEW_PORTS)
-
-with open(MANIFEST, "w") as f:
-    json.dump(data, f, indent=2)
-```
-
-`TARGET_NAMES` is the list of `name` values from all the metadata YAMLs
-you updated in Step 5.
-
----
-
-## Step 7 — Write the JSX render function
-
-Open `apps/frontend/src/canvas/nodes/component-symbols.tsx`.
 
 Each SVG element from the draw.io file maps to one JSX element:
 
@@ -200,85 +191,74 @@ Each SVG element from the draw.io file maps to one JSX element:
 | `M … L … L … Z` (closed path / polygon) | `<polygon points="x1,y1 x2,y2 …" fill={STROKE} stroke="none" />` | For filled arrows |
 | `M … L … L … Z` (open / unfilled polygon) | `<polyline points="…" fill="none" stroke={STROKE} strokeWidth={SW} />` | |
 | Ellipse | `<circle cx={} cy={} r={} fill="none" stroke={STROKE} strokeWidth={SW*0.8} />` | Use `<ellipse>` if rx≠ry by more than 2 |
-| Horizontal/vertical bars connecting many segments | `<polyline points="x1,y1 x2,y2 …" fill="none" stroke={STROKE} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" />` | |
+| Many joined segments | `<polyline points="…" fill="none" stroke={STROKE} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" />` | |
 
-**Constants already defined at the top of the file:**
+`STROKE`, `FILL` and `SW` come from `../symbol-drawing` — import them rather
+than writing a colour or a width. `STROKE` is a CSS variable with the canvas's
+near-black as its fallback, which is what lets the library panel draw the same
+artwork in its own palette; a hard-coded `#0f172a` breaks that. After
+`SYMBOL_SCALE` is applied at render time `SW` matches the wire stroke width.
 
-```tsx
-const STROKE = "#0f172a";   // near-black
-const FILL   = "#ffffff";   // white (for filled shapes with white interior)
-const SW     = 2.1;         // default stroke width (pre-scale)
-```
+Set `inkHeight` when the artwork does not fill its box, so the name and value
+are placed clear of the ink rather than of the box outline. Set
+`selfDrawnPorts` only if the drawing draws its own terminal stubs and dots.
 
-After `SYMBOL_SCALE = 1.6` is applied at render time, `SW` becomes
-`≈ 3.36 px` on screen — matching the wire stroke width.
-
-**Structure the function as:**
-
-```tsx
-// ── <ComponentName> (user-drawn, bbox W×H) ─────────────────────────────────
-// Geometry from: <filename>.drawio.svg
-// <Port layout summary>
-function <componentName>Render(): ReactNode {
-  return (
-    <g>
-      {/* <element description> */}
-      <line … />
-      {/* … */}
-    </g>
-  );
-}
-```
-
-If N and P variants share the same structure with one visual difference
-(arrow direction, etc.), write a single `<name>Symbol(kind)` helper and
-two thin wrapper functions.
+If N and P variants share a structure with one visual difference (arrow
+direction, say), write one `draw(kind)` helper and two thin wrappers — see
+`bjtNpn.tsx` / `bjtPnp.tsx`.
 
 ---
 
-## Step 8 — Register in SCHEMATIC_SYMBOLS
+## Step 6 — Register it
 
-In `component-symbols.tsx`, add an entry to the `SCHEMATIC_SYMBOLS`
-registry for every block `name` that should use this render:
+In `apps/frontend/src/canvas/nodes/symbols/registry.ts`: one import, and one
+entry in `SYMBOL_DRAWINGS` per catalogue type the drawing serves.
 
 ```tsx
-"<block.name>": {
-  staticLabel: "<LABEL>",
-  render: () => <componentName>Render(),
-},
+import myPartDrawing from "./myPart";
+// …
+export const SYMBOL_DRAWINGS: Record<string, SymbolDrawing> = {
+  "passive.my_part": myPartDrawing,
+  "physical_electrical.passive.my_part": myPartDrawing,  // the namespaced spelling
+};
 ```
 
-The key must exactly match the `name` field in `metadata.yaml`.
+The key must be a `metadata.name` or alias that the catalogue actually
+carries — a key that matches nothing silently falls back to a plain rectangle.
+The catalogue spells most electrical parts both short and namespaced and they
+are the same component, so one drawing normally takes several keys. That file
+and this directory are the whole seam: nothing about what a component *is*
+lives on this side, so swapping artwork cannot change behaviour.
 
-If the same visual applies to multiple names (e.g. `semi.bjt.npn` AND
-`physical_electrical.semiconductor.bjt_npn`), add one entry per name.
+`component-symbols.tsx` holds the older `SCHEMATIC_SYMBOLS` registry, which
+`getSchematicSymbol()` still consults. New artwork goes in `symbols/`; do not
+add to `SCHEMATIC_SYMBOLS`.
 
 ---
 
-## Step 9 — Verify and commit
+## Step 7 — Verify
 
 ```bash
-# Type-check
-cd apps/frontend && npx tsc --noEmit
-
-# Unit tests (canvas nodes + BlockSymbol)
-npx vitest run src/canvas/nodes/
-
-# Full frontend suite
-npx vitest run
+pnpm -F @gensim/frontend typecheck
+pnpm -F @gensim/frontend test                        # the whole suite
+pnpm -F @gensim/frontend exec vitest run src/canvas/nodes/   # just the symbols
 ```
 
-All must pass. Then commit using `/commit` (or directly):
+`a-type-draws-its-own-symbol.test.ts` and `BlockSymbol.test.tsx` are the two
+that fail when a registration does not match the catalogue.
+
+Rendering work is visual: render the symbol to a PNG with
+`node scripts/render-schematic.mjs` and **look at the image** before claiming
+it is right (`CLAUDE.md`).
+
+Then commit with `/commit`:
 
 ```
 feat(canvas): import user-drawn <ComponentName> symbol
 ```
 
-Commit message body should list:
-- Source file(s)
-- New bbox
-- Port layout (side/offset for each port)
-- Which block names were updated
+The message body should name the source `.drawio.svg`, the catalogue types the
+drawing was registered for, and the box it was drawn to.
 
 ---
 
@@ -286,11 +266,12 @@ Commit message body should list:
 
 | File | What changes |
 |---|---|
-| `packages/blocks/src/blocks/<path>/metadata.yaml` | `symbol.bbox`, `ports[*].side`, `ports[*].offset` |
-| `apps/frontend/src/library/catalog-manifest.json` | Same fields (regenerated by script) |
-| `apps/frontend/src/canvas/nodes/component-symbols.tsx` | New render function + `SCHEMATIC_SYMBOLS` entry |
+| `apps/frontend/src/canvas/nodes/symbols/<name>.tsx` | The drawing: new file |
+| `apps/frontend/src/canvas/nodes/symbols/registry.ts` | One import, one `SYMBOL_DRAWINGS` entry per catalogue type |
 
-No other files need to change for a symbol-only import.
+No other file changes for a symbol-only import. In particular the catalogue
+does not: ports, bbox and parameters are the engine's, and
+`engine-catalog.json` is generated.
 
 ---
 
@@ -298,8 +279,8 @@ No other files need to change for a symbol-only import.
 
 | Problem | Cause | Fix |
 |---|---|---|
-| Port dot appears inside the body | `offset` is 0 or negative | Check that `svg_y(inner_y)` is non-negative |
-| Wire snaps to wrong corner | Port on wrong `side` | Verify which face the red stub exits from |
-| Symbol invisible (shows rect fallback) | `SCHEMATIC_SYMBOLS` key doesn't match `name` | Check for `_` vs `-` in the key; use `getSchematicSymbol()` normalization rules |
+| Ink does not reach a terminal | The drawing was scaled to its own bounds, not to the catalogue's box | Re-run Step 3 against the bbox from Step 2 |
+| Wire appears to leave the wrong face | The drawing was mirrored on import | The catalogue fixes the side; turn the artwork, not the entry |
+| Symbol invisible (shows rect fallback) | `SYMBOL_DRAWINGS` key matches no catalogue `name` or alias | Re-run the Step 2 lookup for the exact spelling; check `_` vs `-` |
 | Circle distorted | rx ≠ ry after transform | The body bounds have different x and y scales; use `<ellipse rx={} ry={}>` instead of `<circle>` |
 | HMR crash "Duplicate … id" | Registry Map not cleared on hot reload | `bootRegistries()` in `App.tsx` must call `resetActivityRegistry()` and `resetBottomTabRegistry()` before registering — already fixed, don't revert |

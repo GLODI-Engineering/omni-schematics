@@ -1,8 +1,41 @@
 # Custom code blocks in the VS Code extension: delegate to the language extensions
 
-Status: design report. Nothing in any repository was modified.
+Status: design report, written before 0.9.0. Nothing in any repository was modified by it.
 
-Paths abbreviated: `EXT` = `general-simulator-gui-for-vscode/apps/vscode-extension/src`, `GUI` = `general-simulator-gui-for-vscode`, `GS` = `general-simulator`, `CORE` = `gsim-core`.
+> **Read this first — the architecture it surveys is partly gone.** §1's "what
+> exists today" was read against a tree that had a Python kernel sidecar in it.
+> That sidecar, `GUI/apps/kernel-sidecar/`, `GUI/packages/blocks/` and the rest
+> of the Python workspace were deleted in #162, and the two-implementations
+> problem behind them in #158. What replaced them:
+>
+> - **There is no kernel and no WebSocket.** The extension host spawns
+>   `general-simulator` itself, once per run, with `--format samples`
+>   (`EXT/solver-run.ts`, `EXT/run-simulation.ts`), and it sees the solver's
+>   stdout and its exit status directly. Finding 4 in §10 — "the extension host
+>   never sees the result" — is therefore no longer true, and neither is
+>   anything here about a token-gated socket the webview owns.
+> - **There is no `resolveWorkspaceRoot` looking for a `pyproject.toml`.**
+>   Findings 1 and 8 survive in a changed form: nothing sets the solver
+>   subprocess's `cwd`, so a relative `path=` on a code block resolves against
+>   whatever directory the extension host happens to be in rather than against
+>   the schematic. The conclusion of §2 — resolve it against the `.gsim_sch`
+>   file — is unaffected and still unimplemented.
+> - **The open-the-source message landed.** `gsim/openBlockSource` and
+>   `gsim/blockSourceOpened` are in `packages/webview-protocol/src/index.ts`,
+>   handled by `GsimHost.openBlockSource` in `EXT/host.ts`, so finding 5 and the
+>   §3 gesture are done. Finding 9 is also obsolete: both sides import the one
+>   protocol package now, so there are no hand-synchronised copies.
+> - **Block metadata is the engine's.** What a block's parameters are comes from
+>   `gsim-core`'s `data/component-library.json`, mirrored into
+>   `apps/frontend/src/library/engine-catalog.json`.
+>
+> The parts of this report that are still load-bearing are its reading of the
+> engine (§1's block declarations and user-code contracts, §4's error handling)
+> and its recommendations (§2, §3, §11), which `apps/frontend/src/netlist/code-source.ts`
+> cites. Dates and findings below are left as written: this is a report, and
+> rewriting its observations would destroy the record of what was observed.
+
+Paths abbreviated: `EXT` = `general-simulator-gui-for-vscode/apps/vscode-extension/src`, `GUI` = `general-simulator-gui-for-vscode`, `GS` = `general-simulator`, `CORE` = `gsim-core`. `GUI` paths under `apps/kernel-sidecar/` and `packages/` named below are the pre-0.9.0 tree and no longer exist.
 
 ## 0. Summary and verdict
 
@@ -10,7 +43,7 @@ The design is small. A code block is a normal block whose existing `path` parame
 
 Two things currently block the whole feature and must be fixed first. Both are in the plumbing, not in the editor integration.
 
-1. **A relative `path=` is resolved against the wrong directory.** `GeneralSimulatorSolver.solve()` has a `cwd` parameter whose docstring says script-authored documents rely on it. The kernel sidecar's simulate handler never passes it (all four `backend.solve(...)` calls in `GUI/apps/kernel-sidecar/src/kernel_sidecar/ipc/handlers/simulate.py` omit `cwd`). So the engine runs in the sidecar's cwd, which `buildSpawnPlan` in `EXT/kernel-core.ts` sets to `workspaceRoot` (the general-simulator checkout found by `resolveWorkspaceRoot`). A relative `path=` therefore resolves against the wrong directory.
+1. **A relative `path=` is resolved against the wrong directory.** Nothing decides which directory the engine should run in. As this was written, the Python sidecar's simulate handler never passed `solve()`'s `cwd`, so the engine ran in the sidecar's own cwd — the general-simulator checkout that `resolveWorkspaceRoot` had found. The sidecar is gone and the fault is not: `EXT/solver-run.ts` spawns the solver with no `cwd` either, so a relative `path=` resolves against the extension host's directory. Either way it is not the schematic's directory, which is the one a document's author means.
 2. **The engine reports no line number.** `py_traceback` in `GS/crates/pyblock-ffi/src/lib.rs` is `fn py_traceback(_py, err) -> String { err.to_string() }`. That yields `"ValueError: msg"` with no traceback. Octave and C errors carry no location either (see section 4).
 
 Related prerequisite: the Python blocks need a binary built with `--features python`. `general-simulator-cli/Cargo.toml` has `default = []` and `python = ["dae-runtime/python"]`, while `general_simulator_solver.py` documents building with plain `cargo build --release -p general-simulator-cli`. A user following that doc gets a binary that cannot run `pyblock`/`pyfunc`. I did not run it to see the exact error text; this is inferred from the feature gating.
@@ -36,7 +69,7 @@ Two details not obvious from the registry, found in `GS/crates/dae-runtime/src/b
 - `octfunc`: `path` is one `.m` file, and the file name must equal the function name (the Octave `addpath` of its parent directory, per the `octave-ffi` module doc).
 - `octblock`: `path` is a directory that must contain `<function>_start.m`, plus `<function>.m` (plain contract) or `<function>_derivative.m` and `<function>_output_xc.m` (when `xc_count > 0`). A missing file raises `DaeError::OctBlockMissingRequiredFile { expected_path }`, which is a structured error naming the exact expected file.
 
-The block metadata in `GUI/packages/blocks/src/blocks/extensibility/*/metadata.yaml` declares `main_param: path` (pyblock) and label "Path". The inspector already shows the path string; nothing makes it a link to a file.
+The block metadata declared `main_param: path` (pyblock) and label "Path" — then in `GUI/packages/blocks/src/blocks/extensibility/*/metadata.yaml`, now in the engine's component library and its generated mirror `apps/frontend/src/library/engine-catalog.json`. The inspector already shows the path string; nothing makes it a link to a file.
 
 ### The contract the user's code must satisfy
 
@@ -49,7 +82,7 @@ The block metadata in `GUI/packages/blocks/src/blocks/extensibility/*/metadata.y
 
 - Custom editor: `SchematicEditorProvider` in `EXT/schematicEditor.ts`, `CustomEditorProvider<SchematicDocument>`. Its `resolveCustomEditor` handles `panel.webview.onDidReceiveMessage`: first `this.host.handleCommonMessage(...)`, then document-specific messages (`gsim/documentChanged`). The `document` (and so `document.uri`) is in scope here but **not** in `GsimHost.handleCommonMessage`.
 - Protocol: `EXT/protocol.ts` defines `HostBoundMessage` and `WebviewBoundMessage` unions, prefix-checked by `isHostBoundMessage`. The file says the frontend copy `apps/frontend/src/ipc/vscode-protocol.ts` mirrors it and must be kept in sync by hand. `WebviewInit.documentUri` already gives the webview the document's URI.
-- The kernel sidecar: `EXT/kernel.ts` (`KernelSidecar`) spawns `uv run ... kernel_sidecar` and hands `{port, token}` to the **webviews**, which open the WebSocket themselves. The extension host never sees simulation traffic. Errors come back as `SIMULATE_RESULT` with `payload {status:"error", exc_type, message, signals: []}` (`_emit_error` in `simulate.py`). The host sees none of this unless the webview forwards it.
+- Running a simulation, **as this was written**: `EXT/kernel.ts` (`KernelSidecar`) spawned a Python kernel and handed `{port, token}` to the **webviews**, which opened the WebSocket themselves, so the extension host never saw simulation traffic and errors reached it only if a webview forwarded them. That is the arrangement §6 and finding 4 are about, and it is gone. **Today** the host runs the solver itself — `EXT/run-simulation.ts` builds the command, `EXT/solver-run.ts` spawns it and reads its stdout line by line into the output channel, and a failure is a value the host already holds. An engine error therefore needs no new transport to reach a `DiagnosticCollection`; it needs only to be parsed, which is what finding 2 blocks.
 - Precedent for workspace files: `EXT/symbolLibrary.ts` writes `.gsim/symbols/<name>.gsim_sym` with `workspace.fs.createDirectory`/`writeFile`, a `FileSystemWatcher` in `extension.ts`, and failure reporting through `showErrorMessage` plus the output channel (`persistSymbol` in `host.ts`). Its header comment gives the rule this design should follow: a component belongs to the design, travels in version control, and shows up in the diff.
 - AGENTS.md "Invariant 0": "Do not rebuild what VS Code already is... `Diagnostic` for problems, `OutputChannel` for logs, ... `workspace.fs` for files". This design is that rule applied.
 - Double-click: I found no double-click handler on a placed block in `apps/frontend/src/canvas` (the grep hits are annotation drawing and `FigureTab`). The only block double-click is `library/SidebarItem.tsx` (library item). So the gesture is free to claim.
@@ -83,7 +116,7 @@ The engine resolves relative `path=` against its process cwd (`GeneralSimulatorS
 - The compile step (`compile_gsim_document(gsim_doc)`) emits the `path` verbatim. The CORE test in `general_simulator.rs` (~1338) uses `"path": "./blk.py"` and nothing rewrites it. Confirm no tests assume otherwise before changing the sidecar.
 - Edge cases: an untitled or non-`file:` document has no directory. Refuse with a message ("save the schematic first").
 
-A second reading of the "workspace root" question: `resolveWorkspaceRoot` looks for a `pyproject.toml` that marks a general-simulator checkout. For an end user whose workspace is only their converter project, the kernel may not start at all. That is out of scope here but affects whether this feature works for the stated audience; flag it.
+A second reading of the "workspace root" question: `resolveWorkspaceRoot` looked for a `pyproject.toml` that marked a general-simulator checkout, so for an end user whose workspace was only their converter project the kernel might not start at all. That function and that kernel are gone. The question it raised is still open in a simpler form: the solver subprocess is spawned with no `cwd` of its own, so a relative `path=` resolves against the extension host's directory and nobody has decided it should be the schematic's.
 
 ## 3. Double-click to edit (Question 2)
 

@@ -81,12 +81,12 @@ checkout. Everything after this section is identical either way.
 
 </details>
 
-### 1.3 Point the extension at the engine and at a Python environment
+### 1.3 Point the extension at the engine
 
 Open your settings (`Ctrl+,`, or `Cmd+,` on a Mac) and search for
-`omniSchematics`. Two settings must be filled in: the solver binary, and the
-Python environment the simulation kernel runs in. The editor builds neither —
-it runs what you give it.
+`omniSchematics`. **One** setting must be filled in: where the solver binary
+is. The editor does not build it and does not bundle it — it runs what you
+give it.
 
 It is usually faster to edit the JSON directly. Open the command palette
 (`Ctrl+Shift+P`) → **Preferences: Open User Settings (JSON)** → add:
@@ -94,45 +94,31 @@ It is usually faster to edit the JSON directly. Open the command palette
 ```jsonc
 {
   // The binary that actually runs a simulation.
-  "omniSchematics.generalSimulatorPath": "/path/to/general-simulator",
-
-  // The Python environment the simulation kernel runs in. Required: with this
-  // empty, Run tells you so instead of doing nothing.
-  "omniSchematics.kernelPython": "/path/to/gsim-venv",
-
-  // Start the kernel when the extension wakes up, so Run works immediately.
-  "omniSchematics.autoStartKernel": true
+  "omniSchematics.generalSimulatorPath": "/path/to/general-simulator"
 }
 ```
 
-The first path is the binary you unpacked in §1.2 — the file itself, not the
-folder holding it.
+That is the file you unpacked in §1.2 — the file itself, not the folder
+holding it.
 
-The second is a virtualenv with the kernel packages in it. From a checkout of
-the repository, one command builds it and prints the path to paste here:
-
-```sh
-node scripts/make-kernel-venv.mjs
-```
-
-Without a checkout, make a virtualenv and `pip install` the wheels attached to
-the release, which is the same set of packages:
-
-```sh
-python -m venv gsim-venv
-gsim-venv/bin/pip install <wheels>/*.whl
-```
+There is nothing else to install. Compiling the schematic to a netlist happens
+inside the editor, in a WebAssembly build of the engine that ships in the
+extension, and the run is the binary above. No interpreter, no virtual
+environment and no background process of any kind takes part; earlier versions
+asked for a Python kernel and a `kernelPython` setting, and both are gone as of
+0.9.0.
 
 **How to tell it worked.** Open any `.gsim_sch` and press Run. If the path is
 wrong you get a named error — `SolverUnavailable`, with the message saying the
 binary was not found — not a silent hang. That distinction matters: a
 misconfigured path should accuse itself.
 
-> **A note on the settings list.** You will see entries for Octave and for
-> extra `PYTHONPATH` directories. Those are for `octfunc` and `pyblock`
-> scripted blocks and are not needed here. If you are reading an older
-> write-up that mentions `ngspicePath` or `xycePath`, those settings are gone:
-> the project targets one backend now.
+> **A note on the settings list.** You will see entries for Octave, for a
+> Python interpreter and for extra `PYTHONPATH` directories. Those are for
+> `octfunc` and `pyblock` scripted blocks — a block whose body is a script you
+> wrote — and are not needed here. If you are reading an older write-up that
+> mentions `ngspicePath` or `xycePath`, those settings are gone: the project
+> targets one backend now.
 
 ---
 

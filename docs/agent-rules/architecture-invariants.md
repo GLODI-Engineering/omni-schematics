@@ -45,9 +45,8 @@ migration); only `#include` / `import` statements are forbidden.
 ## 2. Optimistic canvas — no synchronous waits on the solver {#optimistic-canvas}
 
 **Rule.** Code in `apps/frontend/src/canvas/` must not synchronously await
-solver, compiler, or kernel responses. All such interactions are
-asynchronous and surfaced via non-blocking indicators (port colors, status
-bar, toasts).
+the compiler or the solver. All such interactions are asynchronous and
+surfaced via non-blocking indicators (port colors, status bar, toasts).
 
 **Why.** OpenModelica's OMEdit couples its canvas tightly to the compiler;
 the result is the editor freezing for 5–6 seconds on every keystroke for
@@ -60,8 +59,10 @@ suspicious patterns: `await.*compile`, `await.*solverCall`, `await.*runSim`,
 clearly-named async functions to stay on the right side of it.
 
 **If the check fails.** The canvas operation must complete using only local
-state. Any solver work happens in a worker / sidecar / cloud kernel and the
-result is delivered as a separate event. The user is never blocked on a
+state. Compilation happens in the committed WebAssembly engine
+(`packages/gsim-wasm`) and a run happens in the `general-simulator` binary the
+extension host spawns; either way the result is delivered as a separate
+`postMessage`. The user is never blocked on a
 compiler round-trip to complete a diagram edit.
 
 ---
@@ -124,4 +125,4 @@ a signal — turn it into an invariant. The process:
 
 The bar for adding an invariant is: a violation would be subtle, costly to
 discover later, and hard to spot in code review. If it's just a style
-preference, it belongs in ruff/biome config, not here.
+preference, it belongs in Biome's config, not here.
