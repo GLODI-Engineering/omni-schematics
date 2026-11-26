@@ -157,7 +157,7 @@ things that used to give a confident wrong answer now refuse instead.
 3. `"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"`
 
 The editor compiles with its own committed copy of the engine, built from
-[gsim-core v0.6.3](gsim-core v0.6.3)
+gsim-core v0.6.3
 — you do not install that, it is inside the `.vsix`. This file names exactly
 one gsim-core release and the release workflow checks it against what the
 bundle was built from, so **this link moves with every engine bump**.
