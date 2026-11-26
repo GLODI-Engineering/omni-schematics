@@ -161,6 +161,12 @@
           "markdownDescription": "What to do when a `cscript` block's compiled library is older than the `.c` it was built from.\n\nNothing in this editor or in `general-simulator` compiles a C block — the engine loads a binary and never invokes a compiler — so editing the source and pressing Run used to simulate the *previous* build and report success. That is the only failure on this path that produces a plausible wrong answer: a gain changed from 2 to 10 in the source, and a waveform that does not move.\n\n`refuse` is the default for that reason. `warn` is for a deliberate mismatch — a comment edited, a library built elsewhere. The source is found by this editor's own convention (`blocks/<stem>.c`, then beside the library, then the sheet's folder, then `src/`), and when none of them exists the run says so rather than implying the library is fresh.",
           "scope": "resource"
         },
+        "omniSchematics.compilerPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The C compiler to build `cscript` blocks with — a program name such as `gcc`, or an absolute path such as `C:\\\\msys64\\\\mingw64\\\\bin\\\\gcc.exe`.\n\n**The extension ships no compiler.** Installing one (MinGW-w64, Build Tools, Xcode command line tools, your distribution's `gcc` or `clang`) is yours to do; this setting is how you say where it is.\n\nLeave it empty and the editor looks for `clang`, then `cc`/`gcc`, then `cl.exe` on Windows, and uses the first that can actually build a shared library — which is a stronger test than finding it on `PATH`.\n\nA block may name its own compiler in its `compiler` parameter, which wins over this. **A named compiler is tried alone:** if it cannot build, the run stops and says so rather than quietly using a different one, because a library built with flags you did not choose is not one you can reason about.",
+          "scope": "machine-overridable"
+        },
         "omniSchematics.octaveCliPath": {
           "type": "string",
           "default": "",
