@@ -20,6 +20,7 @@
  *   across webview boundaries. That single step still needs a human.
  */
 import * as assert from "node:assert/strict";
+import * as cp from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -974,6 +975,228 @@ suite("Omni Schematics — VS Code integration", () => {
         fs.existsSync("/etc/evil.c"),
         false,
         "and nothing outside the workspace was created",
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  /**
+   * #178 — a number, not just a pipeline.
+   *
+   * Everything above this point checks that a run *happened*: a container
+   * larger than 10,000 bytes, a manifest naming its signals, traces with
+   * points in them. All of it would stay green if the solver returned the
+   * wrong answer. The one thing that would not was a comparison against
+   * `reference/step_pid_integrator_scope.npz`, and it had already stopped
+   * running for two independent reasons without saying so (#178), so for two
+   * releases nothing anywhere asserted that a simulation was *right*.
+   *
+   * What this asserts is a value, against a closed form rather than against a
+   * file the solver wrote earlier. A reference the solver generated and the
+   * test compares against is a change-detector: useful, and not the same
+   * statement. The only way to say "the physics is right" is to know the
+   * answer independently of the thing being tested.
+   *
+   * The circuit is a first-order RC step, because its answer is
+   *
+   *     v(t) = V (1 - e^(-t/RC))
+   *
+   * which no solver gets a vote on. One run covers both halves of a
+   * first-order response: the value it settles to, and the time constant it
+   * settles with. A final value alone would not see the second — a circuit
+   * with twice the right R*C ends in the same place.
+   *
+   * It drives the configured binary with `--format csv` rather than going
+   * through `runSimulation`. Not because the pipeline does not matter, but
+   * because the pipeline is what the suite above is for, and `--format
+   * samples` writes a striped container with an LOD pyramid that only
+   * `crates/waveform-store` can read — decoding it here would mean a second
+   * implementation of the container format living inside a test, which is the
+   * thing this repository keeps deleting. `csv` is the same solver, the same
+   * deck and the same numbers in a shape this test can read without inventing
+   * a reader for it.
+   */
+  suite("A run's numbers are right, not merely present (#178)", () => {
+    const solver = process.env.GSIM_GENERAL_SIMULATOR_PATH;
+
+    // The circuit, as constants, so that the deck and the closed form cannot
+    // drift apart: both are written from these three values.
+    const V_STEP = 10; // volts, applied at t = 0 with the capacitor discharged
+    const R_OHMS = 1_000;
+    const C_FARADS = 1e-6;
+    const TAU = R_OHMS * C_FARADS; // 1 ms
+
+    const DECK = [
+      "* #178: a first-order RC step. Its answer is a closed form, which is",
+      "* the whole reason this circuit and not a converter.",
+      `v1 n_in 0 ${V_STEP}`,
+      `r1 n_in n_out ${R_OHMS}`,
+      `c1 n_out 0 ${C_FARADS}`,
+      "",
+    ].join("\n");
+
+    /** The only reference this test trusts. */
+    const exact = (t: number) => V_STEP * (1 - Math.exp(-t / TAU));
+
+    /** Fixed, and a thousandth of the time constant. The tolerance is set from this. */
+    const DT = TAU / 1000;
+    /**
+     * Seven time constants, and not the rounder ten.
+     *
+     * At ten, `V - v` is `10 e^-10` = 0.45 mV, which is *inside* the tolerance
+     * below — so the settling assertion would pass against a flat 10 V and
+     * would be checking "near enough the source voltage" rather than the
+     * closed form. At seven it is 9.1 mV, eight times the tolerance there, so
+     * the assertion is about `v(t)` and not about roundness.
+     */
+    const T_FINAL = 7 * TAU;
+
+    /**
+     * `|v - v_exact| <= ABSOLUTE + RELATIVE * |v_exact|`, and both numbers are
+     * set from the step size rather than from what the solver printed.
+     *
+     * **The absolute term, 100 µV.** The integrator takes its first step with
+     * backward Euler and trapezoidal steps after it, and backward Euler's
+     * error on this circuit is `V (dt/tau)^2 / 2`, which at `dt = tau/1000` is
+     * 5 µV. That error propagates through the early steps, where it was
+     * measured to peak at 20 µV. 100 µV is five times that peak, and still one
+     * part in 10^5 of the 10 V step.
+     *
+     * **The relative term, one part in 10^4.** Once the signal is a volt or
+     * more the discretisation error is around 10^-6 of it, so this leaves two
+     * orders of magnitude.
+     *
+     * The absolute term is what binds in the first microseconds, where the
+     * signal is a hundredth of a volt and a purely relative tolerance is a
+     * cruel measure of a correct answer; the relative term is what binds
+     * afterwards. Measured across the whole 7,000-sample run the worst
+     * deviation uses 19% of this budget against general-simulator 0.8.0 and 5%
+     * against 0.7.0 — a margin, not a figure fitted to an output.
+     *
+     * And it is tight enough to mean something: a 1% error in the time
+     * constant moves `v(tau)` by 37 mV, which is 50 times the tolerance there.
+     */
+    const ABSOLUTE = 1e-4; // volts
+    const RELATIVE = 1e-4;
+
+    const tolerance = (expected: number) => ABSOLUTE + RELATIVE * Math.abs(expected);
+
+    interface Trace {
+      t: number[];
+      vOut: number[];
+    }
+
+    let trace: Trace;
+
+    suiteSetup(function readTrace(this: Mocha.Context) {
+      if (!solver || !fs.existsSync(solver)) {
+        // The same words the run suite above uses, so that CI's grep for a
+        // skipped run suite covers this one too.
+        console.log(
+          "[integration] skipping the run suite: set GSIM_GENERAL_SIMULATOR_PATH to a " +
+            "general-simulator binary to exercise it",
+        );
+        this.skip();
+        return;
+      }
+      this.timeout(180_000);
+
+      const deck = path.join(workspaceDir(), "rc_step.cir");
+      fs.writeFileSync(deck, DECK);
+      const csv = cp.execFileSync(
+        solver,
+        [
+          deck,
+          "--mode",
+          "transient",
+          "--tfinal",
+          String(T_FINAL),
+          "--dt",
+          String(DT),
+          "--format",
+          "csv",
+        ],
+        { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 120_000 },
+      );
+
+      const lines = csv.trim().split("\n");
+      const header = (lines.shift() ?? "").split(",").map((name) => name.trim());
+      const sweep = header.indexOf("t");
+      const out = header.indexOf("V(n_out)");
+      assert.ok(sweep >= 0, `the CSV has no sweep column; header was ${JSON.stringify(header)}`);
+      assert.ok(out >= 0, `the CSV has no V(n_out) column; header was ${JSON.stringify(header)}`);
+
+      trace = { t: [], vOut: [] };
+      for (const line of lines) {
+        const cells = line.split(",");
+        trace.t.push(Number(cells[sweep]));
+        trace.vOut.push(Number(cells[out]));
+      }
+      assert.ok(trace.t.length > 0, "the solver printed a header and no rows");
+    });
+
+    test("the whole curve is the closed form, to a stated tolerance", () => {
+      assert.equal(
+        trace.t.length,
+        Math.round(T_FINAL / DT),
+        "a fixed step gives one sample per step",
+      );
+
+      let worst = { used: 0, t: 0, got: 0, want: 0 };
+      for (let i = 0; i < trace.t.length; i += 1) {
+        const at = trace.t[i] as number;
+        const want = exact(at);
+        const got = trace.vOut[i] as number;
+        const used = Math.abs(got - want) / tolerance(want);
+        if (used > worst.used) worst = { used, t: at, got, want };
+      }
+
+      console.log(
+        "[integration] #178: worst deviation from v(t) = V(1 - e^(-t/RC)) over " +
+          `${trace.t.length} samples used ${(100 * worst.used).toFixed(1)}% of the ` +
+          `tolerance, at t = ${worst.t.toExponential(3)} s ` +
+          `(${worst.got.toPrecision(9)} V against ${worst.want.toPrecision(9)} V)`,
+      );
+
+      assert.ok(
+        worst.used <= 1,
+        `at t = ${worst.t.toExponential(3)} s the solver says ${worst.got.toPrecision(9)} V ` +
+          `and the closed form says ${worst.want.toPrecision(9)} V — a deviation of ` +
+          `${Math.abs(worst.got - worst.want).toExponential(3)} V against a tolerance of ` +
+          `${tolerance(worst.want).toExponential(3)} V`,
+      );
+    });
+
+    test("it settles on the closed form's value and not merely near the source", () => {
+      const last = trace.t.length - 1;
+      const at = trace.t[last] as number;
+      const got = trace.vOut[last] as number;
+      // 9.990881180 V, which is 9.1 mV short of the 10 V source -- eight times
+      // the tolerance, so this does distinguish the two.
+      const want = exact(at);
+      assert.ok(
+        Math.abs(got - want) <= tolerance(want),
+        `after ${at} s — seven time constants — the output is ${got.toPrecision(10)} V, ` +
+          `and v(t) = V(1 - e^(-t/RC)) says ${want.toPrecision(10)} V`,
+      );
+      assert.ok(
+        Math.abs(V_STEP - want) > 8 * tolerance(want),
+        "this assertion is only worth making while the closed form's value is " +
+          `distinguishable from the ${V_STEP} V source; at t = ${at} s it is not`,
+      );
+    });
+
+    test("it reaches 1 - 1/e of the step at one time constant", () => {
+      const index = trace.t.findIndex((at) => Math.abs(at - TAU) <= DT / 2);
+      assert.ok(index >= 0, `the run has no sample within half a step of t = ${TAU} s`);
+      const at = trace.t[index] as number;
+      const got = trace.vOut[index] as number;
+      const want = exact(at); // 6.321205588 V at exactly one time constant
+      assert.ok(
+        Math.abs(got - want) <= tolerance(want),
+        `at one time constant (t = ${at} s) the output is ${got.toPrecision(10)} V ` +
+          `(${((100 * got) / V_STEP).toFixed(4)}% of the step) and the closed form says ` +
+          `${want.toPrecision(10)} V, which is 63.2121% — so R*C is not ${TAU} s`,
       );
     });
   });
