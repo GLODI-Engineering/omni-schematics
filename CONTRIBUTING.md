@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for considering a contribution to the VS Code GUI — schematic capture and simulation inside the editor.
+Thanks for considering a contribution to Omni Schematics — schematic capture and simulation inside VS Code.
 
 This repository is part of the `general-simulator` toolchain. The same
 workflow applies across all of them, so that a change can be traced from the

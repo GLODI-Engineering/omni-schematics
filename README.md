@@ -1,13 +1,21 @@
-# General Simulator GUI for VS Code
+# Omni Schematics
 
 Schematic capture, component authoring and circuit/system simulation, inside
 VS Code.
 
+You draw a schematic in a VS Code tab, press Run, and read the waveforms in a
+panel beside your code.
+
+The engine it runs is
 [`general-simulator`](https://github.com/GLODI-Engineering/general-simulator)
-is the engine — a Rust simulator for power electronics and mixed
-circuit/block-diagram systems, with no user interface. **This repository is
-its GUI.** You draw a schematic in a VS Code tab, press Run, and read the
-waveforms in a panel beside your code.
+— a Rust simulator for power electronics and mixed circuit/block-diagram
+systems, with no user interface of its own. **That is what Omni Schematics
+runs, not what it is.** The editor is named apart from its engine on purpose.
+What it asks of a backend is narrow — compile this sheet, run this netlist,
+and say which components you can compile — and the engine answers that last
+question itself rather than being described by a table kept here. Driving a
+second engine would be real work rather than a configuration flag; the name is
+there so that on the day it happens, nothing has to be renamed.
 
 > **Status: pre-release.** The extension is not yet on the Marketplace. See
 > [Roadmap](#roadmap) for what is still missing.
@@ -152,8 +160,8 @@ the decimator either, because `vsce package --no-dependencies` ships no
 
 ### One host, on purpose
 
-This GUI previously tried to be a web app, a Tauri desktop app and a VS Code
-extension from one codebase. It is now only an extension — see
+This editor previously tried to be a web app, a Tauri desktop app and a VS
+Code extension from one codebase. It is now only an extension — see
 [`AGENTS.md`](./AGENTS.md) invariant 0. The browser entry point that remains
 (`apps/frontend/index.html`) is a development and Playwright harness, not a
 shipped surface, and is excluded from the `.vsix`.

@@ -30,5 +30,5 @@
     "ajv-formats": "^3.0.1",
     "gs-ui-probe": "github:GLODI-Engineering/gs-ui-probe#v0.2.2"
   },
-  "description": "General Simulator GUI for VS Code - schematic capture, component authoring and simulation for the general-simulator engine."
+  "description": "Omni Schematics - schematic capture, component authoring and simulation inside VS Code. Runs the general-simulator engine today, and is built to run others."
 }
