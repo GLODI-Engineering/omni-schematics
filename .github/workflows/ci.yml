@@ -229,6 +229,29 @@ jobs:
       - name: engine catalogue drift
         run: GSIM_PYTHON=$(which python) node scripts/gen-engine-catalog.mjs --check
 
+  cscript-abi-drift:
+    # The C stub this editor writes for a `cscript` block declares the engine's ABI by hand,
+    # and most users will read no other documentation about it. A wrong declaration is the one
+    # mistake neither a unit test nor a compile can catch: on x86-64 System V, integer and
+    # floating-point arguments come from separate register files, so the wrong parameter order
+    # still produced numbers identical to the last digit, with nothing from `-Wall -Wextra`.
+    # Windows x64 passes the first four arguments positionally regardless of class, so there
+    # the same declaration builds a pointer out of an integer and dereferences it.
+    #
+    # Hence a drift check against the engine's own source, like `engine-catalogue-drift`: this
+    # repository holds a copy of the ABI in a string, and a copy that nothing compares is a
+    # second opinion rather than a cache. general-simulator is public, so this needs no
+    # credentials.
+    name: The C stub's ABI is the engine's
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: cscript ABI drift
+        run: node scripts/check-cscript-abi.mjs
+
   gsim-wasm-drift:
     # The editor's compiler is a 1.7 MB WebAssembly binary committed in
     # `packages/gsim-wasm/pkg`. A generated artefact in the tree can stop matching its
