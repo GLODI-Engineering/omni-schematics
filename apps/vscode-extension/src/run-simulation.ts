@@ -30,7 +30,9 @@
  */
 
 import type { ChildProcess } from "node:child_process";
+import * as cp from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 import type {
@@ -47,6 +49,13 @@ import { workingDirectoryFor } from "./run-working-directory";
 import { type SamplesIndex, readSamplesIndex } from "./samples-index";
 import { type ResolvedSolver, SolverNotFound } from "./solver-path";
 import { type SolverOutcome, describeOutcome, runTransient, transientArgs } from "./solver-run";
+import {
+  type ProbeIo,
+  languagesNeeded,
+  preflight,
+  probeCompiler,
+  readEngineCapabilities,
+} from "./toolchain-probe";
 
 /** The files one run owns, all inside its own directory. */
 export const NETLIST_FILE = "netlist.cir";
@@ -97,6 +106,11 @@ export interface RunDependencies {
    * `undefined` here means `"refuse"`.
    */
   staleCodeBlock?: StaleAction;
+  /**
+   * The outside world the toolchain preflight probes (#238). Injected only so the preflight's
+   * own branches are testable; defaults to real spawns and a real temporary directory.
+   */
+  probeIo?: ProbeIo;
   /** The binary, or a throw carrying everywhere it was looked for. */
   resolve: () => ResolvedSolver;
   /**
@@ -118,6 +132,39 @@ export interface RunDependencies {
   readIndex?: (file: string) => SamplesIndex;
   /** Injected in tests, so a whole document can be asserted. */
   now?: () => Date;
+}
+
+/**
+ * The real world, for the toolchain preflight.
+ *
+ * Built lazily rather than held as a module constant so that a run which needs no probe creates
+ * no temporary directory. Spawned as an argv with no shell throughout: this project's own paths
+ * contain a space and an accent, and both survive exactly as long as nothing re-splits the
+ * command.
+ */
+function nodeProbeIo(): ProbeIo {
+  return {
+    platform: process.platform,
+    run: (program, args, cwd) => {
+      const result = cp.spawnSync(program, args, { cwd, encoding: "utf8" });
+      return {
+        started: result.error === undefined,
+        code: result.status,
+        stderr: result.stderr ?? "",
+        stdout: result.stdout ?? "",
+      };
+    },
+    scratch: () => fs.mkdtempSync(path.join(os.tmpdir(), "omni-toolchain-probe-")),
+    discard: (directory) => {
+      try {
+        fs.rmSync(directory, { recursive: true, force: true });
+      } catch {
+        // A probe that cannot tidy up must not fail the run it was checking.
+      }
+    },
+    write: (directory, name, contents) => fs.writeFileSync(path.join(directory, name), contents),
+    produced: (directory, name) => fs.existsSync(path.join(directory, name)),
+  };
 }
 
 const line = (
@@ -321,6 +368,59 @@ export async function runSimulation(
       kind: "could-not-start",
       summary,
       detail: freshness.blocking.map((finding) => finding.message).join("\n"),
+    };
+  }
+
+  // What this machine cannot do for this sheet, before the run that needs it (#238). Only the
+  // languages the sheet actually uses are checked, and the C compiler only when something needs
+  // building -- every probe is a process spawn, and a sheet of resistors should pay nothing.
+  //
+  // A C block whose library is missing or stale is what "needs building" means, and that is the
+  // verdict just computed: a sheet whose libraries are all newer than their sources needs no
+  // compiler, and refusing it would be a regression on every machine without a toolchain.
+  const needsBuilding = [...freshness.blocking, ...freshness.advisory].some(
+    (finding) => finding.kind === "stale" || finding.kind === "no-artifact",
+  );
+  const probeIo = deps.probeIo ?? nodeProbeIo();
+  const shortfalls = preflight({
+    languages: languagesNeeded(request.codeBlocks),
+    cNeedsBuilding: needsBuilding,
+    compiler: () => probeCompiler(probeIo),
+    engine: () => readEngineCapabilities(probeIo, solver.binary),
+    octave: () => {
+      // Spawned rather than looked for on `PATH`: a name on `PATH` that cannot execute is the
+      // same failure as one that is not there, and the engine will spawn it too.
+      const probe = probeIo.run("octave-cli", ["--version"], ".");
+      return probe.started && probe.code === 0
+        ? { started: true }
+        : {
+            started: false,
+            ...(probe.stderr.trim() === ""
+              ? {}
+              : { detail: probe.stderr.trim().split("\n")[0] as string }),
+          };
+    },
+  });
+  for (const shortfall of shortfalls.filter((finding) => !finding.blocking)) {
+    for (const text of shortfall.message.split("\n")) {
+      onOutput([line("warning", text)]);
+    }
+  }
+  const blockingShortfalls = shortfalls.filter((finding) => finding.blocking);
+  if (blockingShortfalls.length > 0) {
+    for (const shortfall of blockingShortfalls) {
+      for (const text of shortfall.message.split("\n")) {
+        onOutput([line("error", text)]);
+      }
+    }
+    const languages = blockingShortfalls.map((finding) => finding.language).join(" and ");
+    return {
+      ok: false,
+      kind: "could-not-start",
+      summary: `This machine cannot run this sheet's ${languages} block${
+        blockingShortfalls.length === 1 ? "" : "s"
+      }`,
+      detail: blockingShortfalls.map((finding) => finding.message).join("\n\n"),
     };
   }
 
