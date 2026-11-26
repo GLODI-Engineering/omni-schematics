@@ -1,5 +1,98 @@
 # Changelog
 
+## 2026-11-26 — Omni Schematics (0.9.2)
+
+**A code block builds into the run, or tells you exactly why not** — and three
+things that used to give a confident wrong answer now refuse instead.
+
+### Install it
+
+1. `omni-schematics-0.9.2.vsix` from this release.
+2. A `general-simulator` binary, **v0.9.0 or newer**, from
+   [its releases](https://github.com/GLODI-Engineering/general-simulator/releases).
+3. `"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"`
+
+The editor compiles with its own committed copy of the engine, built from
+[gsim-core v0.6.3](https://github.com/GLODI-Engineering/gsim-core/releases/tag/v0.6.3)
+— you do not install that, it is inside the `.vsix`. This file names exactly
+one gsim-core release and the release workflow checks it against what the
+bundle was built from, so **this link moves with every engine bump**.
+
+### A C, Python or Octave block is part of the run now
+
+Double-clicking a scripted block opens its source in a VS Code editor beside
+the schematic, which is the reason for being in VS Code at all. From this
+release the rest of the path works too:
+
+- **The solver runs in the schematic's own directory**, so a relative `lib=`
+  or `path=` resolves the way the sheet says. It used to run in
+  `.gsim/runs/<id>/`, where none of a sheet's relative paths mean anything.
+- **A library older than its source does not run silently.** Editing the `.c`
+  and pressing Run used to simulate the *old* compiled library and report
+  success — a result with no error in it and the wrong code behind it.
+- **A compiler error, a Python traceback or an Octave error is a clickable
+  Problems entry**, with the file and the line, so one click puts the cursor on
+  it. The parser was written against the engine's real output rather than an
+  example, which caught that a Python `SyntaxError` arrives *inside* the
+  engine's own sentence while a runtime traceback is on the lines after it.
+- **The run says what this machine cannot do before it starts**, instead of
+  failing in the middle with a message from a tool you did not know it needed.
+
+### Fixed — the C stub declared a function the engine never calls
+
+The scaffold the editor writes for a new C block declared a `cscript_output`
+whose signature disagreed with the engine's. On Linux it worked by register
+coincidence; **on Windows x64 it crashes or reads garbage**. The engine now
+publishes `gsim_cscript.h`, so nobody retypes the ABI — which is what made the
+mismatch possible in the first place — and a CI job reads the engine's own
+declaration and compares.
+
+### Fixed — a sheet's declared analysis was ignored
+
+Pressing Run read a settings store that **nothing in the user interface
+writes**, while the Simulation panel writes analyses to the document. So a
+sheet asking for a 20 ms window at 5 ns got the store's defaults, with nothing
+saying its own declaration had been passed over.
+
+The sharpest case: a sheet declaring `t_step: "{T_sim / 100}"` ran at the
+panel's step instead — **100× coarser**. At 10 µs a 100 kHz converter is
+sampled once per switching period, always at the same phase, so the switch
+reads as permanently off and the plot is the flat line of a converged run of a
+dead circuit. An analysis whose timing the editor cannot read now stops the
+run and says so, from both the Run button and the dropdown.
+
+### The editor can ask for an operating point
+
+`--mode dc` **is** an operating point and the engine has always solved one; the
+editor simply never asked. OP now routes to it, with no window on a command
+line that has no use for one. Measured end to end: a 10 V source across two
+1 kΩ resistors writes 612 bytes rather than the 38,103 a transient of the same
+sheet writes, and solves to 5 V at the midpoint and −5 mA through the source.
+
+AC and DC-sweep are still refused by name, now with a reason that says why
+each is not a flag away: the engine is a piecewise-linear time-domain solver,
+so an AC sweep is a different analysis rather than a different output format.
+
+A switching converter has **no** DC operating point, and the engine says so
+rather than inventing one: *"every gate is block-driven (gate=block), which
+needs --mode transient"*.
+
+### A port says what it carries
+
+gsim-core 0.6.3 gave every signal port a dimension signature — 44 components
+gained one, 48 of 53 now have one against 4 before. Five were deliberately left
+without, with the reason in the engine's own code: a state-space block's width
+is `rows(c)` and the signature language has no way to say "that matrix's row
+count". `[1]` on all of them would have been true today and was rejected,
+because a wrong dimension displayed confidently is worse than none.
+
+### Known
+
+The dimension overlay still does not render in the browser end-to-end test.
+The signatures were necessary and are not sufficient: the blocks insert, the
+wires are made, and the toggle produces nothing. Recorded with the measurement
+on #117.
+
 ## 2026-11-26 — Omni Schematics (0.9.1)
 
 **The editor looks and behaves like part of VS Code, and two silent bugs are
@@ -17,7 +110,7 @@ or newer**), and
 ```
 
 The editor compiles with its own committed copy of the engine, built from
-[gsim-core v0.6.2](https://github.com/GLODI-Engineering/gsim-core/releases/tag/v0.6.2)
+gsim-core **v0.6.2** (link moved to the current release, see 0.9.2)
 — you do not install that, it is inside the `.vsix`. This file names exactly one
 gsim-core release and the release workflow checks it against what the bundle was
 actually built from, so **this link moves with every engine bump**.
