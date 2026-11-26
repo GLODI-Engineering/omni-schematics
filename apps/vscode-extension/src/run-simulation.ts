@@ -40,6 +40,7 @@ import type {
   RunResult,
 } from "@gensim/webview-protocol";
 
+import { type StaleAction, checkCodeBlockFreshness } from "./code-block-staleness";
 import { type EventLog, emptyEventLog, parseEventLogText, worstSeverity } from "./event-log";
 import { buildManifest, serializeManifest } from "./result-manifest";
 import { workingDirectoryFor } from "./run-working-directory";
@@ -88,6 +89,14 @@ export interface RunDependencies {
    * saved; see `run-working-directory.ts` for what then happens.
    */
   schematicFolder?: string;
+  /**
+   * What to do about a `cscript` block whose library is older than its source (#235).
+   *
+   * `"refuse"` by default, because a stale library is the one failure on this path that produces
+   * a plausible wrong answer and calls it a success. From `omniSchematics.staleCodeBlock`;
+   * `undefined` here means `"refuse"`.
+   */
+  staleCodeBlock?: StaleAction;
   /** The binary, or a throw carrying everywhere it was looked for. */
   resolve: () => ResolvedSolver;
   /**
@@ -273,6 +282,45 @@ export async function runSimulation(
       kind: "could-not-start",
       summary: "Could not write this run's files",
       detail,
+    };
+  }
+
+  // Before the solver, because a run against a library built from code the user has since
+  // changed produces a complete, plausible, wrong answer -- the one failure on this path that
+  // reports success (#235). Nothing here builds anything; see `code-block-staleness.ts` for why
+  // the check and the build are deliberately separate changes.
+  const freshness = checkCodeBlockFreshness(
+    request.codeBlocks ?? [],
+    {
+      modifiedAt: (absolute) => {
+        try {
+          return fs.statSync(absolute).mtimeMs;
+        } catch {
+          return null;
+        }
+      },
+      // Relative to the directory the solver itself runs in, which is the schematic's own
+      // folder -- the same base every relative path in the netlist resolves against (#234).
+      resolve: (relative) => path.resolve(workingDirectory.cwd, relative),
+    },
+    deps.staleCodeBlock ?? "refuse",
+  );
+  for (const finding of freshness.advisory) {
+    onOutput([line("warning", finding.message)]);
+  }
+  if (freshness.blocking.length > 0) {
+    for (const finding of freshness.blocking) {
+      onOutput([line("error", finding.message)]);
+    }
+    const summary =
+      freshness.blocking.length === 1
+        ? "A code block's library is older than its source"
+        : `${freshness.blocking.length} code blocks' libraries are older than their sources`;
+    return {
+      ok: false,
+      kind: "could-not-start",
+      summary,
+      detail: freshness.blocking.map((finding) => finding.message).join("\n"),
     };
   }
 

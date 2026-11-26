@@ -231,6 +231,41 @@ export type OpenBlockSourceResult =
  * this binary, so the editor refuses them in the webview with that as the
  * reason rather than sending something the host would have to guess at.
  */
+/**
+ * One code block on the sheet, and where its source is, so the host can tell whether the
+ * artifact it is about to run was built from it (#235).
+ *
+ * The netlist cannot answer this. A `cscript` block's parameter is `lib` — a compiled library —
+ * and the source is not named in the document at all, so only the webview, which holds the
+ * block and this editor's convention for finding its `.c`, can say where to look. (That the
+ * convention is a convention rather than a fact the document states is
+ * `GLODI-Engineering/omni-schematics#222`; `inferredSource` carries that distinction through so
+ * the host's message can be honest about it.)
+ *
+ * Paths are **relative to the schematic**, like every path a block carries, and the host
+ * resolves them against the schematic's own folder — the same directory it spawns the solver in
+ * (#234).
+ */
+export interface RunCodeBlock {
+  /** The block's id on the sheet, which is also the name the netlist gives it. */
+  blockId: string;
+  /** Which of the three languages, as `code-source.ts` decides it from the block type. */
+  language: "c" | "python" | "octave";
+  /**
+   * A `cscript` block's `lib=`, as written. Absent for the other four, whose `path=` already
+   * names the file the user edits, so there is no artifact to go stale against it.
+   */
+  artifact?: string;
+  /** Where the source might be, best first. The first that exists is the one meant. */
+  sourceCandidates: string[];
+  /**
+   * Whether `sourceCandidates` is this editor's convention rather than something the document
+   * states. True for `cscript` today, and the reason a host message has to say "could not find
+   * a source" rather than "the source is up to date".
+   */
+  inferredSource: boolean;
+}
+
 export interface RunRequest {
   /**
    * Which of the engine's two analyses to run.
@@ -263,6 +298,15 @@ export interface RunRequest {
    * engine ever grows an analysis the format already names.
    */
   analysis: string;
+  /**
+   * The sheet's code blocks and where their sources are, so the host can refuse a run whose
+   * compiled library is older than the `.c` it came from (#235).
+   *
+   * Optional, and absent for an imported netlist: a `.cir` opened from disk has no document
+   * behind it, so there are no blocks to ask about. A host that gets no list checks nothing,
+   * which is the behaviour before this field existed.
+   */
+  codeBlocks?: RunCodeBlock[];
 }
 
 /** Why a run did not produce a result. Each needs a different thing of the user. */

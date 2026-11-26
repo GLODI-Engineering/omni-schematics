@@ -684,3 +684,202 @@ describe("a sheet saved beside its own code block", () => {
     120_000,
   );
 });
+
+// ---------------------------------------------------------------------------
+// #235 — a library built from code the user has since changed must not run
+// quietly. The silent wrong result, reproduced with a real compiled library.
+// ---------------------------------------------------------------------------
+
+describe("a code block whose library is older than its source", () => {
+  const binary = realSolver();
+  const compiler = systemCompiler();
+  const guarded = binary && compiler ? it : it.skip;
+
+  /** A sheet folder with `gain.c` compiled to `libgain.so`, and the deck that uses it. */
+  function sheetWithCompiledBlock(gain: number): { folder: string; deck: string } {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "gsim-stale-"));
+    scratch.push(root);
+    const folder = path.join(root, "Sheet Électronique");
+    fs.mkdirSync(folder);
+    fs.writeFileSync(
+      path.join(folder, "gain.c"),
+      [
+        "int cscript_arity(int *in_len, int *out_len) {",
+        "    *in_len = 1; *out_len = 1; return 0;",
+        "}",
+        "void *cscript_start(void) { return 0; }",
+        "void cscript_output(void *state, const double *in, int in_len, double dt,",
+        "                    double *out, int out_len) {",
+        "    (void)state; (void)in_len; (void)dt; (void)out_len;",
+        `    out[0] = ${gain}.0 * in[0];`,
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const built = cp.spawnSync(
+      compiler as string,
+      ["-shared", "-fPIC", "-O0", "-o", "libgain.so", "gain.c"],
+      { cwd: folder, encoding: "utf8" },
+    );
+    expect(built.status, built.stderr).toBe(0);
+    const deck = [
+      "* A textbook RC low-pass whose capacitor voltage feeds one code block.",
+      "V1 n1 0 SIN(0 1 1k)",
+      "R1 n1 n2 1k",
+      "C1 n2 0 1u",
+      "VPROBE kind=phys2sig node=n2",
+      "G1 kind=cscript lib=./libgain.so in=VPROBE outputs=y",
+      "",
+    ].join("\n");
+    return { folder, deck };
+  }
+
+  // Paths relative to the sheet, which the host resolves against the directory it spawns the
+  // solver in -- so this needs no folder of its own.
+  const blockList = () => [
+    {
+      blockId: "G1",
+      language: "c" as const,
+      artifact: "./libgain.so",
+      // What `code-source.ts`'s convention offers, best first. Only the last exists here, which
+      // is also what makes this a real exercise of the candidate walk.
+      sourceCandidates: ["blocks/gain.c", "gain.c", "src/gain.c"],
+      inferredSource: true,
+    },
+  ];
+
+  const requestFor = (deck: string) => ({
+    mode: "transient" as const,
+    netlist: deck,
+    tEnd: 1e-4,
+    tStep: 1e-5,
+    analysis: "TRAN",
+    source: "sheet.gsim_sch",
+    codeBlocks: blockList(),
+  });
+
+  guarded(
+    "is refused, naming the block, the source and the library",
+    async () => {
+      const { folder, deck } = sheetWithCompiledBlock(2);
+      // The edit, without a rebuild. `utimesSync` rather than a sleep: the point is the
+      // ordering of the two timestamps, and waiting for a clock tick makes the test slow and
+      // flaky for no extra truth.
+      fs.writeFileSync(
+        path.join(folder, "gain.c"),
+        fs.readFileSync(path.join(folder, "gain.c"), "utf8").replace("2.0 *", "10.0 *"),
+      );
+      const now = Date.now() / 1000;
+      fs.utimesSync(path.join(folder, "libgain.so"), now - 60, now - 60);
+      fs.utimesSync(path.join(folder, "gain.c"), now, now);
+
+      const sink = collect();
+      const result = await runSimulation(requestFor(deck), {
+        runDirectory: runDirectory(),
+        schematicFolder: folder,
+        resolve: () => ({ binary: binary as string, source: "the path passed in" }),
+        spawn: (b, args, cwd) => spawn(b, args, { cwd }),
+        onOutput: sink.onOutput,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.summary).toMatch(/older than its source/i);
+      const said = texts(sink.lines).join("\n");
+      expect(said).toContain("G1");
+      expect(said).toContain("gain.c");
+      expect(said).toContain("libgain.so");
+      expect(said).toMatch(/rebuild/i);
+    },
+    120_000,
+  );
+
+  guarded(
+    "produces the stale answer when the check is switched off, which is the defect",
+    async () => {
+      // The measurement #235 is about, kept as an assertion so the thing being prevented stays
+      // demonstrable: with `ignore`, the run completes against a library built from `2.0 *`
+      // while the source says `10.0 *`, and reports success.
+      const { folder, deck } = sheetWithCompiledBlock(2);
+      fs.writeFileSync(
+        path.join(folder, "gain.c"),
+        fs.readFileSync(path.join(folder, "gain.c"), "utf8").replace("2.0 *", "10.0 *"),
+      );
+      const now = Date.now() / 1000;
+      fs.utimesSync(path.join(folder, "libgain.so"), now - 60, now - 60);
+      fs.utimesSync(path.join(folder, "gain.c"), now, now);
+
+      const result = await runSimulation(requestFor(deck), {
+        runDirectory: runDirectory(),
+        schematicFolder: folder,
+        staleCodeBlock: "ignore",
+        resolve: () => ({ binary: binary as string, source: "the path passed in" }),
+        spawn: (b, args, cwd) => spawn(b, args, { cwd }),
+        onOutput: collect().onOutput,
+      });
+
+      if (!result.ok) throw new Error(`${result.summary}\n${result.detail ?? ""}`);
+      expect(result.signals).toContain("G1");
+    },
+    120_000,
+  );
+
+  guarded(
+    "runs when the library is newer than its source",
+    async () => {
+      const { folder, deck } = sheetWithCompiledBlock(2);
+      const now = Date.now() / 1000;
+      fs.utimesSync(path.join(folder, "gain.c"), now - 60, now - 60);
+      fs.utimesSync(path.join(folder, "libgain.so"), now, now);
+
+      const result = await runSimulation(requestFor(deck), {
+        runDirectory: runDirectory(),
+        schematicFolder: folder,
+        resolve: () => ({ binary: binary as string, source: "the path passed in" }),
+        spawn: (b, args, cwd) => spawn(b, args, { cwd }),
+        onOutput: collect().onOutput,
+      });
+
+      if (!result.ok) throw new Error(`${result.summary}\n${result.detail ?? ""}`);
+      expect(result.signals).toContain("G1");
+    },
+    120_000,
+  );
+
+  it("says it could not find a source, rather than nothing, when the convention misses", async () => {
+    // No solver needed: the check runs before the spawn, and this arm never reaches it.
+    const directory = runDirectory();
+    const sheetFolder = fs.mkdtempSync(path.join(os.tmpdir(), "gsim-nosource-"));
+    scratch.push(sheetFolder);
+    fs.writeFileSync(path.join(sheetFolder, "libgain.so"), "not really a library");
+    const sink = collect();
+    const result = await runSimulation(
+      {
+        ...request,
+        codeBlocks: [
+          {
+            blockId: "G1",
+            language: "c" as const,
+            artifact: "./libgain.so",
+            sourceCandidates: ["blocks/gain.c", "gain.c"],
+            inferredSource: true,
+          },
+        ],
+      },
+      {
+        runDirectory: directory,
+        schematicFolder: sheetFolder,
+        resolve: () => found,
+        spawn: (b, args) => fakeSolver()(b, args),
+        onOutput: sink.onOutput,
+      },
+    );
+
+    // Not a refusal: the library may well be correct, and the editor's candidate list is a
+    // convention. But the run must not imply it checked.
+    expect(result.ok).toBe(true);
+    const said = texts(sink.lines).join("\n");
+    expect(said).toMatch(/could not find the source/i);
+    expect(said).toMatch(/convention/i);
+  });
+});
