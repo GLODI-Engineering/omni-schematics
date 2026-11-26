@@ -83,6 +83,78 @@ export function createRecordingLogChannel(): {
   };
 }
 
+// --- diagnostics ------------------------------------------------------------
+//
+// Added for #237. VS Code offers no way to read a `DiagnosticCollection` back, so the placement
+// decision is asserted against `code-diagnostics.ts` directly; these exist only so
+// `code-problems.ts` -- the half that imports `vscode` -- can be imported and constructed at
+// all. Only the members it touches are here, so a new dependency on the real API fails loudly.
+
+export class Position {
+  constructor(
+    readonly line: number,
+    readonly character: number,
+  ) {}
+}
+
+export class Range {
+  constructor(
+    readonly start: Position,
+    readonly end: Position,
+  ) {}
+}
+
+export const DiagnosticSeverity = { Error: 0, Warning: 1, Information: 2, Hint: 3 } as const;
+
+export class Diagnostic {
+  source?: string;
+  constructor(
+    readonly range: Range,
+    readonly message: string,
+    readonly severity: number = DiagnosticSeverity.Error,
+  ) {}
+}
+
+export const Uri = {
+  file(fsPath: string) {
+    return { fsPath, scheme: "file", toString: () => `file://${fsPath}` };
+  },
+};
+
+/** A `DiagnosticCollection` whose contents a test can read, which the real one cannot. */
+export function createRecordingDiagnosticCollection(name: string): {
+  readonly name: string;
+  readonly entries: Map<string, Diagnostic[]>;
+  readonly calls: string[];
+  set(uri: { toString(): string }, diagnostics: Diagnostic[]): void;
+  delete(uri: { toString(): string }): void;
+  clear(): void;
+  dispose(): void;
+} {
+  const entries = new Map<string, Diagnostic[]>();
+  const calls: string[] = [];
+  return {
+    name,
+    entries,
+    calls,
+    set(uri, diagnostics) {
+      calls.push(`set ${uri.toString()}`);
+      entries.set(uri.toString(), diagnostics);
+    },
+    delete(uri) {
+      calls.push(`delete ${uri.toString()}`);
+      entries.delete(uri.toString());
+    },
+    clear() {
+      calls.push("clear");
+      entries.clear();
+    },
+    dispose() {
+      calls.push("dispose");
+    },
+  };
+}
+
 // --- mutable test state -----------------------------------------------------
 
 type ConfigValues = Record<string, unknown>;

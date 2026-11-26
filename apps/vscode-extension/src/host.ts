@@ -202,6 +202,20 @@ export class GsimHost implements vscode.Disposable {
      * a real one back.
      */
     readonly runOutput: LevelledChannel = createRunOutputChannel(vscode.window),
+    /**
+     * Where a code block's failure becomes a clickable Problems entry (#237).
+     *
+     * Optional so that every existing construction of this class -- the integration suite's
+     * among them -- keeps working, and because a host with no collection is a host that writes
+     * to the output channel only, which is what this did before.
+     */
+    private readonly problems?: {
+      beginRun(): void;
+      report(
+        context: { workingDirectory: string; schematic?: vscode.Uri },
+        lines: readonly string[],
+      ): number;
+    },
   ) {
     this.disposables.push(
       this.onShowWaveformsEmitter,
@@ -536,8 +550,22 @@ export class GsimHost implements vscode.Disposable {
     // and left the solver running, so the editor needed a deadline of its own.
     const timeoutSeconds = settings.get<number>("solverTimeoutSeconds", 600);
 
-    const emit = (lines: Parameters<typeof writeRunOutput>[1]) =>
+    // Every line this run produces, kept so the whole of it can be read for failures once it
+    // finishes. A diagnostic cannot be published line by line: a Python traceback spans five
+    // lines and its location is on the second of them, so a parser that saw one line at a time
+    // would place the failure before knowing where it belongs.
+    const transcript: string[] = [];
+    const emit = (lines: Parameters<typeof writeRunOutput>[1]) => {
+      for (const entry of lines) {
+        transcript.push(entry.text);
+      }
       writeRunOutput(this.runOutput, lines);
+    };
+
+    // An empty panel before anything else: a red squiggle surviving a fix is the standard
+    // failure of a feature like this, and it is worse than none -- the user fixes the code,
+    // runs, sees the same error and concludes the fix did not work.
+    this.problems?.beginRun();
 
     emit([{ source: "solver", severity: "info", text: `── run ${runId} ──` }]);
 
@@ -606,6 +634,22 @@ export class GsimHost implements vscode.Disposable {
     } finally {
       this.runningChildren.delete(requestId);
     }
+
+    // The whole transcript, once, after the run: both the compiler's diagnostics and the
+    // solver's own errors, into the one collection (#237). A failure with no file and line --
+    // a missing library, a missing function, an arity disagreement, which is the commonest
+    // class -- lands on the `.gsim_sch` rather than nowhere.
+    const schematic =
+      folderOf(request.source) === undefined
+        ? undefined
+        : vscode.Uri.parse(request.source as string);
+    this.problems?.report(
+      {
+        workingDirectory: folderOf(request.source)?.fsPath ?? directory,
+        ...(schematic === undefined ? {} : { schematic }),
+      },
+      transcript,
+    );
 
     if (result.ok) {
       this.lastRunResult = { requestId, result };
