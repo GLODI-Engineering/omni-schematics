@@ -133,3 +133,41 @@ describe("model.role (spec §4.1)", () => {
     expect(compileSchema()(doc)).toBe(false);
   });
 });
+
+/**
+ * #201 — the file is the user's and lives in their repository, so a save has to be readable
+ * as a diff.
+ */
+describe("#201: a saved sheet reads as a diff", () => {
+  it("writes one line per field, not the whole document on one line", () => {
+    const text = serialize(deserialize(readFixture()));
+    const lines = text.split("\n");
+
+    // The precise regression: `JSON.stringify` with no indent put a 19 KB sheet on a single
+    // line, so `git diff` could say that it changed and never what changed in it.
+    expect(lines.length).toBeGreaterThan(20);
+    expect(Math.max(...lines.map((line) => line.length))).toBeLessThan(200);
+  });
+
+  it("ends with a newline, as every other writer of this format does", () => {
+    // `examples/_builder.py` writes `json.dumps(..., indent=2) + "\n"`. A file without a final
+    // newline makes every tool that appends one show a spurious last-line change.
+    expect(serialize(deserialize(readFixture())).endsWith("\n")).toBe(true);
+  });
+
+  it("is byte-stable across a second save, so opening a sheet does not dirty it", () => {
+    const once = serialize(deserialize(readFixture()));
+    const twice = serialize(deserialize(once));
+    expect(twice).toBe(once);
+  });
+
+  it("indents with two spaces, matching the generator and the engine", () => {
+    const text = serialize(deserialize(readFixture()));
+    const indented = text.split("\n").filter((line) => line.startsWith(" "));
+    expect(indented.length).toBeGreaterThan(10);
+    for (const line of indented) {
+      const depth = line.length - line.trimStart().length;
+      expect(depth % 2).toBe(0);
+    }
+  });
+});

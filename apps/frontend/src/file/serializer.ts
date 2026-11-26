@@ -61,9 +61,31 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Two spaces and a trailing newline, because this file is the user's and lives in their
+ * repository (#201).
+ *
+ * It used to be written on one line. Nothing was lost -- the round trip is semantically
+ * identical and byte-idempotent after the first save -- but a `.gsim_sch` under version control
+ * then produced one enormous changed line per edit, so `git diff` could say only *that* the
+ * sheet changed, never what changed in it. Opening a shipped example and nudging one block
+ * rewrote `buck_converter` from 7,535 bytes across 400-odd lines to 3,990 bytes on one.
+ *
+ * It also made the editor the only one of this format's three writers that did not pretty-print:
+ * `examples/_builder.py` emits `indent=2`, and the engine's own `save_document` does the same.
+ *
+ * The cost is the IPC payload. `vscode/schematic-main.tsx` posts the whole text to the host on
+ * every graph mutation and `lastSynced()` compares that text to decide whether anything changed,
+ * so this roughly 1.9x's both -- about 36 KB for a 19 KB sheet, in a `postMessage` on the same
+ * machine. That is the right trade against a permanent file nobody can read a diff of.
+ *
+ * Note this still does not make a saved sheet byte-identical to the one its generator emits:
+ * Python and Rust write a float as `48.0` and JavaScript writes `48`, so the two differ at
+ * every float-valued parameter whatever the indentation. That is its own issue.
+ */
 export function serialize(document: ModelDocument): string {
   assertSerializableDocument(document);
-  return JSON.stringify(canonicalize(document));
+  return `${JSON.stringify(canonicalize(document), null, 2)}\n`;
 }
 
 export const serializeModel = serialize;
