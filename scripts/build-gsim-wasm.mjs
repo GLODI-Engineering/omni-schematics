@@ -52,7 +52,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
@@ -249,7 +249,12 @@ export function buildBundle({ source = null, rev = null, out = BUNDLE_DIR, workD
   return provenance;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// `pathToFileURL`, not `file://` + the path. A path that needs URL escaping --
+// a space, or a non-ASCII character -- never compares equal to `import.meta.url`
+// spelled by hand, so this guard was false and running the script did nothing
+// at all: no output, exit 0, no bundle. CI checks out to a plain ASCII path and
+// so never saw it.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     buildBundle({
       source: arg("--source"),

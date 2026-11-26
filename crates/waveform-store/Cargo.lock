@@ -59,7 +59,8 @@ dependencies = [
 [[package]]
 name = "gsim-samples"
 version = "0.1.0"
-source = "git+https://github.com/GLODI-Engineering/general-simulator#b1fb8b3296be62af9c4e209901943c6902ab7441"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36cdf3906748250908a387719e5db65524cf77290f35bf63e4a7e889bb5d9e63"
 dependencies = [
  "serde",
  "serde_json",
