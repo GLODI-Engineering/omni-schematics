@@ -71,15 +71,33 @@
       ]
     },
     "ParamValue": {
-      "description": "A param value: JSON number, boolean, expression string (starts/ends with braces), or identifier reference string.",
+      "description": "A param value: JSON number, boolean, expression string (starts/ends with braces), identifier reference string, or an array of numbers (or of arrays of numbers) for a structured constant or a matrix-shaped parameter.",
       "oneOf": [
         { "type": "number" },
         { "type": "boolean" },
         {
           "type": "string",
           "description": "Either an expression string matching ^\\{.+\\}$ or a param name reference matching ^[A-Za-z_][A-Za-z0-9_]*$."
-        }
+        },
+        { "$ref": "#/$defs/StructuredValue" }
       ]
+    },
+    "StructuredValue": {
+      "type": "array",
+      "description": "A lookup table, a vector or a matrix — an array of numbers, or an array of arrays of them. The engine's block grammar already takes a list literal as a field value (a=[[1,2],[3,4]]), and §20 renders one into a C brace initialiser; this is the form the format was missing rather than a new capability. An object or a null anywhere inside has no spelling on either side and is not permitted.",
+      "items": {
+        "oneOf": [
+          { "type": "number" },
+          { "type": "boolean" },
+          { "type": "string" },
+          {
+            "type": "array",
+            "items": {
+              "oneOf": [{ "type": "number" }, { "type": "boolean" }, { "type": "string" }]
+            }
+          }
+        ]
+      }
     },
     "CodeDefine": {
       "type": "object",
@@ -98,8 +116,13 @@
           "description": "The `model.params` entry this define's value comes from — the same table the netlist is generated from, which is the whole point. A dotted name is reserved for binding to a drawn component's own parameter and is refused today."
         },
         "literal": {
-          "description": "A constant that is not a circuit quantity, written out by the author. Spelled differently from `from` so a reader can see at a glance which constants the circuit owns.",
-          "oneOf": [{ "type": "number" }, { "type": "boolean" }, { "type": "string" }]
+          "description": "A constant that is not a circuit quantity, written out by the author. Spelled differently from `from` so a reader can see at a glance which constants the circuit owns. A scalar travels as -D; an array travels in the generated header (§20.2b).",
+          "oneOf": [
+            { "type": "number" },
+            { "type": "boolean" },
+            { "type": "string" },
+            { "$ref": "#/$defs/StructuredValue" }
+          ]
         },
         "optional": {
           "type": "boolean",

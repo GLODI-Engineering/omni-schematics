@@ -102,9 +102,41 @@ describe("§20 code_build", () => {
     ).toBe(false);
   });
 
-  it("rejects a define whose literal is not a single value a macro can expand to", () => {
+  // §20.2b: a table is a legitimate constant — it travels in the generated header rather than
+  // on the compile line, and the author does not choose that. The shape of the value does.
+  it("accepts a structured literal, and a structured parameter it can be bound to", () => {
     expect(
-      validateGsimSchDocument(sheet({ defines: [{ name: "X", literal: [1, 2] }], steps: [] })),
+      validateGsimSchDocument(sheet({ defines: [{ name: "LUT", literal: [1, 2] }], steps: [] })),
+    ).toBe(true);
+    expect(
+      validateGsimSchDocument(
+        sheet({
+          defines: [
+            {
+              name: "M",
+              literal: [
+                [1, 2],
+                [3, 4],
+              ],
+            },
+          ],
+          steps: [],
+        }),
+      ),
+    ).toBe(true);
+    const withTable = sheet(PLAN) as {
+      model: { params: { name: string; value: unknown }[] };
+    };
+    withTable.model.params.push({ name: "vq_table", value: [0, 0.25, 0.5, 0.75, 1] });
+    expect(validateGsimSchDocument(withTable)).toBe(true);
+  });
+
+  it("rejects a literal, and a parameter, holding something with no spelling on either side", () => {
+    expect(
+      validateGsimSchDocument(sheet({ defines: [{ name: "X", literal: { a: 1 } }], steps: [] })),
+    ).toBe(false);
+    expect(
+      validateGsimSchDocument(sheet({ defines: [{ name: "X", literal: [1, null] }], steps: [] })),
     ).toBe(false);
   });
 

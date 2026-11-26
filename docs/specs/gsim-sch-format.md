@@ -210,6 +210,7 @@ A param `value` is one of:
 | Numeric literal | `1000`, `1.5e-6`, `-0.25` | Stored as JSON number. |
 | Expression string | `"{Rload * 2}"` | Matches `^\{.+\}$`. Evaluated by the loader (see §5.2). |
 | Reference string | `"Rload"` | Matches `^[A-Za-z_][A-Za-z0-9_]*$`. Resolves to another param's value. |
+| Array | `[0.0, 0.25, 0.5]`, `[[1,2],[3,4]]` | A structured constant — a lookup table, a vector, a matrix. Numbers, or arrays of them; an object or a `null` inside is not permitted. Not usable where a scalar is required; §20.2b is what it is for. |
 
 A block param (see §6) accepts the same three forms. This makes any value position parameterisable.
 
@@ -1429,8 +1430,9 @@ claim is that the build and the netlist read the same dictionary.
 
 ```json
 "params": [
-  { "name": "L_f", "value": 2.8e-6, "unit": "H"  },
-  { "name": "fsw", "value": 250000, "unit": "Hz" }
+  { "name": "L_f",      "value": 2.8e-6, "unit": "H"  },
+  { "name": "fsw",      "value": 250000, "unit": "Hz" },
+  { "name": "vq_table", "value": [0.0, 0.25, 0.5, 0.75, 1.0] }
 ]
 ```
 
@@ -1445,38 +1447,84 @@ The C source names it as a macro, and carries no number at all:
 ```c
 #include "gsim_cscript.h"
 
+/* L_F and FSW arrive as -D on the compile line. LUT_VQ arrives in a generated header the
+   compile line force-includes, so there is no #include to write for it either. Nothing in
+   this file is a literal. */
+static const double vq[] = LUT_VQ;
+
 void cscript_output(void *state, const double *in, int in_len, double dt,
                      double *out, int out_len) {
-    /* L_F and FSW are the sheet's own constants. Nothing here is a literal. */
-    out[0] = in[0] * dt / (L_F * FSW);
+    out[0] = vq[(int)(in[0] * 4.0)] * dt / (L_F * FSW);
 }
 ```
 
 The plan is the one place that says which sheet constant answers to which macro:
 
 ```json
-"defines": [{ "name": "L_F", "from": "L_f" }, { "name": "FSW", "from": "fsw" }]
+"defines": [
+  { "name": "L_F",    "from": "L_f" },
+  { "name": "FSW",    "from": "fsw" },
+  { "name": "LUT_VQ", "from": "vq_table" }
+]
 ```
 
-And one compile produces both sides:
+Nothing in that list says which constant travels how. **The shape of the resolved value decides**
+(§20.2b). And one compile produces all of it:
 
 ```text
-L1 n1 n2 L_f                          <- the netlist card
--DL_F=2.8e-6 -DFSW=250000             <- the compile line for the same run
+L1 n1 n2 L_f                                     <- the netlist card
+-DL_F=2.8e-6 -DFSW=250000                        <- the compile line, scalars
+-include runs/case3/ctrl_gsim_constants.h        <- forced, so the .c writes no #include
 ```
 
-Change `L_f` and both change, because both came from the same read. Misspell the `from` and
-neither exists, because the compile refused (§20.4).
+```c
+/* runs/case3/ctrl_gsim_constants.h — generated every run, beside the artifact, gitignored. */
+#define LUT_VQ { 0, 0.25, 0.5, 0.75, 1 }
+```
 
-**The value reaches the macro as a `-D` on the compile line**, not by rewriting the source. The
-user's `.c` is compiled untouched, so §20's defines do not disturb a `$gcc` diagnostic's file and
-line, a debugger's line table, or a language server reading the file on disk — and the command
-line the builder prints says which constants the artifact was built with, in a form that can be
-pasted into a terminal. A structured constant (a table, an array, a struct initialiser) is the
-case `-D` does not serve, and the format's answer is a generated header written by a step kind
-rather than a second spelling of `defines`; `ParamValue` cannot express a table today, so there
-is nothing yet to carry. The reasoning, and the option that was rejected, is in `gsim-core`'s
-decision record 0009.
+Change `L_f` and both change, because both came from the same read. Edit `vq_table` and the
+header changes and the artifact is rebuilt. Misspell either `from` and **none** of it exists,
+because the compile refused (§20.4) — the same refusal, with the same message, whichever shape
+the constant had.
+
+### 20.2b How a value reaches the macro: `-D`, or the generated header
+
+A scalar reaches the macro as a **`-D` on the compile line**. An array — a lookup table, a
+vector, a matrix, a struct initialiser — reaches it as a `#define` in a **generated header**
+that the compile line **force-includes** (`-include` for clang and gcc, `/FI` for MSVC), so the
+block's `.c` writes no `#include` for it.
+
+**The author does not choose between them.** A `defines` entry says nothing about transport; the
+shape of the resolved value decides. A number, a boolean or a string renders `NAME=VALUE` in the
+`-D` list; an array renders `#define NAME { ... }` in the header, nesting for a nested array,
+which is what a 2-D table and a struct initialiser both want. This is not a convenience — it is
+what makes §20.4 apply equally to both, because there is one declaration site, one resolution
+pass and one set of refusals. If the two transports were separate lists, an author's choice of
+*shape* could quietly change how safe their build is.
+
+**Neither transport rewrites the user's source.** A rewritten `.c` moves every line a `$gcc`
+diagnostic, a debugger's line table or a language server points at, and the editor's whole
+code-block story depends on those pointing at the file the user opened.
+
+**The header is a build output, not a source**, and three rules follow:
+
+- It is written **beside the artifact** — its path is derived from the block's `lib`, so
+  `runs/case3/ctrl` gives `runs/case3/ctrl_gsim_constants.h` — and never into the folder the
+  sources live in, where it would look like something the user wrote. A `lib` already carrying
+  `.so`, `.dylib` or `.dll` yields the same name as the suffix-less stem.
+- It is **regenerated every run** and belongs in `.gitignore`.
+- It is part of **staleness**, compared by **content** and never by timestamp. It is rewritten
+  every run, so its mtime is always fresh and a timestamp check would say nothing — while a
+  library built before a lookup table changed is exactly as stale as one built before its `.c`
+  changed.
+
+A structured constant is why §5.1 permits an array at all. The engine's block grammar already
+takes a list literal as a field value (`a=[[1,2],[3,4]]`), so this is the form the written format
+was missing rather than a new capability. An object or a `null` anywhere inside has no spelling
+on either side and is refused.
+
+The full argument, including the option that was rejected and why, is in `gsim-core`'s decision
+record 0009.
 
 **The `defines` list is written in the document, not discovered from the source.** A reader does
 not scan a `.c` for macro names: the build set would then depend on the contents of a file
