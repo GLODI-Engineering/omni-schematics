@@ -116,6 +116,99 @@ def defaults_for(type_name: str) -> dict[str, Any]:
     return params
 
 
+@functools.lru_cache(maxsize=1)
+def _catalog_by_spelling() -> dict[str, dict[str, Any]]:
+    """The catalogue keyed by every spelling a component answers to.
+
+    `catalog()` is keyed by canonical id, which is all these generators need --
+    they use canonical names only. This exists so that reading a *document*
+    back, where a block may name its component by an alias, resolves the same
+    way the editor's own lookup does.
+    """
+    by_spelling: dict[str, dict[str, Any]] = {}
+    for entry in catalog().values():
+        spellings = [entry.get("id"), entry.get("type"), entry.get("name")]
+        spellings += entry.get("aliases") or []
+        for spelling in spellings:
+            if spelling and spelling not in by_spelling:
+                by_spelling[spelling] = entry
+    return by_spelling
+
+
+def declared_param_type(type_name: str, fidelity: str | None, param: str) -> str | None:
+    """What the engine's library says a parameter's value *is*, or None.
+
+    The fidelity entry is asked first because parameters belong to a tier; the
+    component's own `params` is the fallback. `None` means the catalogue has no
+    opinion -- an unknown component, or a parameter it does not declare -- and
+    the caller must leave such a value exactly as it found it.
+    """
+    entry = _catalog_by_spelling().get(type_name)
+    if entry is None:
+        return None
+    if fidelity:
+        for tier in entry.get("fidelities") or []:
+            if tier.get("tier") != fidelity:
+                continue
+            for declared in tier.get("params") or []:
+                if declared.get("id") == param:
+                    return declared.get("type")
+    for declared in entry.get("params") or []:
+        if declared.get("name") == param:
+            return declared.get("type")
+    return None
+
+
+def apply_declared_number_forms(model: dict[str, Any]) -> int:
+    """Write every component parameter in the form its component declares it.
+
+    JSON has one number type and Python has two, so this generator's output
+    depends on whether the value it was handed happened to be an `int` or a
+    `float` -- and that is not a property of the parameter, it is an accident of
+    which literal somebody typed, or of how the catalogue spelled a default.
+    Both spellings mean the same double to the engine and to the editor, and
+    *only* Python can tell them apart afterwards, which is exactly why Python
+    must not be the one deciding by accident.
+
+    So the declaration decides, the same declaration the editor's writer reads
+    (`apps/frontend/src/file/number-form.ts`). A parameter declared `number`
+    becomes a `float`, one declared `integer` becomes an `int`, and anything
+    undeclared is left alone -- `vector` and `matrix` among them, because those
+    name the container and say nothing about the numbers inside one. See #268.
+
+    Returns the number of values changed, so a caller can say so.
+    """
+    changed = 0
+
+    def walk(container: dict[str, Any]) -> None:
+        nonlocal changed
+        for block in container.get("blocks") or []:
+            params = block.get("params")
+            if isinstance(params, dict):
+                for name, value in params.items():
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        continue
+                    declared = declared_param_type(block.get("type", ""), block.get("fidelity"), name)
+                    wanted: Any = None
+                    if declared == "number":
+                        wanted = float(value)
+                    elif declared == "integer" and float(value).is_integer():
+                        wanted = int(value)
+                    if wanted is None or type(wanted) is type(value):
+                        continue
+                    params[name] = wanted
+                    changed += 1
+            subsystem = block.get("subsystem")
+            if isinstance(subsystem, dict):
+                walk(subsystem)
+        for definition in container.get("subckt_defs") or []:
+            if isinstance(definition, dict):
+                walk(definition)
+
+    walk(model)
+    return changed
+
+
 def placement_for(type_name: str) -> dict[str, str]:
     r"""The paradigm the schema requires and the domain the engine declares.
 
@@ -242,13 +335,18 @@ def write_document(
         "analyses": [
             {
                 "id": analysis_id,
+                # Floats, not because anything here is fractional -- `t_start` is
+                # normally 0 -- but because a time is a real quantity and this is
+                # the one writer whose output records which of the two it was.
+                # See `apply_declared_number_forms`.
                 "type": "TRAN",
-                "t_start": t_start,
-                "t_end": t_end,
-                "t_step": t_step,
+                "t_start": float(t_start),
+                "t_end": float(t_end),
+                "t_step": float(t_step),
             }
         ],
     }
+    apply_declared_number_forms(model)
     text = json.dumps(document, indent=2) + "\n"
     pathlib.Path(path).write_text(text)
     return text

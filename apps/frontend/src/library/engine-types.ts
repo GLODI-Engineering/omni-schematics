@@ -13,6 +13,17 @@ import engineCatalog from "./engine-catalog.json";
  * `passive.resistor`, and keeps the older spellings as aliases so saved work still resolves.
  */
 
+/** The declared value type of one parameter, as the engine's library states it. */
+export type ParamDeclaredType =
+  | "number"
+  | "integer"
+  | "vector"
+  | "matrix"
+  | "string"
+  | "bool"
+  | "enum"
+  | "list";
+
 interface CatalogRecord {
   metadata: {
     name?: string;
@@ -21,6 +32,8 @@ interface CatalogRecord {
     engineType: string | null;
     compilable: boolean;
     aliases?: string[];
+    params?: Array<{ name: string; type: ParamDeclaredType }>;
+    fidelities?: Array<{ tier?: string; params?: Array<{ id: string; type: ParamDeclaredType }> }>;
   };
 }
 
@@ -54,4 +67,36 @@ export function isCompilable(blockType: string): boolean {
 /** Every component the engine declares, for callers that want to enumerate rather than ask. */
 export function engineComponents(): ReadonlyArray<(typeof RECORDS)[number]> {
   return RECORDS;
+}
+
+/**
+ * What the engine's library says a parameter's value *is*.
+ *
+ * `undefined` for a block the catalogue does not describe, and for a parameter
+ * the component does not declare — a subsystem boundary alias, a `.SUBCKT`
+ * instance's parameter, a key a document carries that this engine has no
+ * opinion about. Absence is not a signal: a caller that has to know should
+ * treat it as "not declared" rather than guess from the value, which is how
+ * #268 happened in the first place.
+ *
+ * The fidelity entry is asked first because parameters belong to a tier: the
+ * same component can be `ideal` with five and `spice` with twenty. The
+ * component's own `params` is the fallback, and the two never disagree about a
+ * type -- `gsim-core`'s library test holds them to that.
+ */
+export function paramDeclaredType(
+  blockType: string,
+  fidelity: string | undefined,
+  paramName: string,
+): ParamDeclaredType | undefined {
+  const record = BY_NAME.get(blockType);
+  if (!record) return undefined;
+  if (fidelity) {
+    for (const entry of record.fidelities ?? []) {
+      if (entry.tier !== fidelity) continue;
+      const declared = (entry.params ?? []).find((param) => param.id === paramName);
+      if (declared) return declared.type;
+    }
+  }
+  return (record.params ?? []).find((param) => param.name === paramName)?.type;
 }
