@@ -24,6 +24,7 @@
  * value when `getData()` comes back empty (see `resolveDroppedBlock`).
  */
 import { type ChildProcess, spawn as spawnChild } from "node:child_process";
+import * as fs from "node:fs";
 import * as os from "node:os";
 import path from "node:path";
 
@@ -41,6 +42,7 @@ import {
   isHostBoundMessage,
 } from "./protocol";
 import { type LevelledChannel, createRunOutputChannel, writeRunOutput } from "./run-output";
+import { describePrune, runsToPrune } from "./run-retention";
 import { runSimulation } from "./run-simulation";
 import { SamplesReadError, readSamplesRanges } from "./samples-read";
 import { buildSolverEnvironment } from "./solver-environment";
@@ -515,6 +517,38 @@ export class GsimHost implements vscode.Disposable {
   }
 
   /**
+   * Keep the newest `omniSchematics.keepRuns` runs, and say what went.
+   *
+   * Never throws: a workspace whose `.gsim/runs/` cannot be read, or a directory that will not
+   * delete because something has it open, is not a reason to fail a run that has already
+   * succeeded. The result the user asked for is already on disk.
+   */
+  private pruneOldRuns(runsRoot: string): void {
+    const keep = vscode.workspace.getConfiguration("omniSchematics").get<number>("keepRuns", 20);
+    if (keep <= 0) return;
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(runsRoot);
+    } catch {
+      return;
+    }
+    const decision = runsToPrune(entries, keep);
+    const removed: string[] = [];
+    for (const name of decision.remove) {
+      try {
+        fs.rmSync(path.join(runsRoot, name), { recursive: true, force: true });
+        removed.push(name);
+      } catch {
+        // Leave it; the next successful run tries again.
+      }
+    }
+    const said = describePrune({ remove: removed, keep: decision.keep }, keep);
+    if (said !== undefined) {
+      writeRunOutput(this.runOutput, [{ source: "editor", severity: "info", text: said }]);
+    }
+  }
+
+  /**
    * Where a run's four files go: `.gsim/runs/<run id>/` in the open folder.
    *
    * Beside `.gsim/symbols/`, which is already this extension's corner of a
@@ -654,6 +688,9 @@ export class GsimHost implements vscode.Disposable {
 
     if (result.ok) {
       this.lastRunResult = { requestId, result };
+      // Only after a success (#186). Pruning first would let a run that then fails take the
+      // last good result with it, which is the one moment the previous result matters most.
+      this.pruneOldRuns(path.dirname(directory));
     }
 
     if (!result.ok) {

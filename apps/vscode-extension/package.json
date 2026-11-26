@@ -161,6 +161,13 @@
           "markdownDescription": "What to do when a `cscript` block's compiled library is older than the `.c` it was built from.\n\nNothing in this editor or in `general-simulator` compiles a C block — the engine loads a binary and never invokes a compiler — so editing the source and pressing Run used to simulate the *previous* build and report success. That is the only failure on this path that produces a plausible wrong answer: a gain changed from 2 to 10 in the source, and a waveform that does not move.\n\n`refuse` is the default for that reason. `warn` is for a deliberate mismatch — a comment edited, a library built elsewhere. The source is found by this editor's own convention (`blocks/<stem>.c`, then beside the library, then the sheet's folder, then `src/`), and when none of them exists the run says so rather than implying the library is fresh.",
           "scope": "resource"
         },
+        "omniSchematics.keepRuns": {
+          "type": "number",
+          "default": 20,
+          "minimum": 0,
+          "markdownDescription": "How many simulation results to keep in `.gsim/runs/`.\n\nEach Run writes a directory holding the netlist, the sample container, the event log and the result document — and the container can be hundreds of megabytes for a long run at a fine step, so a day of iterating fills a disk.\n\nThe oldest are removed **after a run succeeds**, never before, so a run that fails cannot take the last good result with it. The run just written is always kept.\n\nSet to `0` to keep every result and delete nothing.",
+          "scope": "machine-overridable"
+        },
         "omniSchematics.compilerPath": {
           "type": "string",
           "default": "",
