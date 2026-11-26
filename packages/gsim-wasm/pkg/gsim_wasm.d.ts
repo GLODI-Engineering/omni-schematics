@@ -71,7 +71,8 @@ export function catalog(): string;
  * Compiles a `Model` into netlist text for `target` (currently only `"general-simulator"`).
  *
  * **Shared JSON contract** (identical to `gsim-py`'s `compile`): returns
- * `{"netlist": "<text>", "notes": [...], "provenance": {"elements": [...], "nets": [...]}}`;
+ * `{"netlist": "<text>", "notes": [...], "provenance": {"elements": [...], "nets": [...]},
+ * "code_build": {"steps": [...]} | null, "params": {"<name>": <resolved value>}}`;
  * throws a real JS `Error` carrying the compiler's own message on failure. See
  * `gsim_core::compile::provenance` for the provenance shape and why it is carried rather than
  * re-derived on the JS side.
