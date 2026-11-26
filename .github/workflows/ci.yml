@@ -145,10 +145,14 @@ jobs:
   # Runs after the frontend build succeeds; uploads artifacts on failure.
   # ---------------------------------------------------------------------------
   e2e:
-    # Pinned, not `ubuntu-latest`: that is 26.04 now, and Playwright 1.60 refuses
+    # Pinned, not `ubuntu-latest`: that is 26.04 now, and Playwright 1.60 refused
     # it outright — "Playwright does not support chromium on ubuntu26.04-x64" —
-    # so `playwright install --with-deps` fails before a single test runs. 24.04
-    # is the newest image Playwright supports; unpin it when it supports 26.04.
+    # so `playwright install --with-deps` failed before a single test ran.
+    #
+    # That constraint is lifted: `playwright-core` added ubuntu26.04 to its
+    # supported distributions in 1.62, and #233 moved this repository to 1.65.1.
+    # The pin is now a choice rather than a necessity, and it is left in place so
+    # that a runner-image change and a Playwright change do not land together.
     runs-on: ubuntu-24.04
     needs: frontend
     # A cap, not a budget. Without one the job inherits GitHub's 6-hour default,

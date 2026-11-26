@@ -12,15 +12,21 @@ import { WEB_BASE_URL } from "./tests/e2e/fixtures/build";
 const baseURL = WEB_BASE_URL;
 
 /**
- * Playwright ships no bundled Chromium for every distribution — on Ubuntu
- * 26.04 `playwright install chromium` refuses outright. Setting
- * PLAYWRIGHT_BROWSER_CHANNEL=chrome runs the suite against the browser
+ * An escape hatch for a machine Playwright has no build for, and nothing more.
+ *
+ * Playwright maps the host distribution to a download, and a distribution it
+ * does not know is refused outright — `playwright install chromium` answers
+ * "Playwright does not support chromium on <distro>" and installs nothing.
+ * Setting PLAYWRIGHT_BROWSER_CHANNEL=chrome runs the suite against the browser
  * already on the machine instead.
  *
- * Opt-in via the environment rather than a default, so CI keeps using the
- * pinned bundled build: a suite that silently runs against whatever Chrome
- * a developer happens to have is a suite whose failures nobody can
- * reproduce.
+ * **Reach for it last.** A suite running against whatever Chrome a developer
+ * happens to have is a suite whose failures nobody else can reproduce, and a
+ * rendering or input difference between that browser and the pinned revision
+ * shows up as a wrong assertion with no hint of the cause (#233). Bumping
+ * Playwright until `playwright install` works is the fix; this is what to do
+ * while waiting for one. It is opt-in through the environment for that reason,
+ * and CI never sets it.
  */
 const channel = process.env.PLAYWRIGHT_BROWSER_CHANNEL;
 
