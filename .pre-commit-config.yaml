@@ -27,7 +27,6 @@ repos:
         exclude: \.md$  # markdown uses trailing spaces for line breaks
       - id: end-of-file-fixer
       - id: check-yaml
-        exclude: ^\.archon/workflows/.*\.template\.yaml$  # contains {{...}} placeholders
       - id: check-json
         exclude: ^apps/frontend/tsconfig\.json$  # tsconfig.json allows comments
       - id: check-toml
