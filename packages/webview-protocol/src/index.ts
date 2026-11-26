@@ -231,6 +231,63 @@ export type OpenBlockSourceResult =
  * this binary, so the editor refuses them in the webview with that as the
  * reason rather than sending something the host would have to guess at.
  */
+/**
+ * One code block on the sheet, and where its source is, so the host can tell whether the
+ * artifact it is about to run was built from it (#235).
+ *
+ * The netlist cannot answer this. A `cscript` block's parameter is `lib` — a compiled library —
+ * and the source is not named in the document at all, so only the webview, which holds the
+ * block and this editor's convention for finding its `.c`, can say where to look. (That the
+ * convention is a convention rather than a fact the document states is
+ * `GLODI-Engineering/omni-schematics#222`; `inferredSource` carries that distinction through so
+ * the host's message can be honest about it.)
+ *
+ * Paths are **relative to the schematic**, like every path a block carries, and the host
+ * resolves them against the schematic's own folder — the same directory it spawns the solver in
+ * (#234).
+ *
+ * ## This field is provisional, and `sourceCandidates` is a guess
+ *
+ * Say it here rather than leave it to be discovered: **`sourceCandidates` is a list the webview
+ * derives by convention** (`blocks/<stem>.c`, then beside the library, then the sheet's folder,
+ * then `src/`, each with a `.cpp` alternative), and a convention that travels in a protocol
+ * message looks exactly like a fact to whoever reads it next. It is not a fact. A project with
+ * its sources in `code/` and its artifacts in `code/runs/<case>/` matches none of those folders,
+ * and this field will say so by listing candidates none of which exist.
+ *
+ * It shipped ahead of the tidier design on purpose: the staleness refusal removes a silent wrong
+ * result today, and `GLODI-Engineering/omni-schematics#222` — the `source` parameter that would
+ * make the link something the **document states** — is a cross-repo change needing a component
+ * library entry in the engine and a release behind it. Blocking a wrong-answer fix on that is
+ * the wrong trade.
+ *
+ * So: **expect this field to be replaced** by a document-stated source once #222 lands, and do
+ * not build anything on it that needs `sourceCandidates` to be true rather than plausible.
+ * `inferredSource` is what carries the distinction to a consumer, and the one feature built on
+ * this field so far — the staleness check — says "could not find the source, and the list I
+ * looked in is this editor's convention rather than something the document states" instead of
+ * implying it checked.
+ */
+export interface RunCodeBlock {
+  /** The block's id on the sheet, which is also the name the netlist gives it. */
+  blockId: string;
+  /** Which of the three languages, as `code-source.ts` decides it from the block type. */
+  language: "c" | "python" | "octave";
+  /**
+   * A `cscript` block's `lib=`, as written. Absent for the other four, whose `path=` already
+   * names the file the user edits, so there is no artifact to go stale against it.
+   */
+  artifact?: string;
+  /** Where the source might be, best first. The first that exists is the one meant. */
+  sourceCandidates: string[];
+  /**
+   * Whether `sourceCandidates` is this editor's convention rather than something the document
+   * states. True for `cscript` today, and the reason a host message has to say "could not find
+   * a source" rather than "the source is up to date".
+   */
+  inferredSource: boolean;
+}
+
 export interface RunRequest {
   /**
    * Which of the engine's two analyses to run.
@@ -263,6 +320,15 @@ export interface RunRequest {
    * engine ever grows an analysis the format already names.
    */
   analysis: string;
+  /**
+   * The sheet's code blocks and where their sources are, so the host can refuse a run whose
+   * compiled library is older than the `.c` it came from (#235).
+   *
+   * Optional, and absent for an imported netlist: a `.cir` opened from disk has no document
+   * behind it, so there are no blocks to ask about. A host that gets no list checks nothing,
+   * which is the behaviour before this field existed.
+   */
+  codeBlocks?: RunCodeBlock[];
 }
 
 /** Why a run did not produce a result. Each needs a different thing of the user. */

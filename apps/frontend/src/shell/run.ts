@@ -30,6 +30,7 @@
 import { compileSchematic, initEngine } from "../engine/engine";
 import { getWebviewInit, postToHost } from "../ipc/vscode-host";
 import { detectAnalysisTypeFromNetlist } from "../netlist/generate";
+import { runCodeBlocksFor } from "../netlist/run-code-blocks";
 import { publishCompilerNotes } from "../problems/compiler-notes";
 import { publishRunEvents } from "../problems/run-events";
 import { plotRunContainer } from "../results/container-plot";
@@ -450,12 +451,21 @@ export async function triggerRun(): Promise<void> {
     return;
   }
 
+  // The sheet's code blocks and where their sources are, so the host can refuse a run whose
+  // compiled library is older than the `.c` it came from (#235). The netlist cannot carry this:
+  // a `cscript` block's parameter is the *binary*, and the source is not named in the document
+  // at all. Empty for an imported `.cir`, which has no document behind it.
+  const codeBlocks = importedNetlist
+    ? []
+    : runCodeBlocksFor(useGraphStore.getState().document.model.blocks);
+
   await runOnHost({
     mode: route.mode,
     netlist,
     ...(route.mode === "transient" ? { tEnd: window.tEnd, tStep: window.tStep } : {}),
     analysis: route.analysis,
     source: documentUri(),
+    ...(codeBlocks.length > 0 ? { codeBlocks } : {}),
   });
 }
 

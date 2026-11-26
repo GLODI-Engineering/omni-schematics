@@ -564,6 +564,10 @@ export class GsimHost implements vscode.Disposable {
           // for, so a sheet saved beside its own `ctrl.py` ran in a directory where `ctrl.py`
           // does not exist.
           schematicFolder: folderOf(request.source)?.fsPath,
+          // What to do about a `cscript` block whose library is older than its `.c` (#235).
+          // The default is to refuse, which is why the fallback is spelled here rather than
+          // left to `undefined`: a missing setting must not mean "run it anyway".
+          staleCodeBlock: settings.get<"refuse" | "warn" | "ignore">("staleCodeBlock", "refuse"),
           spawn: (binary, args, cwd) =>
             spawnChild(binary, args, {
               cwd,
