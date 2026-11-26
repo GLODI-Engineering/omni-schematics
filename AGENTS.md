@@ -1,9 +1,14 @@
 # Agent Guidelines
 
-You are working on **General Simulator GUI for VS Code** — the graphical
-front end for [`general-simulator`](https://github.com/GLODI-Engineering/general-simulator),
-which is the headless engine. This repo is the GUI, and it targets exactly
-one host: **VS Code**. Full architecture: `docs/specs/`.
+You are working on **Omni Schematics** — a schematic editor that targets
+exactly one host, **VS Code**, and drives an engine that is a separate
+program. Today that engine is
+[`general-simulator`](https://github.com/GLODI-Engineering/general-simulator),
+which is headless; the editor is named apart from it because it is built to
+drive others. Keep the two straight when you write: the editor is Omni
+Schematics, the engine keeps its own name, and
+`omniSchematics.generalSimulatorPath` is a setting of the first naming the
+second. Full architecture: `docs/specs/`.
 
 This file lists only what mechanical checks cannot enforce.
 

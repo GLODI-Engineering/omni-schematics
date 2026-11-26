@@ -1,10 +1,14 @@
-# General Simulator — VS Code extension
+# Omni Schematics — the VS Code extension
 
-Hosts the General Simulator frontend (`apps/frontend`) inside VS Code, so
+Hosts the Omni Schematics webviews (`apps/frontend`) inside VS Code, so
 schematic capture and simulation live next to the Python / C / Octave files
 that back `pyblock` / `octfunc` / `cscript` blocks, with VS Code's own language
 tooling. Those are the engine's business, not this extension's: nothing here
 runs an interpreter.
+
+`general-simulator` is the engine this extension spawns, and it keeps its own
+name — `omniSchematics.generalSimulatorPath` is a setting of the editor that
+points at it.
 
 ## What it contributes
 
@@ -13,9 +17,11 @@ runs an interpreter.
 | Activity Bar view container | `omniSchematics` | icon + "Omni Schematics" |
 | Webview view | `omniSchematics.library` | `library/LibraryActivity.tsx` (no `PrimarySideBar` wrapper — VS Code supplies the sidebar chrome) |
 | Custom editor | `omniSchematics.schematic` for `*.gsim_sch` | `canvas/Canvas.tsx` + the rest of `canvas/**` in a `WebviewPanel`; real `CustomEditorProvider` save / save-as / revert / hot-exit backup |
-| Command | `General Simulator: Show Waveforms` | `waveform/WaveformTab.tsx` in a webview **panel** — see `src/waveformPanel.ts` for why this is not a second custom editor |
+| Command | `Omni Schematics: Show Waveforms` | `waveform/WaveformTab.tsx` in a webview **panel** — see `src/waveformPanel.ts` for why this is not a second custom editor |
 | Command | `Omni Schematics: Show Log` | the extension's output channel |
-| Command | `General Simulator: New Schematic` | creates and opens a `.gsim_sch` |
+| Command | `Omni Schematics: New Schematic` | creates and opens a `.gsim_sch` |
+| Command | `Omni Schematics: Open Schematic…` | opens an existing `.gsim_sch` |
+| Command | `Omni Schematics: Open Example Schematic…` | copies one of the bundled examples into the workspace and opens it |
 
 ## Architecture
 
@@ -71,7 +77,7 @@ Click-to-insert takes the same route via `gsim/insertBlock`.
 
 ```sh
 pnpm --filter @gensim/frontend build   # emits apps/frontend/dist/{schematic,library,waveform}.html
-pnpm --filter general-simulator build  # tsc -> apps/vscode-extension/out
+pnpm --filter omni-schematics build    # tsc -> apps/vscode-extension/out
 ```
 
 Running from a source checkout, the extension finds the frontend at
