@@ -16,6 +16,7 @@
  */
 import * as vscode from "vscode";
 
+import { CodeProblems } from "./code-problems";
 import { openExample } from "./examples";
 import { GsimHost } from "./host";
 import { LIBRARY_VIEW_ID, LibraryViewProvider } from "./libraryView";
@@ -43,9 +44,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<GsimTe
   // one, because VS Code offers no way to read an output channel back and the
   // webview -> host -> panel path (#139) would otherwise be untestable end to
   // end. Outside integration mode this is the real LogOutputChannel.
+  // The one `DiagnosticCollection` this extension owns (#237). Created here and disposed with
+  // the extension, which is the whole of its lifetime: before this there was none at all, so
+  // nothing this editor produced ever reached the Problems panel and nothing was clickable.
+  const problems = new CodeProblems();
+  context.subscriptions.push(problems);
+
   const host = new GsimHost(
     log,
     isIntegrationTest() ? createRecordingRunOutput() : createRunOutputChannel(vscode.window),
+    problems,
   );
   context.subscriptions.push(host);
 
