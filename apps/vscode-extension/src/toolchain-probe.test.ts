@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   type ProbeIo,
+  chooseCompiler,
   languagesNeeded,
   preflight,
   probeCompiler,
@@ -403,5 +404,78 @@ describe("the real engine on this machine", () => {
     }
     expect(typeof capabilities.python).toBe("boolean");
     expect(capabilities.version).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
+/**
+ * Whose compiler gets used, which the owner settled: the editor ships none, and its job is to
+ * let you say where yours is.
+ */
+describe("you name your own compiler", () => {
+  it("prefers the block's, then the setting's, then discovery", () => {
+    expect(chooseCompiler({ block: "/opt/mingw/bin/gcc", setting: "clang" })).toEqual({
+      program: "/opt/mingw/bin/gcc",
+      source: "block",
+    });
+    expect(chooseCompiler({ setting: "clang" })).toEqual({ program: "clang", source: "setting" });
+    expect(chooseCompiler({})).toEqual({ source: "discovered" });
+  });
+
+  it("treats blank and whitespace as unset, so an empty setting does not name a compiler", () => {
+    expect(chooseCompiler({ block: "   ", setting: "clang" })).toEqual({
+      program: "clang",
+      source: "setting",
+    });
+    expect(chooseCompiler({ block: "", setting: "" })).toEqual({ source: "discovered" });
+  });
+
+  it("tries a named compiler alone, and does not quietly use another that works", () => {
+    // `clang` would build here. The user asked for `gcc-14`, which is absent. Falling back
+    // would hand them a library built with flags they did not choose, from a compiler they
+    // did not name -- and nothing on the sheet would record which one produced it.
+    const io = world({ "gcc-14": undefined, clang: { code: 0 } });
+    const report = probeCompiler(io, { program: "gcc-14", source: "setting" });
+
+    expect(report.usable).toBeUndefined();
+    expect(report.attempts.map((attempt) => attempt.program)).toEqual(["gcc-14"]);
+    expect(report.source).toBe("setting");
+  });
+
+  it("reports a named compiler that starts and cannot build, which is the Windows case", () => {
+    const io = world(
+      { "cl.exe": { code: 2, stderr: "LINK : fatal error LNK1104" } },
+      { platform: "win32" },
+    );
+    const report = probeCompiler(io, { program: "cl.exe", source: "setting" });
+
+    expect(report.usable).toBeUndefined();
+    expect(report.attempts[0]?.outcome).toBe("cannot-build");
+    expect(report.attempts[0]?.detail).toContain("LNK1104");
+  });
+
+  it("gives a named MSVC its own flags even when it is spelled as a path", () => {
+    // Matched on the file name: a setting points at an installation, not at a bare `cl.exe`,
+    // and `-shared -fPIC` handed to MSVC fails in a way nobody would connect to this.
+    const seen: string[][] = [];
+    const io = world({ "C:/BuildTools/cl.exe": { code: 0 } }, { platform: "win32" });
+    const spy: ProbeIo = {
+      ...io,
+      run: (program, args, cwd) => {
+        seen.push(args);
+        return io.run(program, args, cwd);
+      },
+    };
+    probeCompiler(spy, { program: "C:/BuildTools/cl.exe", source: "setting" });
+
+    expect(seen[0]).toContain("/LD");
+    expect(seen[0]).not.toContain("-shared");
+  });
+
+  it("still discovers one when nothing is named", () => {
+    const io = world({ clang: undefined, cc: { code: 0 } });
+    const report = probeCompiler(io, chooseCompiler({}));
+
+    expect(report.usable).toBe("cc");
+    expect(report.source).toBe("discovered");
   });
 });

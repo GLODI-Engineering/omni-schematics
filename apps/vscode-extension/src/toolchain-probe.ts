@@ -83,6 +83,44 @@ export interface CompilerReport {
   usable?: string;
   /** Every candidate, in the order tried. A report, not a log. */
   attempts: CompilerAttempt[];
+  /** Where the choice came from, which decides what a failure should tell the user. */
+  source: CompilerChoice["source"];
+}
+
+/** Which compiler to try, and on whose authority. */
+export interface CompilerChoice {
+  /** The one program to try. Absent means: discover one. */
+  program?: string;
+  /**
+   * `block` — the sheet's own `compiler` parameter, for a block that needs a particular one.
+   * `setting` — `omniSchematics.compilerPath`, the machine's answer for every block.
+   * `discovered` — nothing was named, so the candidates below are tried in order.
+   */
+  source: "block" | "setting" | "discovered";
+}
+
+/**
+ * Whose compiler to use: the block's, then the setting's, then whatever is on `PATH`.
+ *
+ * The owner's decision, and the reasoning is his: installing a toolchain is the user's
+ * business, and the editor's business is letting them say where it is. So a `.vsix` ships no
+ * compiler and this is the whole of the policy.
+ *
+ * A named compiler is tried **alone**. Falling back to a different one would be the worst of
+ * both: a build that succeeds with flags the user did not choose, producing a library whose
+ * provenance nobody can reconstruct from the sheet. If the one you named cannot build, that is
+ * the answer, and the report says which one you named and what it said.
+ */
+export function chooseCompiler(named: { block?: string; setting?: string }): CompilerChoice {
+  const block = named.block?.trim();
+  if (block !== undefined && block !== "") {
+    return { program: block, source: "block" };
+  }
+  const setting = named.setting?.trim();
+  if (setting !== undefined && setting !== "") {
+    return { program: setting, source: "setting" };
+  }
+  return { source: "discovered" };
 }
 
 /** The outside world, injected so every branch below is testable without one. */
@@ -127,7 +165,10 @@ function buildCommand(
   program: string,
   platform: NodeJS.Platform,
 ): { args: string[]; output: string } {
-  if (program === "cl.exe") {
+  // Matched on the file name, not the whole string: a named compiler is usually a path, and
+  // `C:\\...\\cl.exe` wants MSVC's flags exactly as much as a bare `cl.exe` does.
+  const name = program.replace(/\\/g, "/").split("/").pop() ?? program;
+  if (name === "cl.exe" || name === "cl") {
     // MSVC: `/LD` is a DLL, `/nologo` keeps the banner out of the report, and the output name
     // comes from the source unless `/Fe` says otherwise.
     return { args: ["/nologo", "/LD", "probe.c"], output: "probe.dll" };
@@ -146,9 +187,12 @@ function buildCommand(
  * missing compiler should say what it looked for; a run refused because the *probe* broke would
  * be a worse outcome than not probing at all.
  */
-export function probeCompiler(io: ProbeIo): CompilerReport {
+export function probeCompiler(io: ProbeIo, choice?: CompilerChoice): CompilerReport {
+  const chosen = choice ?? { source: "discovered" as const };
   const attempts: CompilerAttempt[] = [];
-  for (const program of candidates(io.platform)) {
+  // A named compiler is the only candidate. See `chooseCompiler` for why there is no fallback.
+  const order = chosen.program === undefined ? candidates(io.platform) : [chosen.program];
+  for (const program of order) {
     const { args, output } = buildCommand(program, io.platform);
     let directory: string | undefined;
     try {
@@ -165,7 +209,7 @@ export function probeCompiler(io: ProbeIo): CompilerReport {
       }
       if (result.code === 0 && io.produced(directory, output)) {
         attempts.push({ program, outcome: "works" });
-        return { usable: program, attempts };
+        return { usable: program, attempts, source: chosen.source };
       }
       // Started and did not produce a library. This is the case a `PATH` lookup calls success.
       const said = [result.stderr, result.stdout]
@@ -192,7 +236,7 @@ export function probeCompiler(io: ProbeIo): CompilerReport {
       }
     }
   }
-  return { attempts };
+  return { attempts, source: chosen.source };
 }
 
 /** What the engine said about itself, from `general-simulator --capabilities`. */
