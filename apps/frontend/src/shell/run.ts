@@ -36,7 +36,7 @@ import { plotRunContainer } from "../results/container-plot";
 import { useGraphStore, useIpcStore, useUiStore } from "../store";
 import { useSimSettingsStore } from "../store/sim-settings";
 import { useToastStore } from "../store/toast";
-import { stepForDocument } from "./analysis-defaults";
+import { type AnalysisTiming, stepForDocument, timingForAnalysis } from "./analysis-defaults";
 import type { RunRequest, RunResult } from "./run-host";
 import { cancelRun, requestRun } from "./run-host";
 import { type RunOutputSource, reportRunLine, reportRunOutput } from "./run-output";
@@ -480,6 +480,12 @@ export async function triggerRunAnalysis(analysisId: string): Promise<void> {
   }
 
   const analysis = namedAnalysis(analysisId);
+  if (!analysis.ok) {
+    // Not a solver failure: the sheet does not say, readably, how long to run.
+    // Reported from the editor, which is where the answer is (#244).
+    reportRunFailure("This sheet does not say how long to run", analysis.reason, "editor");
+    return;
+  }
   const route = routeAnalysis(analysis.type);
   if (!route.ok) {
     reportRunFailure("This solver cannot run that analysis", route.reason);
@@ -498,13 +504,20 @@ export async function triggerRunAnalysis(analysisId: string): Promise<void> {
 }
 
 /**
- * The analysis to run, by id, falling back the way the payload builder did.
+ * The analysis to run, by id, or why it cannot be run.
  *
  * Priority, unchanged: the named analysis, then the document's default (or its
  * first), then the legacy sim-settings store that a v1 document has instead of
  * a `simulation` block.
+ *
+ * What changed with #244 is what happens when the named analysis is there but
+ * its timing is not a number: that is a refusal now, not a silent fall back to
+ * the settings store's own window. The store is for a document that does not
+ * declare one at all.
  */
-function namedAnalysis(analysisId?: string): { type: string; tEnd: number; tStep: number } {
+function namedAnalysis(
+  analysisId?: string,
+): { ok: true; type: string; tEnd: number; tStep: number } | { ok: false; reason: string } {
   const simulation = useGraphStore.getState().document.model.simulation;
   const analyses = simulation?.analyses ?? [];
   const settings = useSimSettingsStore.getState().settings;
@@ -513,13 +526,18 @@ function namedAnalysis(analysisId?: string): { type: string; tEnd: number; tStep
     const targetId = analysisId ?? simulation?.default_analysis ?? analyses[0]?.id;
     const analysis = analyses.find((entry) => entry.id === targetId) ?? analyses[0];
     if (analysis) {
+      // A transient analysis carries both. A value that is not a number is
+      // refused rather than replaced by the settings panel's own -- see
+      // `timingForAnalysis` for what that substitution cost (#244).
+      const timing: AnalysisTiming = timingForAnalysis(analysis);
+      if (!timing.ok) {
+        return timing;
+      }
       return {
+        ok: true,
         type: String(analysis.type ?? "TRAN"),
-        // A transient analysis carries both; anything else is refused before
-        // these are read, so the fallbacks are for a malformed document rather
-        // than for another analysis type.
-        tEnd: typeof analysis.t_end === "number" ? analysis.t_end : settings.tEnd,
-        tStep: typeof analysis.t_step === "number" ? analysis.t_step : settings.tStep,
+        tEnd: timing.tEnd,
+        tStep: timing.tStep,
       };
     }
   }
@@ -528,6 +546,7 @@ function namedAnalysis(analysisId?: string): { type: string; tEnd: number; tStep
   // and plots a flat line -- so the sheet's own declared switching period
   // refines it when there is one (#193).
   return {
+    ok: true,
     type: settings.analysisType,
     tEnd: settings.tEnd,
     tStep: stepForDocument(useGraphStore.getState().document, settings.tStep),
