@@ -3,19 +3,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.counter",
     "metadata": {
       "name": "control.counter",
-      "label": "Counter",
-      "category": "control",
-      "description": "Edge-triggered up/down counter with an optional modulus and reset.",
       "aliases": [
         "counter",
         "cnt"
-      ],
-      "tags": [
-        "control",
-        "logic",
-        "counter",
-        "discrete",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -74,7 +64,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "modulus",
       "params": [
         {
           "default": 0,
@@ -137,6 +126,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Counter",
+      "category": "control",
+      "description": "Edge-triggered up/down counter with an optional modulus and reset.",
+      "tags": [
+        "control",
+        "logic",
+        "counter",
+        "discrete",
+        "general-simulator"
+      ],
+      "main_param": "modulus",
       "symbol": {
         "bbox": [
           60,
@@ -145,7 +146,6 @@
         "shape": "rect",
         "text": "CNT"
       },
-      "version": 1,
       "engineId": "control.counter",
       "engineType": "control.counter",
       "compilable": true
@@ -156,9 +156,6 @@
     "metadata": {
       "name": "control.delay",
       "type": "signal-flow.discrete.unit_delay",
-      "label": "Delay",
-      "category": "control",
-      "description": "One-simulation-step delay: reads its input's value from the previous step (general-simulator's own `prev:` reference).",
       "aliases": [
         "delay",
         "unit delay",
@@ -167,11 +164,6 @@
         "prev",
         "signal_flow.discrete.unit_delay",
         "signal-flow.discrete.unit_delay"
-      ],
-      "tags": [
-        "delay",
-        "control",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -237,6 +229,15 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Delay",
+      "category": "control",
+      "description": "One-simulation-step delay: reads its input's value from the previous step (general-simulator's own `prev:` reference).",
+      "tags": [
+        "delay",
+        "control",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -245,7 +246,6 @@
         "shape": "rect",
         "text": "z⁻¹"
       },
-      "version": 1,
       "engineId": "control.delay",
       "engineType": "control.delay",
       "compilable": true
@@ -256,9 +256,6 @@
     "metadata": {
       "name": "control.derivative",
       "type": "signal-flow.continuous.derivative",
-      "label": "Derivative",
-      "category": "control",
-      "description": "Continuous-time derivative `y = du/dt`.",
       "aliases": [
         "du/dt",
         "differentiator",
@@ -266,12 +263,6 @@
         "derivative",
         "signal_flow.continuous.derivative",
         "signal-flow.continuous.derivative"
-      ],
-      "tags": [
-        "derivative",
-        "continuous",
-        "control",
-        "linear"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -337,6 +328,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Derivative",
+      "category": "control",
+      "description": "Continuous-time derivative `y = du/dt`.",
+      "tags": [
+        "derivative",
+        "continuous",
+        "control",
+        "linear"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -345,7 +346,6 @@
         "shape": "rect",
         "text": "du/dt"
       },
-      "version": 1,
       "engineId": "control.derivative",
       "engineType": "control.derivative",
       "compilable": true
@@ -355,20 +355,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.discrete_state_space",
     "metadata": {
       "name": "control.discrete_state_space",
-      "label": "Discrete State Space",
-      "category": "control",
-      "description": "Discrete-time linear state-space block x[k+1] = Ax[k] + Bu[k], y = Cx + Du.",
       "aliases": [
         "discrete state space",
         "dss"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "linear",
-        "discrete",
-        "state-space",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -451,7 +440,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "ts",
       "params": [
         {
           "default": [
@@ -532,6 +520,19 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Discrete State Space",
+      "category": "control",
+      "description": "Discrete-time linear state-space block x[k+1] = Ax[k] + Bu[k], y = Cx + Du.",
+      "tags": [
+        "control",
+        "signal",
+        "linear",
+        "discrete",
+        "state-space",
+        "general-simulator"
+      ],
+      "main_param": "ts",
       "symbol": {
         "bbox": [
           60,
@@ -540,7 +541,6 @@
         "shape": "rect",
         "text": "DSS"
       },
-      "version": 1,
       "engineId": "control.discrete_state_space",
       "engineType": "control.discrete_state_space",
       "compilable": true
@@ -550,20 +550,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.discrete_transfer_function",
     "metadata": {
       "name": "control.discrete_transfer_function",
-      "label": "Discrete Transfer Function",
-      "category": "control",
-      "description": "Discrete-time SISO transfer function num(z)/den(z) at a fixed sample period.",
       "aliases": [
         "discrete transfer function",
         "dtf",
         "z transform"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "discrete",
-        "transfer-function",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -623,7 +613,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "ts",
       "params": [
         {
           "default": [
@@ -683,6 +672,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Discrete Transfer Function",
+      "category": "control",
+      "description": "Discrete-time SISO transfer function num(z)/den(z) at a fixed sample period.",
+      "tags": [
+        "control",
+        "signal",
+        "discrete",
+        "transfer-function",
+        "general-simulator"
+      ],
+      "main_param": "ts",
       "symbol": {
         "bbox": [
           60,
@@ -691,7 +692,6 @@
         "shape": "rect",
         "text": "N(z)/D(z)"
       },
-      "version": 1,
       "engineId": "control.discrete_transfer_function",
       "engineType": "control.discrete_transfer_function",
       "compilable": true
@@ -702,9 +702,6 @@
     "metadata": {
       "name": "control.gain",
       "type": "signal-flow.math.gain",
-      "label": "Gain",
-      "category": "control",
-      "description": "Scalar gain `y = k * u`.",
       "aliases": [
         "k",
         "scalar gain",
@@ -712,12 +709,6 @@
         "gain",
         "signal_flow.math.gain",
         "signal-flow.math.gain"
-      ],
-      "tags": [
-        "gain",
-        "multiplier",
-        "control",
-        "linear"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -759,7 +750,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "k",
       "params": [
         {
           "default": 1,
@@ -799,6 +789,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Gain",
+      "category": "control",
+      "description": "Scalar gain `y = k * u`.",
+      "tags": [
+        "gain",
+        "multiplier",
+        "control",
+        "linear"
+      ],
+      "main_param": "k",
       "symbol": {
         "bbox": [
           60,
@@ -807,7 +808,6 @@
         "shape": "triangle",
         "text": "{k}"
       },
-      "version": 1,
       "engineId": "control.gain",
       "engineType": "control.gain",
       "compilable": true
@@ -818,9 +818,6 @@
     "metadata": {
       "name": "control.integrator",
       "type": "signal-flow.continuous.integrator",
-      "label": "Integrator",
-      "category": "control",
-      "description": "Continuous-time integrator `dx/dt = u`, with optional output limits.",
       "aliases": [
         "1/s",
         "integrate",
@@ -828,12 +825,6 @@
         "integrator",
         "signal_flow.continuous.integrator",
         "signal-flow.continuous.integrator"
-      ],
-      "tags": [
-        "integrator",
-        "continuous",
-        "control",
-        "linear"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -887,7 +878,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "x0",
       "params": [
         {
           "default": 0,
@@ -941,6 +931,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Integrator",
+      "category": "control",
+      "description": "Continuous-time integrator `dx/dt = u`, with optional output limits.",
+      "tags": [
+        "integrator",
+        "continuous",
+        "control",
+        "linear"
+      ],
+      "main_param": "x0",
       "symbol": {
         "bbox": [
           60,
@@ -949,7 +950,6 @@
         "shape": "rect",
         "text": "1/s"
       },
-      "version": 1,
       "engineId": "control.integrator",
       "engineType": "control.integrator",
       "compilable": true
@@ -960,21 +960,12 @@
     "metadata": {
       "name": "control.pid",
       "type": "signal-flow.continuous.pid",
-      "label": "PID Controller",
-      "category": "control",
-      "description": "Continuous PID controller.",
       "aliases": [
         "pid",
         "proportional-integral-derivative",
         "controller",
         "signal_flow.continuous.pid",
         "signal-flow.continuous.pid"
-      ],
-      "tags": [
-        "pid",
-        "controller",
-        "feedback",
-        "control"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -1048,7 +1039,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "kp",
       "params": [
         {
           "default": 1,
@@ -1127,6 +1117,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "PID Controller",
+      "category": "control",
+      "description": "Continuous PID controller.",
+      "tags": [
+        "pid",
+        "controller",
+        "feedback",
+        "control"
+      ],
+      "main_param": "kp",
       "symbol": {
         "bbox": [
           60,
@@ -1135,7 +1136,6 @@
         "shape": "rect",
         "text": "PID"
       },
-      "version": 1,
       "engineId": "control.pid",
       "engineType": "control.pid",
       "compilable": true
@@ -1146,21 +1146,12 @@
     "metadata": {
       "name": "control.product",
       "type": "signal-flow.math.product",
-      "label": "Product",
-      "category": "control",
-      "description": "Multiplies all of its input signals together.",
       "aliases": [
         "product",
         "multiply",
         "mul",
         "signal_flow.math.product",
         "signal-flow.math.product"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "arithmetic",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -1195,7 +1186,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "n_inputs",
       "params": [
         {
           "default": 2,
@@ -1238,6 +1228,17 @@
           }
         }
       },
+      "version": 1,
+      "label": "Product",
+      "category": "control",
+      "description": "Multiplies all of its input signals together.",
+      "tags": [
+        "control",
+        "signal",
+        "arithmetic",
+        "general-simulator"
+      ],
+      "main_param": "n_inputs",
       "symbol": {
         "bbox": [
           60,
@@ -1246,7 +1247,6 @@
         "shape": "rect",
         "text": "x"
       },
-      "version": 1,
       "engineId": "control.product",
       "engineType": "control.product",
       "compilable": true
@@ -1257,9 +1257,6 @@
     "metadata": {
       "name": "control.saturation",
       "type": "signal-flow.discontinuity.saturation",
-      "label": "Saturation",
-      "category": "control",
-      "description": "Saturates a signal between lower and upper limits.",
       "aliases": [
         "clamp",
         "sat",
@@ -1268,12 +1265,6 @@
         "saturation",
         "signal_flow.discontinuity.saturation",
         "signal-flow.discontinuity.saturation"
-      ],
-      "tags": [
-        "saturation",
-        "clamp",
-        "nonlinear",
-        "control"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -1371,6 +1362,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Saturation",
+      "category": "control",
+      "description": "Saturates a signal between lower and upper limits.",
+      "tags": [
+        "saturation",
+        "clamp",
+        "nonlinear",
+        "control"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -1379,7 +1380,6 @@
         "shape": "rect",
         "text": "sat"
       },
-      "version": 1,
       "engineId": "control.saturation",
       "engineType": "control.saturation",
       "compilable": true
@@ -1390,22 +1390,12 @@
     "metadata": {
       "name": "control.state_space",
       "type": "signal-flow.continuous.state_space",
-      "label": "State Space",
-      "category": "control",
-      "description": "Continuous-time linear state-space block dx/dt = Ax + Bu, y = Cx + Du.",
       "aliases": [
         "state space",
         "ss",
         "abcd",
         "signal_flow.continuous.state_space",
         "signal-flow.continuous.state_space"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "linear",
-        "state-space",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -1553,6 +1543,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "State Space",
+      "category": "control",
+      "description": "Continuous-time linear state-space block dx/dt = Ax + Bu, y = Cx + Du.",
+      "tags": [
+        "control",
+        "signal",
+        "linear",
+        "state-space",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -1561,7 +1562,6 @@
         "shape": "rect",
         "text": "SS"
       },
-      "version": 1,
       "engineId": "control.state_space",
       "engineType": "control.state_space",
       "compilable": true
@@ -1572,9 +1572,6 @@
     "metadata": {
       "name": "control.sum",
       "type": "signal-flow.math.sum",
-      "label": "Sum",
-      "category": "control",
-      "description": "Weighted summation. Number of inputs and their signs come from `signs`.",
       "aliases": [
         "adder",
         "summer",
@@ -1583,12 +1580,6 @@
         "sum",
         "signal_flow.math.sum",
         "signal-flow.math.sum"
-      ],
-      "tags": [
-        "sum",
-        "adder",
-        "control",
-        "linear"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -1622,7 +1613,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "signs",
       "params": [
         {
           "default": "++",
@@ -1664,6 +1654,17 @@
           }
         }
       },
+      "version": 1,
+      "label": "Sum",
+      "category": "control",
+      "description": "Weighted summation. Number of inputs and their signs come from `signs`.",
+      "tags": [
+        "sum",
+        "adder",
+        "control",
+        "linear"
+      ],
+      "main_param": "signs",
       "symbol": {
         "bbox": [
           60,
@@ -1672,7 +1673,6 @@
         "shape": "circle",
         "text": "Σ"
       },
-      "version": 1,
       "engineId": "control.sum",
       "engineType": "control.sum",
       "compilable": true
@@ -1683,9 +1683,6 @@
     "metadata": {
       "name": "control.transfer_function",
       "type": "signal-flow.continuous.transfer_function",
-      "label": "Transfer Function",
-      "category": "control",
-      "description": "Rational transfer function `H(s) = num(s) / den(s)`, realised as state-space.",
       "aliases": [
         "tf",
         "H(s)",
@@ -1693,13 +1690,6 @@
         "lti",
         "signal_flow.continuous.transfer_function",
         "signal-flow.continuous.transfer_function"
-      ],
-      "tags": [
-        "transfer function",
-        "continuous",
-        "control",
-        "frequency",
-        "linear"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -1752,7 +1742,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "num",
       "params": [
         {
           "default": [
@@ -1804,6 +1793,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Transfer Function",
+      "category": "control",
+      "description": "Rational transfer function `H(s) = num(s) / den(s)`, realised as state-space.",
+      "tags": [
+        "transfer function",
+        "continuous",
+        "control",
+        "frequency",
+        "linear"
+      ],
+      "main_param": "num",
       "symbol": {
         "bbox": [
           60,
@@ -1812,7 +1813,6 @@
         "shape": "rect",
         "text": "H(s)"
       },
-      "version": 1,
       "engineId": "control.transfer_function",
       "engineType": "control.transfer_function",
       "compilable": true
@@ -1822,20 +1822,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.transform.clarke",
     "metadata": {
       "name": "control.transform.clarke",
-      "label": "Clarke Transform",
-      "category": "control",
-      "description": "Clarke (abc to alpha-beta-zero) transform.",
       "aliases": [
         "clarke",
         "transform",
         "coordinate transform"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "transform",
-        "motor-control",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -1977,6 +1967,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Clarke Transform",
+      "category": "control",
+      "description": "Clarke (abc to alpha-beta-zero) transform.",
+      "tags": [
+        "control",
+        "signal",
+        "transform",
+        "motor-control",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           80,
@@ -1985,7 +1986,6 @@
         "shape": "rect",
         "text": "abc/αβ0"
       },
-      "version": 1,
       "engineId": "control.transform.clarke",
       "engineType": "control.transform.clarke",
       "compilable": true
@@ -1995,20 +1995,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.transform.clarke_inv",
     "metadata": {
       "name": "control.transform.clarke_inv",
-      "label": "Inverse Clarke Transform",
-      "category": "control",
-      "description": "Inverse Clarke (alpha-beta-zero to abc) transform.",
       "aliases": [
         "clarke inv",
         "transform",
         "coordinate transform"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "transform",
-        "motor-control",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -2150,6 +2140,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Inverse Clarke Transform",
+      "category": "control",
+      "description": "Inverse Clarke (alpha-beta-zero to abc) transform.",
+      "tags": [
+        "control",
+        "signal",
+        "transform",
+        "motor-control",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           80,
@@ -2158,7 +2159,6 @@
         "shape": "rect",
         "text": "αβ0/abc"
       },
-      "version": 1,
       "engineId": "control.transform.clarke_inv",
       "engineType": "control.transform.clarke_inv",
       "compilable": true
@@ -2168,20 +2168,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.transform.clarke_park",
     "metadata": {
       "name": "control.transform.clarke_park",
-      "label": "Clarke-Park Transform",
-      "category": "control",
-      "description": "Combined Clarke-Park (abc to dq0) transform.",
       "aliases": [
         "clarke park",
         "transform",
         "coordinate transform"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "transform",
-        "motor-control",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -2342,6 +2332,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Clarke-Park Transform",
+      "category": "control",
+      "description": "Combined Clarke-Park (abc to dq0) transform.",
+      "tags": [
+        "control",
+        "signal",
+        "transform",
+        "motor-control",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           80,
@@ -2350,7 +2351,6 @@
         "shape": "rect",
         "text": "abc/dq0"
       },
-      "version": 1,
       "engineId": "control.transform.clarke_park",
       "engineType": "control.transform.clarke_park",
       "compilable": true
@@ -2360,20 +2360,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.transform.clarke_park_inv",
     "metadata": {
       "name": "control.transform.clarke_park_inv",
-      "label": "Inverse Clarke-Park Transform",
-      "category": "control",
-      "description": "Combined inverse Clarke-Park (dq0 to abc) transform.",
       "aliases": [
         "clarke park inv",
         "transform",
         "coordinate transform"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "transform",
-        "motor-control",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -2534,6 +2524,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Inverse Clarke-Park Transform",
+      "category": "control",
+      "description": "Combined inverse Clarke-Park (dq0 to abc) transform.",
+      "tags": [
+        "control",
+        "signal",
+        "transform",
+        "motor-control",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           80,
@@ -2542,7 +2543,6 @@
         "shape": "rect",
         "text": "dq0/abc"
       },
-      "version": 1,
       "engineId": "control.transform.clarke_park_inv",
       "engineType": "control.transform.clarke_park_inv",
       "compilable": true
@@ -2552,20 +2552,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.transform.park",
     "metadata": {
       "name": "control.transform.park",
-      "label": "Park Transform",
-      "category": "control",
-      "description": "Park (alpha-beta-zero to dq0) transform.",
       "aliases": [
         "park",
         "transform",
         "coordinate transform"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "transform",
-        "motor-control",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -2726,6 +2716,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Park Transform",
+      "category": "control",
+      "description": "Park (alpha-beta-zero to dq0) transform.",
+      "tags": [
+        "control",
+        "signal",
+        "transform",
+        "motor-control",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           80,
@@ -2734,7 +2735,6 @@
         "shape": "rect",
         "text": "αβ0/dq0"
       },
-      "version": 1,
       "engineId": "control.transform.park",
       "engineType": "control.transform.park",
       "compilable": true
@@ -2744,20 +2744,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.transform.park_inv",
     "metadata": {
       "name": "control.transform.park_inv",
-      "label": "Inverse Park Transform",
-      "category": "control",
-      "description": "Inverse Park (dq0 to alpha-beta-zero) transform.",
       "aliases": [
         "park inv",
         "transform",
         "coordinate transform"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "transform",
-        "motor-control",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -2918,6 +2908,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Inverse Park Transform",
+      "category": "control",
+      "description": "Inverse Park (dq0 to alpha-beta-zero) transform.",
+      "tags": [
+        "control",
+        "signal",
+        "transform",
+        "motor-control",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           80,
@@ -2926,7 +2927,6 @@
         "shape": "rect",
         "text": "dq0/αβ0"
       },
-      "version": 1,
       "engineId": "control.transform.park_inv",
       "engineType": "control.transform.park_inv",
       "compilable": true
@@ -2936,19 +2936,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#control.vco",
     "metadata": {
       "name": "control.vco",
-      "label": "VCO",
-      "category": "control",
-      "description": "Voltage-controlled oscillator: maps the input signal onto a frequency ramp.",
       "aliases": [
         "vco",
         "oscillator",
         "voltage controlled oscillator"
-      ],
-      "tags": [
-        "control",
-        "signal",
-        "oscillator",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -2998,7 +2989,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "f_max",
       "params": [
         {
           "default": 1,
@@ -3047,6 +3037,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "VCO",
+      "category": "control",
+      "description": "Voltage-controlled oscillator: maps the input signal onto a frequency ramp.",
+      "tags": [
+        "control",
+        "signal",
+        "oscillator",
+        "general-simulator"
+      ],
+      "main_param": "f_max",
       "symbol": {
         "bbox": [
           60,
@@ -3055,7 +3056,6 @@
         "shape": "rect",
         "text": "VCO"
       },
-      "version": 1,
       "engineId": "control.vco",
       "engineType": "control.vco",
       "compilable": true
@@ -3065,19 +3065,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#converter.phys2sig",
     "metadata": {
       "name": "converter.phys2sig",
-      "label": "Physical to Signal",
-      "category": "power",
-      "description": "Reads a circuit node voltage or branch current back out as a signal.",
       "aliases": [
         "phys2sig",
         "p2s",
         "physical to signal"
-      ],
-      "tags": [
-        "converter",
-        "signal",
-        "electrical",
-        "general-simulator"
       ],
       "paradigm": "converter",
       "domain": "mixed",
@@ -3151,6 +3142,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Physical to Signal",
+      "category": "power",
+      "description": "Reads a circuit node voltage or branch current back out as a signal.",
+      "tags": [
+        "converter",
+        "signal",
+        "electrical",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -3159,7 +3160,6 @@
         "shape": "rect",
         "text": "P2S"
       },
-      "version": 1,
       "engineId": "converter.phys2sig",
       "engineType": "converter.phys2sig",
       "compilable": true
@@ -3169,19 +3169,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#converter.sig2phys",
     "metadata": {
       "name": "converter.sig2phys",
-      "label": "Signal to Physical",
-      "category": "power",
-      "description": "Drives a physical-electrical node from a signal, as a voltage or a current.",
       "aliases": [
         "sig2phys",
         "s2p",
         "signal to physical"
-      ],
-      "tags": [
-        "converter",
-        "signal",
-        "electrical",
-        "general-simulator"
       ],
       "paradigm": "converter",
       "domain": "mixed",
@@ -3227,7 +3218,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "domain",
       "params": [
         {
           "choices": [
@@ -3269,6 +3259,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Signal to Physical",
+      "category": "power",
+      "description": "Drives a physical-electrical node from a signal, as a voltage or a current.",
+      "tags": [
+        "converter",
+        "signal",
+        "electrical",
+        "general-simulator"
+      ],
+      "main_param": "domain",
       "symbol": {
         "bbox": [
           60,
@@ -3277,7 +3278,6 @@
         "shape": "rect",
         "text": "S2P"
       },
-      "version": 1,
       "engineId": "converter.sig2phys",
       "engineType": "converter.sig2phys",
       "compilable": true
@@ -3287,19 +3287,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#extensibility.cscript",
     "metadata": {
       "name": "extensibility.cscript",
-      "label": "C Script",
-      "category": "user",
-      "description": "Stateful block hosted in a precompiled C shared library.",
       "aliases": [
         "cscript",
         "script",
         "custom block"
-      ],
-      "tags": [
-        "extensibility",
-        "script",
-        "custom",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -3370,7 +3361,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "lib",
       "params": [
         {
           "default": "",
@@ -3469,6 +3459,17 @@
           }
         }
       },
+      "version": 1,
+      "label": "C Script",
+      "category": "user",
+      "description": "Stateful block hosted in a precompiled C shared library.",
+      "tags": [
+        "extensibility",
+        "script",
+        "custom",
+        "general-simulator"
+      ],
+      "main_param": "lib",
       "symbol": {
         "bbox": [
           70,
@@ -3477,7 +3478,6 @@
         "shape": "rect",
         "text": "C"
       },
-      "version": 1,
       "engineId": "extensibility.cscript",
       "engineType": "extensibility.cscript",
       "compilable": true
@@ -3487,19 +3487,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#extensibility.octblock",
     "metadata": {
       "name": "extensibility.octblock",
-      "label": "Octave Block",
-      "category": "user",
-      "description": "Stateful block hosted in an Octave function.",
       "aliases": [
         "octblock",
         "script",
         "custom block"
-      ],
-      "tags": [
-        "extensibility",
-        "script",
-        "custom",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -3576,7 +3567,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "function",
       "params": [
         {
           "default": "",
@@ -3682,6 +3672,17 @@
           }
         }
       },
+      "version": 1,
+      "label": "Octave Block",
+      "category": "user",
+      "description": "Stateful block hosted in an Octave function.",
+      "tags": [
+        "extensibility",
+        "script",
+        "custom",
+        "general-simulator"
+      ],
+      "main_param": "function",
       "symbol": {
         "bbox": [
           70,
@@ -3690,7 +3691,6 @@
         "shape": "rect",
         "text": "OCT"
       },
-      "version": 1,
       "engineId": "extensibility.octblock",
       "engineType": "extensibility.octblock",
       "compilable": true
@@ -3700,19 +3700,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#extensibility.octfunc",
     "metadata": {
       "name": "extensibility.octfunc",
-      "label": "Octave Function",
-      "category": "user",
-      "description": "Stateless block evaluated by an Octave function.",
       "aliases": [
         "octfunc",
         "script",
         "custom block"
-      ],
-      "tags": [
-        "extensibility",
-        "script",
-        "custom",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -3782,7 +3773,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "function",
       "params": [
         {
           "default": "",
@@ -3880,6 +3870,17 @@
           }
         }
       },
+      "version": 1,
+      "label": "Octave Function",
+      "category": "user",
+      "description": "Stateless block evaluated by an Octave function.",
+      "tags": [
+        "extensibility",
+        "script",
+        "custom",
+        "general-simulator"
+      ],
+      "main_param": "function",
       "symbol": {
         "bbox": [
           70,
@@ -3888,7 +3889,6 @@
         "shape": "rect",
         "text": "OCTf"
       },
-      "version": 1,
       "engineId": "extensibility.octfunc",
       "engineType": "extensibility.octfunc",
       "compilable": true
@@ -3898,19 +3898,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#extensibility.pyblock",
     "metadata": {
       "name": "extensibility.pyblock",
-      "label": "Python Block",
-      "category": "user",
-      "description": "Stateful block hosted in a Python module.",
       "aliases": [
         "pyblock",
         "script",
         "custom block"
-      ],
-      "tags": [
-        "extensibility",
-        "script",
-        "custom",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -3981,7 +3972,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "path",
       "params": [
         {
           "default": "",
@@ -4080,6 +4070,17 @@
           }
         }
       },
+      "version": 1,
+      "label": "Python Block",
+      "category": "user",
+      "description": "Stateful block hosted in a Python module.",
+      "tags": [
+        "extensibility",
+        "script",
+        "custom",
+        "general-simulator"
+      ],
+      "main_param": "path",
       "symbol": {
         "bbox": [
           70,
@@ -4088,7 +4089,6 @@
         "shape": "rect",
         "text": "PY"
       },
-      "version": 1,
       "engineId": "extensibility.pyblock",
       "engineType": "extensibility.pyblock",
       "compilable": true
@@ -4098,19 +4098,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#extensibility.pyfunc",
     "metadata": {
       "name": "extensibility.pyfunc",
-      "label": "Python Function",
-      "category": "user",
-      "description": "Stateless block evaluated by a Python function.",
       "aliases": [
         "pyfunc",
         "script",
         "custom block"
-      ],
-      "tags": [
-        "extensibility",
-        "script",
-        "custom",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -4180,7 +4171,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "function",
       "params": [
         {
           "default": "",
@@ -4278,6 +4268,17 @@
           }
         }
       },
+      "version": 1,
+      "label": "Python Function",
+      "category": "user",
+      "description": "Stateless block evaluated by a Python function.",
+      "tags": [
+        "extensibility",
+        "script",
+        "custom",
+        "general-simulator"
+      ],
+      "main_param": "function",
       "symbol": {
         "bbox": [
           70,
@@ -4286,7 +4287,6 @@
         "shape": "rect",
         "text": "PYf"
       },
-      "version": 1,
       "engineId": "extensibility.pyfunc",
       "engineType": "extensibility.pyfunc",
       "compilable": true
@@ -4296,18 +4296,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#hierarchy.inport",
     "metadata": {
       "name": "hierarchy.inport",
-      "label": "Inport",
-      "category": "subsystems",
-      "description": "Boundary inport — placed inside a subsystem body to define an input port on the parent-side block (spec §11). The `id` param is the port id; `kind` selects the signal domain.",
       "aliases": [
         "inport",
         "boundary inport"
-      ],
-      "tags": [
-        "hierarchy",
-        "subsystem",
-        "inport",
-        "boundary"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -4393,6 +4384,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Inport",
+      "category": "subsystems",
+      "description": "Boundary inport — placed inside a subsystem body to define an input port on the parent-side block (spec §11). The `id` param is the port id; `kind` selects the signal domain.",
+      "tags": [
+        "hierarchy",
+        "subsystem",
+        "inport",
+        "boundary"
+      ],
       "symbol": {
         "bbox": [
           200,
@@ -4401,7 +4402,6 @@
         "shape": "rect",
         "text": "In"
       },
-      "version": 1,
       "engineId": "hierarchy.inport",
       "engineType": "hierarchy.inport",
       "compilable": true
@@ -4411,18 +4411,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#hierarchy.outport",
     "metadata": {
       "name": "hierarchy.outport",
-      "label": "Outport",
-      "category": "subsystems",
-      "description": "Boundary outport — placed inside a subsystem body to define an output port on the parent-side block (spec §11). The `id` param is the port id; `kind` selects the signal domain.",
       "aliases": [
         "outport",
         "boundary outport"
-      ],
-      "tags": [
-        "hierarchy",
-        "subsystem",
-        "outport",
-        "boundary"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -4508,6 +4499,16 @@
         ],
         "outputs": []
       },
+      "version": 1,
+      "label": "Outport",
+      "category": "subsystems",
+      "description": "Boundary outport — placed inside a subsystem body to define an output port on the parent-side block (spec §11). The `id` param is the port id; `kind` selects the signal domain.",
+      "tags": [
+        "hierarchy",
+        "subsystem",
+        "outport",
+        "boundary"
+      ],
       "symbol": {
         "bbox": [
           200,
@@ -4516,7 +4517,6 @@
         "shape": "rect",
         "text": "Out"
       },
-      "version": 1,
       "engineId": "hierarchy.outport",
       "engineType": "hierarchy.outport",
       "compilable": true
@@ -4527,9 +4527,6 @@
     "metadata": {
       "name": "ideal.diode",
       "type": "physical-electrical.semiconductor.diode",
-      "label": "Ideal Diode",
-      "category": "ideal",
-      "description": "Ideal diode: piecewise-conductance forward/reverse model with a breakdown branch.",
       "aliases": [
         "passive.diode.ideal",
         "ideal diode",
@@ -4537,13 +4534,6 @@
         "d",
         "physical_electrical.semiconductor.diode",
         "physical-electrical.semiconductor.diode"
-      ],
-      "tags": [
-        "ideal-device",
-        "electrical",
-        "diode",
-        "ideal",
-        "general-simulator"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -4726,7 +4716,6 @@
           "tier": "spice"
         }
       ],
-      "main_param": "v_f",
       "params": [
         {
           "default": 5,
@@ -4791,6 +4780,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Ideal Diode",
+      "category": "ideal",
+      "description": "Ideal diode: piecewise-conductance forward/reverse model with a breakdown branch.",
+      "tags": [
+        "ideal-device",
+        "electrical",
+        "diode",
+        "ideal",
+        "general-simulator"
+      ],
+      "main_param": "v_f",
       "symbol": {
         "bbox": [
           60,
@@ -4799,7 +4800,6 @@
         "shape": "rect",
         "text": "D"
       },
-      "version": 1,
       "engineId": "ideal.diode",
       "engineType": "ideal.diode",
       "compilable": true
@@ -4810,9 +4810,6 @@
     "metadata": {
       "name": "ideal.switch",
       "type": "physical-electrical.switch.generic",
-      "label": "Ideal Switch",
-      "category": "ideal",
-      "description": "Block-gated ideal switch: on/off conductance with a threshold and breakdown branch.",
       "aliases": [
         "passive.switch.ideal",
         "ideal switch",
@@ -4822,13 +4819,6 @@
         "generic_switch",
         "physical_electrical.switch.generic",
         "physical-electrical.switch.generic"
-      ],
-      "tags": [
-        "ideal-device",
-        "electrical",
-        "switch",
-        "ideal",
-        "general-simulator"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -4998,7 +4988,6 @@
           "tier": "behavioral"
         }
       ],
-      "main_param": "r_on",
       "params": [
         {
           "default": 0.1,
@@ -5087,6 +5076,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Ideal Switch",
+      "category": "ideal",
+      "description": "Block-gated ideal switch: on/off conductance with a threshold and breakdown branch.",
+      "tags": [
+        "ideal-device",
+        "electrical",
+        "switch",
+        "ideal",
+        "general-simulator"
+      ],
+      "main_param": "r_on",
       "symbol": {
         "bbox": [
           60,
@@ -5095,7 +5096,6 @@
         "shape": "rect",
         "text": "SW"
       },
-      "version": 1,
       "engineId": "ideal.switch",
       "engineType": "ideal.switch",
       "compilable": true
@@ -5105,22 +5105,12 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#logic.flip_flop",
     "metadata": {
       "name": "logic.flip_flop",
-      "label": "Flip-Flop",
-      "category": "signal",
-      "description": "Edge-triggered flip-flop: D, T or JK, with an optional asynchronous reset.",
       "aliases": [
         "flip flop",
         "dff",
         "jkff",
         "tff",
         "register"
-      ],
-      "tags": [
-        "logic",
-        "signal",
-        "flip-flop",
-        "discrete",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -5207,7 +5197,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "kind",
       "params": [
         {
           "choices": [
@@ -5307,6 +5296,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Flip-Flop",
+      "category": "signal",
+      "description": "Edge-triggered flip-flop: D, T or JK, with an optional asynchronous reset.",
+      "tags": [
+        "logic",
+        "signal",
+        "flip-flop",
+        "discrete",
+        "general-simulator"
+      ],
+      "main_param": "kind",
       "symbol": {
         "bbox": [
           60,
@@ -5315,7 +5316,6 @@
         "shape": "rect",
         "text": "{kind}"
       },
-      "version": 1,
       "engineId": "logic.flip_flop",
       "engineType": "logic.flip_flop",
       "compilable": true
@@ -5325,9 +5325,6 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#logic.gate",
     "metadata": {
       "name": "logic.gate",
-      "label": "Logic Gate",
-      "category": "signal",
-      "description": "Boolean gate (and/or/xor/nand/nor/xnor/not) over its input signals.",
       "aliases": [
         "gate",
         "and",
@@ -5338,12 +5335,6 @@
         "xnor",
         "not",
         "boolean"
-      ],
-      "tags": [
-        "logic",
-        "signal",
-        "boolean",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -5409,7 +5400,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "op",
       "params": [
         {
           "choices": [
@@ -5476,6 +5466,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Logic Gate",
+      "category": "signal",
+      "description": "Boolean gate (and/or/xor/nand/nor/xnor/not) over its input signals.",
+      "tags": [
+        "logic",
+        "signal",
+        "boolean",
+        "general-simulator"
+      ],
+      "main_param": "op",
       "symbol": {
         "bbox": [
           50,
@@ -5484,7 +5485,6 @@
         "shape": "rect",
         "text": "{op}"
       },
-      "version": 1,
       "engineId": "logic.gate",
       "engineType": "logic.gate",
       "compilable": true
@@ -5494,19 +5494,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#logic.hysteresis",
     "metadata": {
       "name": "logic.hysteresis",
-      "label": "Hysteresis",
-      "category": "signal",
-      "description": "Schmitt-trigger hysteresis comparator with separate low and high thresholds.",
       "aliases": [
         "hysteresis",
         "schmitt trigger",
         "comparator"
-      ],
-      "tags": [
-        "logic",
-        "signal",
-        "hysteresis",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -5554,7 +5545,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "high",
       "params": [
         {
           "default": -1,
@@ -5601,6 +5591,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Hysteresis",
+      "category": "signal",
+      "description": "Schmitt-trigger hysteresis comparator with separate low and high thresholds.",
+      "tags": [
+        "logic",
+        "signal",
+        "hysteresis",
+        "general-simulator"
+      ],
+      "main_param": "high",
       "symbol": {
         "bbox": [
           60,
@@ -5609,7 +5610,6 @@
         "shape": "rect",
         "text": "HYST"
       },
-      "version": 1,
       "engineId": "logic.hysteresis",
       "engineType": "logic.hysteresis",
       "compilable": true
@@ -5619,19 +5619,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#logic.sr_latch",
     "metadata": {
       "name": "logic.sr_latch",
-      "label": "SR Latch",
-      "category": "signal",
-      "description": "Level-triggered set/reset latch with a configurable priority input.",
       "aliases": [
         "sr latch",
         "latch",
         "set reset"
-      ],
-      "tags": [
-        "logic",
-        "signal",
-        "latch",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -5685,7 +5676,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "priority",
       "params": [
         {
           "choices": [
@@ -5740,6 +5730,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "SR Latch",
+      "category": "signal",
+      "description": "Level-triggered set/reset latch with a configurable priority input.",
+      "tags": [
+        "logic",
+        "signal",
+        "latch",
+        "general-simulator"
+      ],
+      "main_param": "priority",
       "symbol": {
         "bbox": [
           50,
@@ -5748,7 +5749,6 @@
         "shape": "rect",
         "text": "SR"
       },
-      "version": 1,
       "engineId": "logic.sr_latch",
       "engineType": "logic.sr_latch",
       "compilable": true
@@ -5758,21 +5758,11 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#machine.pmsm",
     "metadata": {
       "name": "machine.pmsm",
-      "label": "PMSM",
-      "category": "power",
-      "description": "Permanent-magnet synchronous machine in the dq frame, with mechanical dynamics.",
       "aliases": [
         "pmsm",
         "motor",
         "synchronous machine",
         "bldc"
-      ],
-      "tags": [
-        "machine",
-        "motor",
-        "power",
-        "dq",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -5897,7 +5887,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "pole_pairs",
       "params": [
         {
           "default": 0.5,
@@ -6041,6 +6030,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "PMSM",
+      "category": "power",
+      "description": "Permanent-magnet synchronous machine in the dq frame, with mechanical dynamics.",
+      "tags": [
+        "machine",
+        "motor",
+        "power",
+        "dq",
+        "general-simulator"
+      ],
+      "main_param": "pole_pairs",
       "symbol": {
         "bbox": [
           80,
@@ -6049,7 +6050,6 @@
         "shape": "rect",
         "text": "PMSM"
       },
-      "version": 1,
       "engineId": "machine.pmsm",
       "engineType": "machine.pmsm",
       "compilable": true
@@ -6059,19 +6059,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#math.fn1",
     "metadata": {
       "name": "math.fn1",
-      "label": "Math Function (unary)",
-      "category": "signal",
-      "description": "Unary waveform-arithmetic function applied to one signal.",
       "aliases": [
         "fn1",
         "unary function",
         "math function"
-      ],
-      "tags": [
-        "math",
-        "signal",
-        "arithmetic",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -6141,7 +6132,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "fn",
       "params": [
         {
           "choices": [
@@ -6209,6 +6199,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Math Function (unary)",
+      "category": "signal",
+      "description": "Unary waveform-arithmetic function applied to one signal.",
+      "tags": [
+        "math",
+        "signal",
+        "arithmetic",
+        "general-simulator"
+      ],
+      "main_param": "fn",
       "symbol": {
         "bbox": [
           60,
@@ -6217,7 +6218,6 @@
         "shape": "rect",
         "text": "{fn}"
       },
-      "version": 1,
       "engineId": "math.fn1",
       "engineType": "math.fn1",
       "compilable": true
@@ -6227,19 +6227,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#math.fn2",
     "metadata": {
       "name": "math.fn2",
-      "label": "Math Function (binary)",
-      "category": "signal",
-      "description": "Binary waveform-arithmetic function applied to two signals.",
       "aliases": [
         "fn2",
         "binary function",
         "math function"
-      ],
-      "tags": [
-        "math",
-        "signal",
-        "arithmetic",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -6299,7 +6290,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "fn",
       "params": [
         {
           "choices": [
@@ -6360,6 +6350,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Math Function (binary)",
+      "category": "signal",
+      "description": "Binary waveform-arithmetic function applied to two signals.",
+      "tags": [
+        "math",
+        "signal",
+        "arithmetic",
+        "general-simulator"
+      ],
+      "main_param": "fn",
       "symbol": {
         "bbox": [
           60,
@@ -6368,7 +6369,6 @@
         "shape": "rect",
         "text": "{fn}"
       },
-      "version": 1,
       "engineId": "math.fn2",
       "engineType": "math.fn2",
       "compilable": true
@@ -6378,19 +6378,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#math.fn3",
     "metadata": {
       "name": "math.fn3",
-      "label": "Math Function (ternary)",
-      "category": "signal",
-      "description": "Ternary waveform-arithmetic function applied to three signals.",
       "aliases": [
         "fn3",
         "ternary function",
         "math function"
-      ],
-      "tags": [
-        "math",
-        "signal",
-        "arithmetic",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -6452,7 +6443,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "fn",
       "params": [
         {
           "choices": [
@@ -6518,6 +6508,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Math Function (ternary)",
+      "category": "signal",
+      "description": "Ternary waveform-arithmetic function applied to three signals.",
+      "tags": [
+        "math",
+        "signal",
+        "arithmetic",
+        "general-simulator"
+      ],
+      "main_param": "fn",
       "symbol": {
         "bbox": [
           60,
@@ -6526,7 +6527,6 @@
         "shape": "rect",
         "text": "{fn}"
       },
-      "version": 1,
       "engineId": "math.fn3",
       "engineType": "math.fn3",
       "compilable": true
@@ -6536,20 +6536,11 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#math.table_lookup",
     "metadata": {
       "name": "math.table_lookup",
-      "label": "Table Lookup",
-      "category": "signal",
-      "description": "Piecewise-linear lookup table over a list of [x, y] breakpoints.",
       "aliases": [
         "table",
         "lookup",
         "lut",
         "breakpoints"
-      ],
-      "tags": [
-        "math",
-        "signal",
-        "lookup",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -6600,7 +6591,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "points",
       "params": [
         {
           "default": [
@@ -6649,6 +6639,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Table Lookup",
+      "category": "signal",
+      "description": "Piecewise-linear lookup table over a list of [x, y] breakpoints.",
+      "tags": [
+        "math",
+        "signal",
+        "lookup",
+        "general-simulator"
+      ],
+      "main_param": "points",
       "symbol": {
         "bbox": [
           80,
@@ -6657,7 +6658,6 @@
         "shape": "rect",
         "text": "LUT"
       },
-      "version": 1,
       "engineId": "math.table_lookup",
       "engineType": "math.table_lookup",
       "compilable": true
@@ -6668,21 +6668,12 @@
     "metadata": {
       "name": "passive.capacitor",
       "type": "physical-electrical.passive.capacitor",
-      "label": "Capacitor",
-      "category": "passive",
-      "description": "Linear capacitor. SPICE element C.",
       "aliases": [
         "C",
         "capacitor",
         "linear capacitor",
         "physical_electrical.passive.capacitor",
         "physical-electrical.passive.capacitor"
-      ],
-      "tags": [
-        "passive",
-        "electrical",
-        "capacitor",
-        "linear"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -6818,6 +6809,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Capacitor",
+      "category": "passive",
+      "description": "Linear capacitor. SPICE element C.",
+      "tags": [
+        "passive",
+        "electrical",
+        "capacitor",
+        "linear"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -6826,7 +6827,6 @@
         "shape": "rect",
         "text": "C"
       },
-      "version": 1,
       "engineId": "passive.capacitor",
       "engineType": "passive.capacitor",
       "compilable": true
@@ -6837,21 +6837,12 @@
     "metadata": {
       "name": "passive.inductor",
       "type": "physical-electrical.passive.inductor",
-      "label": "Inductor",
-      "category": "passive",
-      "description": "Linear inductor. SPICE element L.",
       "aliases": [
         "L",
         "inductor",
         "linear inductor",
         "physical_electrical.passive.inductor",
         "physical-electrical.passive.inductor"
-      ],
-      "tags": [
-        "passive",
-        "electrical",
-        "inductor",
-        "linear"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -6987,6 +6978,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Inductor",
+      "category": "passive",
+      "description": "Linear inductor. SPICE element L.",
+      "tags": [
+        "passive",
+        "electrical",
+        "inductor",
+        "linear"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -6995,7 +6996,6 @@
         "shape": "rect",
         "text": "L"
       },
-      "version": 1,
       "engineId": "passive.inductor",
       "engineType": "passive.inductor",
       "compilable": true
@@ -7005,20 +7005,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#passive.inductor.coupled",
     "metadata": {
       "name": "passive.inductor.coupled",
-      "label": "Coupled Inductors",
-      "category": "passive",
-      "description": "Coupled inductors (mutual inductance). SPICE element K.",
       "aliases": [
         "K",
         "coupled inductors",
         "mutual inductance"
-      ],
-      "tags": [
-        "passive",
-        "electrical",
-        "inductor",
-        "coupled",
-        "mutual"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -7153,6 +7143,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Coupled Inductors",
+      "category": "passive",
+      "description": "Coupled inductors (mutual inductance). SPICE element K.",
+      "tags": [
+        "passive",
+        "electrical",
+        "inductor",
+        "coupled",
+        "mutual"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -7161,7 +7162,6 @@
         "shape": "rect",
         "text": "K"
       },
-      "version": 1,
       "engineId": "passive.inductor.coupled",
       "engineType": "passive.inductor.coupled",
       "compilable": true
@@ -7172,21 +7172,12 @@
     "metadata": {
       "name": "passive.resistor",
       "type": "physical-electrical.passive.resistor",
-      "label": "Resistor",
-      "category": "passive",
-      "description": "Linear resistor. SPICE element R.",
       "aliases": [
         "R",
         "resistor",
         "linear resistor",
         "physical_electrical.passive.resistor",
         "physical-electrical.passive.resistor"
-      ],
-      "tags": [
-        "passive",
-        "electrical",
-        "resistor",
-        "linear"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -7308,6 +7299,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Resistor",
+      "category": "passive",
+      "description": "Linear resistor. SPICE element R.",
+      "tags": [
+        "passive",
+        "electrical",
+        "resistor",
+        "linear"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -7316,7 +7317,6 @@
         "shape": "rect",
         "text": "R"
       },
-      "version": 1,
       "engineId": "passive.resistor",
       "engineType": "passive.resistor",
       "compilable": true
@@ -7327,19 +7327,11 @@
     "metadata": {
       "name": "passive.mutual_inductor",
       "type": "physical-electrical.passive.mutual_inductor",
-      "label": "Mutual Inductor",
-      "category": "passive",
-      "description": "Magnetically coupled inductors with coupling coefficient k.",
       "aliases": [
         "mutual_inductor",
         "M",
         "physical_electrical.passive.mutual_inductor",
         "physical-electrical.passive.mutual_inductor"
-      ],
-      "tags": [
-        "physical",
-        "electrical",
-        "passive"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -7578,6 +7570,15 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Mutual Inductor",
+      "category": "passive",
+      "description": "Magnetically coupled inductors with coupling coefficient k.",
+      "tags": [
+        "physical",
+        "electrical",
+        "passive"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -7586,7 +7587,6 @@
         "shape": "rect",
         "text": "M"
       },
-      "version": 1,
       "engineId": "passive.mutual_inductor",
       "engineType": "passive.mutual_inductor",
       "compilable": true
@@ -7597,19 +7597,11 @@
     "metadata": {
       "name": "passive.transformer",
       "type": "physical-electrical.passive.transformer",
-      "label": "Transformer",
-      "category": "passive",
-      "description": "Ideal transformer with turns ratio n.",
       "aliases": [
         "transformer",
         "T",
         "physical_electrical.passive.transformer",
         "physical-electrical.passive.transformer"
-      ],
-      "tags": [
-        "physical",
-        "electrical",
-        "passive"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -7806,6 +7798,15 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Transformer",
+      "category": "passive",
+      "description": "Ideal transformer with turns ratio n.",
+      "tags": [
+        "physical",
+        "electrical",
+        "passive"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -7814,7 +7815,6 @@
         "shape": "rect",
         "text": "TX"
       },
-      "version": 1,
       "engineId": "passive.transformer",
       "engineType": "passive.transformer",
       "compilable": true
@@ -7824,19 +7824,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#power.pwm1",
     "metadata": {
       "name": "power.pwm1",
-      "label": "PWM Modulator",
-      "category": "power",
-      "description": "Fixed-carrier PWM modulator with complementary output and dead time.",
       "aliases": [
         "pwm",
         "pwm1",
         "modulator"
-      ],
-      "tags": [
-        "power",
-        "pwm",
-        "modulator",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -7901,7 +7892,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "freq",
       "params": [
         {
           "default": 10000,
@@ -7969,6 +7959,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "PWM Modulator",
+      "category": "power",
+      "description": "Fixed-carrier PWM modulator with complementary output and dead time.",
+      "tags": [
+        "power",
+        "pwm",
+        "modulator",
+        "general-simulator"
+      ],
+      "main_param": "freq",
       "symbol": {
         "bbox": [
           60,
@@ -7977,7 +7978,6 @@
         "shape": "rect",
         "text": "PWM"
       },
-      "version": 1,
       "engineId": "power.pwm1",
       "engineType": "power.pwm1",
       "compilable": true
@@ -7987,20 +7987,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#power.pwm2",
     "metadata": {
       "name": "power.pwm2",
-      "label": "Phase-Shift PWM Modulator",
-      "category": "power",
-      "description": "Phase-shift PWM modulator driven by live frequency, phase and duty signals.",
       "aliases": [
         "pspwm",
         "pwm2",
         "phase-shift pwm"
-      ],
-      "tags": [
-        "power",
-        "pwm",
-        "modulator",
-        "phase-shift",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -8088,7 +8078,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "f_max",
       "params": [
         {
           "default": 1000,
@@ -8186,6 +8175,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Phase-Shift PWM Modulator",
+      "category": "power",
+      "description": "Phase-shift PWM modulator driven by live frequency, phase and duty signals.",
+      "tags": [
+        "power",
+        "pwm",
+        "modulator",
+        "phase-shift",
+        "general-simulator"
+      ],
+      "main_param": "f_max",
       "symbol": {
         "bbox": [
           70,
@@ -8194,7 +8195,6 @@
         "shape": "rect",
         "text": "PS-PWM"
       },
-      "version": 1,
       "engineId": "power.pwm2",
       "engineType": "power.pwm2",
       "compilable": true
@@ -8204,16 +8204,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#routing.from",
     "metadata": {
       "name": "routing.from",
-      "label": "From",
-      "description": "Receives a signal from a matching Goto tag.",
       "aliases": [
         "from",
         "tag-recv"
-      ],
-      "tags": [
-        "routing",
-        "signal-flow",
-        "tag"
       ],
       "paradigm": "routing",
       "domain": "signal",
@@ -8270,6 +8263,14 @@
           }
         ]
       },
+      "version": 1,
+      "label": "From",
+      "description": "Receives a signal from a matching Goto tag.",
+      "tags": [
+        "routing",
+        "signal-flow",
+        "tag"
+      ],
       "symbol": {
         "bbox": [
           70,
@@ -8278,7 +8279,6 @@
         "shape": "rect",
         "text": "From"
       },
-      "version": 1,
       "engineId": "routing.from",
       "engineType": "routing.from",
       "compilable": true
@@ -8288,16 +8288,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#routing.goto",
     "metadata": {
       "name": "routing.goto",
-      "label": "Goto",
-      "description": "Routes a signal by tag within local/scoped/global visibility.",
       "aliases": [
         "goto",
         "tag-route"
-      ],
-      "tags": [
-        "routing",
-        "signal-flow",
-        "tag"
       ],
       "paradigm": "routing",
       "domain": "signal",
@@ -8380,6 +8373,14 @@
         ],
         "outputs": []
       },
+      "version": 1,
+      "label": "Goto",
+      "description": "Routes a signal by tag within local/scoped/global visibility.",
+      "tags": [
+        "routing",
+        "signal-flow",
+        "tag"
+      ],
       "symbol": {
         "bbox": [
           70,
@@ -8388,7 +8389,6 @@
         "shape": "rect",
         "text": "Goto"
       },
-      "version": 1,
       "engineId": "routing.goto",
       "engineType": "routing.goto",
       "compilable": true
@@ -8399,21 +8399,12 @@
     "metadata": {
       "name": "routing.ground",
       "type": "physical-electrical.reference.ground",
-      "label": "Ground",
-      "category": "reference",
-      "description": "Circuit ground / 0 V reference node.",
       "aliases": [
         "ground",
         "gnd",
         "0V",
         "physical_electrical.reference.ground",
         "physical-electrical.reference.ground"
-      ],
-      "tags": [
-        "routing",
-        "reference",
-        "ground",
-        "electrical"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -8455,6 +8446,16 @@
         ],
         "outputs": []
       },
+      "version": 1,
+      "label": "Ground",
+      "category": "reference",
+      "description": "Circuit ground / 0 V reference node.",
+      "tags": [
+        "routing",
+        "reference",
+        "ground",
+        "electrical"
+      ],
       "symbol": {
         "bbox": [
           40,
@@ -8463,7 +8464,6 @@
         "shape": "rect",
         "text": "GND"
       },
-      "version": 1,
       "engineId": "routing.ground",
       "engineType": "routing.ground",
       "compilable": true
@@ -8473,18 +8473,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#signal.step",
     "metadata": {
       "name": "signal.step",
-      "label": "Step",
-      "category": "signal",
-      "description": "Step input — outputs `before` for t < t_step, `after` afterwards.",
       "aliases": [
         "step",
         "unit step",
         "heaviside"
-      ],
-      "tags": [
-        "source",
-        "signal",
-        "step"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -8531,7 +8523,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "t_step",
       "params": [
         {
           "default": 1,
@@ -8574,6 +8565,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Step",
+      "category": "signal",
+      "description": "Step input — outputs `before` for t < t_step, `after` afterwards.",
+      "tags": [
+        "source",
+        "signal",
+        "step"
+      ],
+      "main_param": "t_step",
       "symbol": {
         "bbox": [
           60,
@@ -8582,7 +8583,6 @@
         "shape": "rect",
         "text": "Step"
       },
-      "version": 1,
       "engineId": "signal.step",
       "engineType": "signal.step",
       "compilable": true
@@ -8593,16 +8593,9 @@
     "metadata": {
       "name": "signal_flow.sink.scope",
       "type": "signal-flow.sink.scope",
-      "label": "Scope (legacy spelling)",
-      "category": "sinks",
-      "description": "Signal scope sink, under the GSF v2 spelling `signal_flow.sink.scope`. Identical to Scope: both emit no netlist card at all. Kept so a sheet saved under this name still opens; place Scope on a new sheet.",
       "aliases": [
         "scope",
         "signal_flow.sink.scope"
-      ],
-      "tags": [
-        "signal-flow",
-        "sink"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -8660,6 +8653,14 @@
         ],
         "outputs": []
       },
+      "version": 1,
+      "label": "Scope (legacy spelling)",
+      "category": "sinks",
+      "description": "Signal scope sink, under the GSF v2 spelling `signal_flow.sink.scope`. Identical to Scope: both emit no netlist card at all. Kept so a sheet saved under this name still opens; place Scope on a new sheet.",
+      "tags": [
+        "signal-flow",
+        "sink"
+      ],
       "symbol": {
         "bbox": [
           70,
@@ -8668,7 +8669,6 @@
         "shape": "rect",
         "text": "scope"
       },
-      "version": 1,
       "engineId": "signal-flow.sink.scope",
       "engineType": "signal-flow.sink.scope",
       "compilable": true
@@ -8679,16 +8679,9 @@
     "metadata": {
       "name": "signal_flow.source.step",
       "type": "signal-flow.source.step",
-      "label": "Step (legacy spelling)",
-      "category": "signal",
-      "description": "Step input, under the GSF v2 spelling `signal_flow.source.step`. Identical to Step: both compile to the same `kind=pulsewave` card. Kept so a sheet saved under this name still opens; place Step on a new sheet.",
       "aliases": [
         "step",
         "signal_flow.source.step"
-      ],
-      "tags": [
-        "signal-flow",
-        "source"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -8768,6 +8761,14 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Step (legacy spelling)",
+      "category": "signal",
+      "description": "Step input, under the GSF v2 spelling `signal_flow.source.step`. Identical to Step: both compile to the same `kind=pulsewave` card. Kept so a sheet saved under this name still opens; place Step on a new sheet.",
+      "tags": [
+        "signal-flow",
+        "source"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -8776,7 +8777,6 @@
         "shape": "rect",
         "text": "step"
       },
-      "version": 1,
       "engineId": "signal-flow.source.step",
       "engineType": "signal-flow.source.step",
       "compilable": true
@@ -8786,20 +8786,11 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#sinks.scope",
     "metadata": {
       "name": "sinks.scope",
-      "label": "Scope",
-      "category": "sinks",
-      "description": "Captures the input signal for display in the waveform viewer.",
       "aliases": [
         "scope",
         "plot",
         "oscilloscope",
         "viewer"
-      ],
-      "tags": [
-        "scope",
-        "sink",
-        "visualization",
-        "output"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -8834,7 +8825,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "t_window",
       "params": [
         {
           "default": 10,
@@ -8863,6 +8853,17 @@
         ],
         "outputs": []
       },
+      "version": 1,
+      "label": "Scope",
+      "category": "sinks",
+      "description": "Captures the input signal for display in the waveform viewer.",
+      "tags": [
+        "scope",
+        "sink",
+        "visualization",
+        "output"
+      ],
+      "main_param": "t_window",
       "symbol": {
         "bbox": [
           60,
@@ -8871,7 +8872,6 @@
         "shape": "rect",
         "text": "Scope"
       },
-      "version": 1,
       "engineId": "sinks.scope",
       "engineType": "sinks.scope",
       "compilable": true
@@ -8882,21 +8882,12 @@
     "metadata": {
       "name": "source.const",
       "type": "signal-flow.source.constant",
-      "label": "Constant",
-      "category": "sources",
-      "description": "Constant signal source.",
       "aliases": [
         "const",
         "constant",
         "dc signal",
         "signal_flow.source.constant",
         "signal-flow.source.constant"
-      ],
-      "tags": [
-        "source",
-        "signal",
-        "constant",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -8930,7 +8921,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "value",
       "params": [
         {
           "default": 1,
@@ -8958,6 +8948,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Constant",
+      "category": "sources",
+      "description": "Constant signal source.",
+      "tags": [
+        "source",
+        "signal",
+        "constant",
+        "general-simulator"
+      ],
+      "main_param": "value",
       "symbol": {
         "bbox": [
           60,
@@ -8966,7 +8967,6 @@
         "shape": "rect",
         "text": "CONST"
       },
-      "version": 1,
       "engineId": "source.const",
       "engineType": "source.const",
       "compilable": true
@@ -8977,21 +8977,12 @@
     "metadata": {
       "name": "source.current.dc",
       "type": "physical-electrical.source.current_dc",
-      "label": "I (DC)",
-      "category": "sources",
-      "description": "Ideal DC current source. SPICE element I.",
       "aliases": [
         "IDC",
         "dc current source",
         "current_dc",
         "physical_electrical.source.current_dc",
         "physical-electrical.source.current_dc"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "current",
-        "dc"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -9066,6 +9057,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "I (DC)",
+      "category": "sources",
+      "description": "Ideal DC current source. SPICE element I.",
+      "tags": [
+        "source",
+        "electrical",
+        "current",
+        "dc"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -9074,7 +9075,6 @@
         "shape": "circle",
         "text": "I (DC)"
       },
-      "version": 1,
       "engineId": "source.current.dc",
       "engineType": "source.current.dc",
       "compilable": true
@@ -9084,19 +9084,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.current.exp",
     "metadata": {
       "name": "source.current.exp",
-      "label": "I (EXP)",
-      "category": "sources",
-      "description": "Exponential current source. SPICE element I with EXP waveform.",
       "aliases": [
         "IEXP",
         "exponential current source"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "current",
-        "exponential",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -9236,6 +9226,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "I (EXP)",
+      "category": "sources",
+      "description": "Exponential current source. SPICE element I with EXP waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "current",
+        "exponential",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -9244,7 +9245,6 @@
         "shape": "circle",
         "text": "I (EXP)"
       },
-      "version": 1,
       "engineId": "source.current.exp",
       "engineType": "source.current.exp",
       "compilable": true
@@ -9254,19 +9254,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.current.pulse",
     "metadata": {
       "name": "source.current.pulse",
-      "label": "I (PULSE)",
-      "category": "sources",
-      "description": "Pulsed current source. SPICE element I with PULSE waveform.",
       "aliases": [
         "IPULSE",
         "pulse current source"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "current",
-        "pulse",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -9419,6 +9409,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "I (PULSE)",
+      "category": "sources",
+      "description": "Pulsed current source. SPICE element I with PULSE waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "current",
+        "pulse",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -9427,7 +9428,6 @@
         "shape": "circle",
         "text": "I (PULSE)"
       },
-      "version": 1,
       "engineId": "source.current.pulse",
       "engineType": "source.current.pulse",
       "compilable": true
@@ -9437,19 +9437,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.current.pwl",
     "metadata": {
       "name": "source.current.pwl",
-      "label": "I (PWL)",
-      "category": "sources",
-      "description": "Piecewise-linear current source. SPICE element I with PWL waveform.",
       "aliases": [
         "IPWL",
         "piecewise linear current source"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "current",
-        "pwl",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -9524,6 +9514,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "I (PWL)",
+      "category": "sources",
+      "description": "Piecewise-linear current source. SPICE element I with PWL waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "current",
+        "pwl",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -9532,7 +9533,6 @@
         "shape": "circle",
         "text": "I (PWL)"
       },
-      "version": 1,
       "engineId": "source.current.pwl",
       "engineType": "source.current.pwl",
       "compilable": true
@@ -9542,20 +9542,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.current.sffm",
     "metadata": {
       "name": "source.current.sffm",
-      "label": "I (SFFM)",
-      "category": "sources",
-      "description": "Single-frequency FM current source. SPICE element I with SFFM waveform.",
       "aliases": [
         "ISFFM",
         "FM current source"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "current",
-        "sffm",
-        "fm",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -9682,6 +9671,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "I (SFFM)",
+      "category": "sources",
+      "description": "Single-frequency FM current source. SPICE element I with SFFM waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "current",
+        "sffm",
+        "fm",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -9690,7 +9691,6 @@
         "shape": "circle",
         "text": "I (SFFM)"
       },
-      "version": 1,
       "engineId": "source.current.sffm",
       "engineType": "source.current.sffm",
       "compilable": true
@@ -9700,20 +9700,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.current.sin",
     "metadata": {
       "name": "source.current.sin",
-      "label": "I (SIN)",
-      "category": "sources",
-      "description": "Sinusoidal current source. SPICE element I with SIN waveform.",
       "aliases": [
         "ISIN",
         "sinusoidal current source"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "current",
-        "sine",
-        "ac",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -9853,6 +9842,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "I (SIN)",
+      "category": "sources",
+      "description": "Sinusoidal current source. SPICE element I with SIN waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "current",
+        "sine",
+        "ac",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -9861,7 +9862,6 @@
         "shape": "circle",
         "text": "I (SIN)"
       },
-      "version": 1,
       "engineId": "source.current.sin",
       "engineType": "source.current.sin",
       "compilable": true
@@ -9872,21 +9872,12 @@
     "metadata": {
       "name": "source.dependent.cccs",
       "type": "physical-electrical.source.cccs",
-      "label": "CCCS",
-      "category": "dependent",
-      "description": "Physical electrical Current-Controlled Current Source.",
       "aliases": [
         "F",
         "cccs",
         "current-controlled current source",
         "physical_electrical.source.cccs",
         "physical-electrical.source.cccs"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "dependent",
-        "cccs"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -9970,6 +9961,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "CCCS",
+      "category": "dependent",
+      "description": "Physical electrical Current-Controlled Current Source.",
+      "tags": [
+        "source",
+        "electrical",
+        "dependent",
+        "cccs"
+      ],
       "symbol": {
         "bbox": [
           80,
@@ -9978,7 +9979,6 @@
         "shape": "rect",
         "text": "CCCS"
       },
-      "version": 1,
       "engineId": "source.dependent.cccs",
       "engineType": "source.dependent.cccs",
       "compilable": true
@@ -9989,21 +9989,12 @@
     "metadata": {
       "name": "source.dependent.ccvs",
       "type": "physical-electrical.source.ccvs",
-      "label": "CCVS",
-      "category": "dependent",
-      "description": "Physical electrical Current-Controlled Voltage Source.",
       "aliases": [
         "H",
         "ccvs",
         "current-controlled voltage source",
         "physical_electrical.source.ccvs",
         "physical-electrical.source.ccvs"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "dependent",
-        "ccvs"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -10087,6 +10078,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "CCVS",
+      "category": "dependent",
+      "description": "Physical electrical Current-Controlled Voltage Source.",
+      "tags": [
+        "source",
+        "electrical",
+        "dependent",
+        "ccvs"
+      ],
       "symbol": {
         "bbox": [
           80,
@@ -10095,7 +10096,6 @@
         "shape": "rect",
         "text": "CCVS"
       },
-      "version": 1,
       "engineId": "source.dependent.ccvs",
       "engineType": "source.dependent.ccvs",
       "compilable": true
@@ -10106,21 +10106,12 @@
     "metadata": {
       "name": "source.dependent.vccs",
       "type": "physical-electrical.source.vccs",
-      "label": "VCCS",
-      "category": "dependent",
-      "description": "Voltage-controlled current source. SPICE element G.",
       "aliases": [
         "G",
         "vccs",
         "voltage-controlled current source",
         "physical_electrical.source.vccs",
         "physical-electrical.source.vccs"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "dependent",
-        "vccs"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -10229,6 +10220,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "VCCS",
+      "category": "dependent",
+      "description": "Voltage-controlled current source. SPICE element G.",
+      "tags": [
+        "source",
+        "electrical",
+        "dependent",
+        "vccs"
+      ],
       "symbol": {
         "bbox": [
           120,
@@ -10237,7 +10238,6 @@
         "shape": "rect",
         "text": "G"
       },
-      "version": 1,
       "engineId": "source.dependent.vccs",
       "engineType": "source.dependent.vccs",
       "compilable": true
@@ -10248,21 +10248,12 @@
     "metadata": {
       "name": "source.dependent.vcvs",
       "type": "physical-electrical.source.vcvs",
-      "label": "VCVS",
-      "category": "dependent",
-      "description": "Voltage-controlled voltage source. SPICE element E.",
       "aliases": [
         "E",
         "vcvs",
         "voltage-controlled voltage source",
         "physical_electrical.source.vcvs",
         "physical-electrical.source.vcvs"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "dependent",
-        "vcvs"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -10371,6 +10362,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "VCVS",
+      "category": "dependent",
+      "description": "Voltage-controlled voltage source. SPICE element E.",
+      "tags": [
+        "source",
+        "electrical",
+        "dependent",
+        "vcvs"
+      ],
       "symbol": {
         "bbox": [
           120,
@@ -10379,7 +10380,6 @@
         "shape": "rect",
         "text": "E"
       },
-      "version": 1,
       "engineId": "source.dependent.vcvs",
       "engineType": "source.dependent.vcvs",
       "compilable": true
@@ -10389,20 +10389,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.expwave",
     "metadata": {
       "name": "source.expwave",
-      "label": "Exponential Wave Source",
-      "category": "sources",
-      "description": "Exponential rise/fall signal source, using ngspice EXP() semantics.",
       "aliases": [
         "expwave",
         "exp",
         "exponential source"
-      ],
-      "tags": [
-        "source",
-        "signal",
-        "exponential",
-        "transient",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -10470,7 +10460,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "tau1",
       "params": [
         {
           "default": 0,
@@ -10537,6 +10526,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Exponential Wave Source",
+      "category": "sources",
+      "description": "Exponential rise/fall signal source, using ngspice EXP() semantics.",
+      "tags": [
+        "source",
+        "signal",
+        "exponential",
+        "transient",
+        "general-simulator"
+      ],
+      "main_param": "tau1",
       "symbol": {
         "bbox": [
           60,
@@ -10545,7 +10546,6 @@
         "shape": "rect",
         "text": "EXP"
       },
-      "version": 1,
       "engineId": "source.expwave",
       "engineType": "source.expwave",
       "compilable": true
@@ -10556,22 +10556,12 @@
     "metadata": {
       "name": "source.pulsewave",
       "type": "signal-flow.source.pulse",
-      "label": "Pulse Wave Source",
-      "category": "sources",
-      "description": "Trapezoidal pulse signal source, using ngspice PULSE() semantics.",
       "aliases": [
         "pulsewave",
         "pulse",
         "square wave",
         "signal_flow.source.pulse",
         "signal-flow.source.pulse"
-      ],
-      "tags": [
-        "source",
-        "signal",
-        "pulse",
-        "transient",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -10646,7 +10636,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "per",
       "params": [
         {
           "default": 0,
@@ -10721,6 +10710,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Pulse Wave Source",
+      "category": "sources",
+      "description": "Trapezoidal pulse signal source, using ngspice PULSE() semantics.",
+      "tags": [
+        "source",
+        "signal",
+        "pulse",
+        "transient",
+        "general-simulator"
+      ],
+      "main_param": "per",
       "symbol": {
         "bbox": [
           60,
@@ -10729,7 +10730,6 @@
         "shape": "rect",
         "text": "PULSE"
       },
-      "version": 1,
       "engineId": "source.pulsewave",
       "engineType": "source.pulsewave",
       "compilable": true
@@ -10739,20 +10739,10 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.sffmwave",
     "metadata": {
       "name": "source.sffmwave",
-      "label": "SFFM Wave Source",
-      "category": "sources",
-      "description": "Single-frequency FM signal source, using ngspice SFFM() semantics.",
       "aliases": [
         "sffmwave",
         "sffm",
         "fm source"
-      ],
-      "tags": [
-        "source",
-        "signal",
-        "fm",
-        "transient",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -10813,7 +10803,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "fc",
       "params": [
         {
           "default": 1,
@@ -10872,6 +10861,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "SFFM Wave Source",
+      "category": "sources",
+      "description": "Single-frequency FM signal source, using ngspice SFFM() semantics.",
+      "tags": [
+        "source",
+        "signal",
+        "fm",
+        "transient",
+        "general-simulator"
+      ],
+      "main_param": "fc",
       "symbol": {
         "bbox": [
           60,
@@ -10880,7 +10881,6 @@
         "shape": "rect",
         "text": "SFFM"
       },
-      "version": 1,
       "engineId": "source.sffmwave",
       "engineType": "source.sffmwave",
       "compilable": true
@@ -10891,22 +10891,12 @@
     "metadata": {
       "name": "source.sinwave",
       "type": "signal-flow.source.sine",
-      "label": "Sine Wave Source",
-      "category": "sources",
-      "description": "Damped sine signal source, using ngspice SIN() semantics.",
       "aliases": [
         "sinwave",
         "sine",
         "sin source",
         "signal_flow.source.sine",
         "signal-flow.source.sine"
-      ],
-      "tags": [
-        "source",
-        "signal",
-        "sine",
-        "transient",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -10972,7 +10962,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "freq",
       "params": [
         {
           "default": 1,
@@ -11037,6 +11026,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Sine Wave Source",
+      "category": "sources",
+      "description": "Damped sine signal source, using ngspice SIN() semantics.",
+      "tags": [
+        "source",
+        "signal",
+        "sine",
+        "transient",
+        "general-simulator"
+      ],
+      "main_param": "freq",
       "symbol": {
         "bbox": [
           60,
@@ -11045,7 +11046,6 @@
         "shape": "rect",
         "text": "SIN"
       },
-      "version": 1,
       "engineId": "source.sinwave",
       "engineType": "source.sinwave",
       "compilable": true
@@ -11055,20 +11055,11 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.time",
     "metadata": {
       "name": "source.time",
-      "label": "Simulation Time",
-      "category": "sources",
-      "description": "Emits the current simulation time t as a signal.",
       "aliases": [
         "time",
         "clock",
         "t",
         "ramp"
-      ],
-      "tags": [
-        "source",
-        "signal",
-        "time",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -11114,6 +11105,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "Simulation Time",
+      "category": "sources",
+      "description": "Emits the current simulation time t as a signal.",
+      "tags": [
+        "source",
+        "signal",
+        "time",
+        "general-simulator"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -11122,7 +11123,6 @@
         "shape": "rect",
         "text": "t"
       },
-      "version": 1,
       "engineId": "source.time",
       "engineType": "source.time",
       "compilable": true
@@ -11133,21 +11133,12 @@
     "metadata": {
       "name": "source.voltage.dc",
       "type": "physical-electrical.source.voltage_dc",
-      "label": "V (DC)",
-      "category": "sources",
-      "description": "Ideal DC voltage source. SPICE element V.",
       "aliases": [
         "VDC",
         "dc voltage source",
         "voltage_dc",
         "physical_electrical.source.voltage_dc",
         "physical-electrical.source.voltage_dc"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "voltage",
-        "dc"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -11222,6 +11213,16 @@
           }
         ]
       },
+      "version": 1,
+      "label": "V (DC)",
+      "category": "sources",
+      "description": "Ideal DC voltage source. SPICE element V.",
+      "tags": [
+        "source",
+        "electrical",
+        "voltage",
+        "dc"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -11230,7 +11231,6 @@
         "shape": "circle",
         "text": "V (DC)"
       },
-      "version": 1,
       "engineId": "source.voltage.dc",
       "engineType": "source.voltage.dc",
       "compilable": true
@@ -11240,19 +11240,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.voltage.exp",
     "metadata": {
       "name": "source.voltage.exp",
-      "label": "V (EXP)",
-      "category": "sources",
-      "description": "Exponential voltage source. SPICE element V with EXP waveform.",
       "aliases": [
         "VEXP",
         "exponential voltage source"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "voltage",
-        "exponential",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -11392,6 +11382,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "V (EXP)",
+      "category": "sources",
+      "description": "Exponential voltage source. SPICE element V with EXP waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "voltage",
+        "exponential",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -11400,7 +11401,6 @@
         "shape": "circle",
         "text": "V (EXP)"
       },
-      "version": 1,
       "engineId": "source.voltage.exp",
       "engineType": "source.voltage.exp",
       "compilable": true
@@ -11411,22 +11411,12 @@
     "metadata": {
       "name": "source.voltage.pulse",
       "type": "physical-electrical.source.voltage_pulse",
-      "label": "V (PULSE)",
-      "category": "sources",
-      "description": "Pulsed voltage source. SPICE element V with PULSE waveform.",
       "aliases": [
         "VPULSE",
         "pulse voltage source",
         "voltage_pulse",
         "physical_electrical.source.voltage_pulse",
         "physical-electrical.source.voltage_pulse"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "voltage",
-        "pulse",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -11579,6 +11569,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "V (PULSE)",
+      "category": "sources",
+      "description": "Pulsed voltage source. SPICE element V with PULSE waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "voltage",
+        "pulse",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -11587,7 +11588,6 @@
         "shape": "circle",
         "text": "V (PULSE)"
       },
-      "version": 1,
       "engineId": "source.voltage.pulse",
       "engineType": "source.voltage.pulse",
       "compilable": true
@@ -11597,19 +11597,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.voltage.pwl",
     "metadata": {
       "name": "source.voltage.pwl",
-      "label": "V (PWL)",
-      "category": "sources",
-      "description": "Piecewise-linear voltage source. SPICE element V with PWL waveform.",
       "aliases": [
         "VPWL",
         "piecewise linear voltage source"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "voltage",
-        "pwl",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -11684,6 +11674,17 @@
           }
         ]
       },
+      "version": 1,
+      "label": "V (PWL)",
+      "category": "sources",
+      "description": "Piecewise-linear voltage source. SPICE element V with PWL waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "voltage",
+        "pwl",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -11692,7 +11693,6 @@
         "shape": "circle",
         "text": "V (PWL)"
       },
-      "version": 1,
       "engineId": "source.voltage.pwl",
       "engineType": "source.voltage.pwl",
       "compilable": true
@@ -11702,20 +11702,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.voltage.sffm",
     "metadata": {
       "name": "source.voltage.sffm",
-      "label": "V (SFFM)",
-      "category": "sources",
-      "description": "Single-frequency FM voltage source. SPICE element V with SFFM waveform.",
       "aliases": [
         "VSFFM",
         "FM voltage source"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "voltage",
-        "sffm",
-        "fm",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -11842,6 +11831,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "V (SFFM)",
+      "category": "sources",
+      "description": "Single-frequency FM voltage source. SPICE element V with SFFM waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "voltage",
+        "sffm",
+        "fm",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -11850,7 +11851,6 @@
         "shape": "circle",
         "text": "V (SFFM)"
       },
-      "version": 1,
       "engineId": "source.voltage.sffm",
       "engineType": "source.voltage.sffm",
       "compilable": true
@@ -11860,20 +11860,9 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.voltage.sin",
     "metadata": {
       "name": "source.voltage.sin",
-      "label": "V (SIN)",
-      "category": "sources",
-      "description": "Sinusoidal voltage source. SPICE element V with SIN waveform.",
       "aliases": [
         "VSIN",
         "sinusoidal voltage source"
-      ],
-      "tags": [
-        "source",
-        "electrical",
-        "voltage",
-        "sine",
-        "ac",
-        "transient"
       ],
       "paradigm": "physical-network",
       "domain": "physical-electrical",
@@ -12013,6 +12002,18 @@
           }
         ]
       },
+      "version": 1,
+      "label": "V (SIN)",
+      "category": "sources",
+      "description": "Sinusoidal voltage source. SPICE element V with SIN waveform.",
+      "tags": [
+        "source",
+        "electrical",
+        "voltage",
+        "sine",
+        "ac",
+        "transient"
+      ],
       "symbol": {
         "bbox": [
           60,
@@ -12021,7 +12022,6 @@
         "shape": "circle",
         "text": "V (SIN)"
       },
-      "version": 1,
       "engineId": "source.voltage.sin",
       "engineType": "source.voltage.sin",
       "compilable": true
@@ -12031,9 +12031,6 @@
     "filePath": "gsim-core/crates/gsim-core/data/component-library.json#source.file",
     "metadata": {
       "name": "source.file",
-      "label": "File Source",
-      "category": "sources",
-      "description": "A measured waveform read from a file: one output per value column, interpolated or held between samples.",
       "aliases": [
         "filewave",
         "file source",
@@ -12041,13 +12038,6 @@
         "measured waveform",
         "scope",
         "csv source"
-      ],
-      "tags": [
-        "source",
-        "signal",
-        "file",
-        "measurement",
-        "general-simulator"
       ],
       "paradigm": "signal-flow",
       "domain": "signal",
@@ -12154,7 +12144,6 @@
           "tier": "ideal"
         }
       ],
-      "main_param": "path",
       "params": [
         {
           "default": "",
@@ -12278,6 +12267,18 @@
           }
         }
       },
+      "version": 1,
+      "label": "File Source",
+      "category": "sources",
+      "description": "A measured waveform read from a file: one output per value column, interpolated or held between samples.",
+      "tags": [
+        "source",
+        "signal",
+        "file",
+        "measurement",
+        "general-simulator"
+      ],
+      "main_param": "path",
       "symbol": {
         "bbox": [
           70,
@@ -12286,7 +12287,6 @@
         "shape": "rect",
         "text": "FILE"
       },
-      "version": 1,
       "engineId": "source.file",
       "engineType": "source.file",
       "compilable": true
