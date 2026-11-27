@@ -4,7 +4,18 @@
     "repository": "https://github.com/GLODI-Engineering/gsim-core.git",
     "crate": "crates/gsim-wasm",
     "version": "0.7.1",
-    "commit": "eb1b43bd2a56f833f5580803f9387c7f41e3c449"
+    "commit": "eb1b43bd2a56f833f5580803f9387c7f41e3c449",
+    "code_fingerprint": {
+      "digest": "3e15c974183bcb24f4fc98e45610f89883e368a445fac1d31f623fc491601cfe",
+      "paths": 38,
+      "inputs": [
+        "crates/gsim-wasm/",
+        "crates/gsim-core/src/",
+        "crates/gsim-core/data/",
+        "crates/gsim-core/Cargo.toml",
+        "Cargo.toml"
+      ]
+    }
   },
   "built_with": {
     "wasm-pack": "wasm-pack 0.13.1",
