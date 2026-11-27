@@ -35,6 +35,10 @@ import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LIB = join(REPO_ROOT, "apps/frontend/src/library");
+
+// This repository's half of the catalogue. Read rather than generated: it is edited by hand,
+// because a label and a symbol are decisions somebody makes rather than facts to derive.
+const DISPLAY = JSON.parse(readFileSync(join(LIB, "display-catalog.json"), "utf8"));
 const CHECK = process.argv.includes("--check");
 
 /** Ask the engine. `null` when `gsim_py` is not importable here. */
@@ -59,12 +63,32 @@ function fromEngine(call) {
  * pointing at the engine is the honest answer to "where does this component come from".
  */
 function toCatalogEntries(catalog) {
-  return catalog.components.map((component) => {
-    const { id, compilable, compiles_to: compilesTo, ...rest } = component;
+  const missing = [];
+  const entries = catalog.components.map((component) => {
+    const {
+      id,
+      compilable,
+      compiles_to: compilesTo,
+      // Dropped on the floor, deliberately: this repository owns how a component is drawn and
+      // described (gsim-core decision 0010). The engine still sends these today and they are
+      // ignored, which is what makes the split real here before the engine stops sending them.
+      label: _label,
+      category: _category,
+      description: _description,
+      tags: _tags,
+      main_param: _mainParam,
+      symbol: _symbol,
+      ...rest
+    } = component;
+    const display = DISPLAY.components[id];
+    if (display === undefined) {
+      missing.push(id);
+    }
     return {
       filePath: `gsim-core/crates/gsim-core/data/component-library.json#${id}`,
       metadata: {
         ...rest,
+        ...(display ?? {}),
         // `loadCatalog` keys entries by `name`, `type` and every alias, so a sheet saved under
         // the catalogue's old spelling still resolves — those spellings are in `aliases`.
         name: rest.name ?? id,
@@ -75,6 +99,17 @@ function toCatalogEntries(catalog) {
       },
     };
   });
+  // Loudly, because a component that reaches a palette with nothing to draw is the failure this
+  // split could introduce. Not a warning: the catalogue is not writable without an answer.
+  if (missing.length > 0) {
+    console.error(
+      `gen-engine-catalog: ${missing.length} engine component(s) have no entry in ` +
+        `display-catalog.json, so there is nothing to draw for them:\n  ${missing.join("\n  ")}` +
+        "\n\nAdd each one to apps/frontend/src/library/display-catalog.json.",
+    );
+    process.exit(1);
+  }
+  return entries;
 }
 
 const catalogRaw = fromEngine("catalog");

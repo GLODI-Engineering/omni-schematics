@@ -5,7 +5,7 @@
   "description": "Catalog entry for one functional block. One file per block under packages/blocks/src/blocks/<family>/<block_dir>/metadata.yaml. Shared contract: the frontend reads visual + search fields; the simulator reads behavior + equation_template.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["label", "paradigm", "domain", "fidelities"],
+  "required": ["paradigm", "domain", "fidelities"],
   "properties": {
     "name": {
       "type": "string",
@@ -845,5 +845,6 @@
         }
       ]
     }
-  }
+  },
+  "$comment": "`label` was required here until gsim-core decision 0010 moved it. This schema is validated against two different things: this repository's merged catalogue entry, and -- fetched over HTTP from this branch by gsim-core's CI -- the engine's raw submission. After 0010 the engine does not send a label, so requiring one here would fail a job on another repository that no pull request there could fix. The guarantee is not lost: `the-editor-owns-what-it-draws.test.ts` asserts every component this editor can place has a label, which is the end that matters, and asserts it where the labels live."
 }

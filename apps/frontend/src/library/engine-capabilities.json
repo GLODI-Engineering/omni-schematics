@@ -1,6 +1,6 @@
 {
   "schema_version": 3,
-  "generator": "gsim-core 0.7.0",
+  "generator": "gsim-core 0.7.1",
   "types": [
     {
       "type": "routing.ground",

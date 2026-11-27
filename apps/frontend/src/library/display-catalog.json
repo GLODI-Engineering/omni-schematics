@@ -1,0 +1,898 @@
+{
+  "$comment": "This repository owns how a component is drawn and described; the engine owns what it compiles. See gsim-core decision 0010. Keyed on the engine's component id, because 'passive.resistor' already is the name that decision means by 'this is a resistor' and a second display-kind vocabulary would be a second thing to drift. An entry here with no engine component is legal and expected: a component a front end must draw but no engine compiles. An engine component with no entry here is an error, because it would be placed from a palette with nothing to show. Edit this file to change a label, a category, help text or a symbol -- none of those are the engine's business.",
+  "components": {
+    "control.counter": {
+      "label": "Counter",
+      "category": "control",
+      "description": "Edge-triggered up/down counter with an optional modulus and reset.",
+      "tags": ["control", "logic", "counter", "discrete", "general-simulator"],
+      "main_param": "modulus",
+      "symbol": {
+        "bbox": [60, 66],
+        "shape": "rect",
+        "text": "CNT"
+      }
+    },
+    "control.delay": {
+      "label": "Delay",
+      "category": "control",
+      "description": "One-simulation-step delay: reads its input's value from the previous step (general-simulator's own `prev:` reference).",
+      "tags": ["delay", "control", "general-simulator"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "z\u207b\u00b9"
+      }
+    },
+    "control.derivative": {
+      "label": "Derivative",
+      "category": "control",
+      "description": "Continuous-time derivative `y = du/dt`.",
+      "tags": ["derivative", "continuous", "control", "linear"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "du/dt"
+      }
+    },
+    "control.discrete_state_space": {
+      "label": "Discrete State Space",
+      "category": "control",
+      "description": "Discrete-time linear state-space block x[k+1] = Ax[k] + Bu[k], y = Cx + Du.",
+      "tags": ["control", "signal", "linear", "discrete", "state-space", "general-simulator"],
+      "main_param": "ts",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "DSS"
+      }
+    },
+    "control.discrete_transfer_function": {
+      "label": "Discrete Transfer Function",
+      "category": "control",
+      "description": "Discrete-time SISO transfer function num(z)/den(z) at a fixed sample period.",
+      "tags": ["control", "signal", "discrete", "transfer-function", "general-simulator"],
+      "main_param": "ts",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "N(z)/D(z)"
+      }
+    },
+    "control.gain": {
+      "label": "Gain",
+      "category": "control",
+      "description": "Scalar gain `y = k * u`.",
+      "tags": ["gain", "multiplier", "control", "linear"],
+      "main_param": "k",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "triangle",
+        "text": "{k}"
+      }
+    },
+    "control.integrator": {
+      "label": "Integrator",
+      "category": "control",
+      "description": "Continuous-time integrator `dx/dt = u`, with optional output limits.",
+      "tags": ["integrator", "continuous", "control", "linear"],
+      "main_param": "x0",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "1/s"
+      }
+    },
+    "control.pid": {
+      "label": "PID Controller",
+      "category": "control",
+      "description": "Continuous PID controller.",
+      "tags": ["pid", "controller", "feedback", "control"],
+      "main_param": "kp",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "PID"
+      }
+    },
+    "control.product": {
+      "label": "Product",
+      "category": "control",
+      "description": "Multiplies all of its input signals together.",
+      "tags": ["control", "signal", "arithmetic", "general-simulator"],
+      "main_param": "n_inputs",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "x"
+      }
+    },
+    "control.saturation": {
+      "label": "Saturation",
+      "category": "control",
+      "description": "Saturates a signal between lower and upper limits.",
+      "tags": ["saturation", "clamp", "nonlinear", "control"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "sat"
+      }
+    },
+    "control.state_space": {
+      "label": "State Space",
+      "category": "control",
+      "description": "Continuous-time linear state-space block dx/dt = Ax + Bu, y = Cx + Du.",
+      "tags": ["control", "signal", "linear", "state-space", "general-simulator"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "SS"
+      }
+    },
+    "control.sum": {
+      "label": "Sum",
+      "category": "control",
+      "description": "Weighted summation. Number of inputs and their signs come from `signs`.",
+      "tags": ["sum", "adder", "control", "linear"],
+      "main_param": "signs",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "\u03a3"
+      }
+    },
+    "control.transfer_function": {
+      "label": "Transfer Function",
+      "category": "control",
+      "description": "Rational transfer function `H(s) = num(s) / den(s)`, realised as state-space.",
+      "tags": ["transfer function", "continuous", "control", "frequency", "linear"],
+      "main_param": "num",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "H(s)"
+      }
+    },
+    "control.transform.clarke": {
+      "label": "Clarke Transform",
+      "category": "control",
+      "description": "Clarke (abc to alpha-beta-zero) transform.",
+      "tags": ["control", "signal", "transform", "motor-control", "general-simulator"],
+      "symbol": {
+        "bbox": [80, 66],
+        "shape": "rect",
+        "text": "abc/\u03b1\u03b20"
+      }
+    },
+    "control.transform.clarke_inv": {
+      "label": "Inverse Clarke Transform",
+      "category": "control",
+      "description": "Inverse Clarke (alpha-beta-zero to abc) transform.",
+      "tags": ["control", "signal", "transform", "motor-control", "general-simulator"],
+      "symbol": {
+        "bbox": [80, 66],
+        "shape": "rect",
+        "text": "\u03b1\u03b20/abc"
+      }
+    },
+    "control.transform.clarke_park": {
+      "label": "Clarke-Park Transform",
+      "category": "control",
+      "description": "Combined Clarke-Park (abc to dq0) transform.",
+      "tags": ["control", "signal", "transform", "motor-control", "general-simulator"],
+      "symbol": {
+        "bbox": [80, 88],
+        "shape": "rect",
+        "text": "abc/dq0"
+      }
+    },
+    "control.transform.clarke_park_inv": {
+      "label": "Inverse Clarke-Park Transform",
+      "category": "control",
+      "description": "Combined inverse Clarke-Park (dq0 to abc) transform.",
+      "tags": ["control", "signal", "transform", "motor-control", "general-simulator"],
+      "symbol": {
+        "bbox": [80, 88],
+        "shape": "rect",
+        "text": "dq0/abc"
+      }
+    },
+    "control.transform.park": {
+      "label": "Park Transform",
+      "category": "control",
+      "description": "Park (alpha-beta-zero to dq0) transform.",
+      "tags": ["control", "signal", "transform", "motor-control", "general-simulator"],
+      "symbol": {
+        "bbox": [80, 88],
+        "shape": "rect",
+        "text": "\u03b1\u03b20/dq0"
+      }
+    },
+    "control.transform.park_inv": {
+      "label": "Inverse Park Transform",
+      "category": "control",
+      "description": "Inverse Park (dq0 to alpha-beta-zero) transform.",
+      "tags": ["control", "signal", "transform", "motor-control", "general-simulator"],
+      "symbol": {
+        "bbox": [80, 88],
+        "shape": "rect",
+        "text": "dq0/\u03b1\u03b20"
+      }
+    },
+    "control.vco": {
+      "label": "VCO",
+      "category": "control",
+      "description": "Voltage-controlled oscillator: maps the input signal onto a frequency ramp.",
+      "tags": ["control", "signal", "oscillator", "general-simulator"],
+      "main_param": "f_max",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "VCO"
+      }
+    },
+    "converter.phys2sig": {
+      "label": "Physical to Signal",
+      "category": "power",
+      "description": "Reads a circuit node voltage or branch current back out as a signal.",
+      "tags": ["converter", "signal", "electrical", "general-simulator"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "P2S"
+      }
+    },
+    "converter.sig2phys": {
+      "label": "Signal to Physical",
+      "category": "power",
+      "description": "Drives a physical-electrical node from a signal, as a voltage or a current.",
+      "tags": ["converter", "signal", "electrical", "general-simulator"],
+      "main_param": "domain",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "S2P"
+      }
+    },
+    "extensibility.cscript": {
+      "label": "C Script",
+      "category": "user",
+      "description": "Stateful block hosted in a precompiled C shared library.",
+      "tags": ["extensibility", "script", "custom", "general-simulator"],
+      "main_param": "lib",
+      "symbol": {
+        "bbox": [70, 40],
+        "shape": "rect",
+        "text": "C"
+      }
+    },
+    "extensibility.octblock": {
+      "label": "Octave Block",
+      "category": "user",
+      "description": "Stateful block hosted in an Octave function.",
+      "tags": ["extensibility", "script", "custom", "general-simulator"],
+      "main_param": "function",
+      "symbol": {
+        "bbox": [70, 40],
+        "shape": "rect",
+        "text": "OCT"
+      }
+    },
+    "extensibility.octfunc": {
+      "label": "Octave Function",
+      "category": "user",
+      "description": "Stateless block evaluated by an Octave function.",
+      "tags": ["extensibility", "script", "custom", "general-simulator"],
+      "main_param": "function",
+      "symbol": {
+        "bbox": [70, 40],
+        "shape": "rect",
+        "text": "OCTf"
+      }
+    },
+    "extensibility.pyblock": {
+      "label": "Python Block",
+      "category": "user",
+      "description": "Stateful block hosted in a Python module.",
+      "tags": ["extensibility", "script", "custom", "general-simulator"],
+      "main_param": "path",
+      "symbol": {
+        "bbox": [70, 40],
+        "shape": "rect",
+        "text": "PY"
+      }
+    },
+    "extensibility.pyfunc": {
+      "label": "Python Function",
+      "category": "user",
+      "description": "Stateless block evaluated by a Python function.",
+      "tags": ["extensibility", "script", "custom", "general-simulator"],
+      "main_param": "function",
+      "symbol": {
+        "bbox": [70, 40],
+        "shape": "rect",
+        "text": "PYf"
+      }
+    },
+    "hierarchy.inport": {
+      "label": "Inport",
+      "category": "subsystems",
+      "description": "Boundary inport \u2014 placed inside a subsystem body to define an input port on the parent-side block (spec \u00a711). The `id` param is the port id; `kind` selects the signal domain.",
+      "tags": ["hierarchy", "subsystem", "inport", "boundary"],
+      "symbol": {
+        "bbox": [200, 40],
+        "shape": "rect",
+        "text": "In"
+      }
+    },
+    "hierarchy.outport": {
+      "label": "Outport",
+      "category": "subsystems",
+      "description": "Boundary outport \u2014 placed inside a subsystem body to define an output port on the parent-side block (spec \u00a711). The `id` param is the port id; `kind` selects the signal domain.",
+      "tags": ["hierarchy", "subsystem", "outport", "boundary"],
+      "symbol": {
+        "bbox": [200, 40],
+        "shape": "rect",
+        "text": "Out"
+      }
+    },
+    "ideal.diode": {
+      "label": "Ideal Diode",
+      "category": "ideal",
+      "description": "Ideal diode: piecewise-conductance forward/reverse model with a breakdown branch.",
+      "tags": ["ideal-device", "electrical", "diode", "ideal", "general-simulator"],
+      "main_param": "v_f",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "D"
+      }
+    },
+    "ideal.switch": {
+      "label": "Ideal Switch",
+      "category": "ideal",
+      "description": "Block-gated ideal switch: on/off conductance with a threshold and breakdown branch.",
+      "tags": ["ideal-device", "electrical", "switch", "ideal", "general-simulator"],
+      "main_param": "r_on",
+      "symbol": {
+        "bbox": [60, 60],
+        "shape": "rect",
+        "text": "SW"
+      }
+    },
+    "logic.flip_flop": {
+      "label": "Flip-Flop",
+      "category": "signal",
+      "description": "Edge-triggered flip-flop: D, T or JK, with an optional asynchronous reset.",
+      "tags": ["logic", "signal", "flip-flop", "discrete", "general-simulator"],
+      "main_param": "kind",
+      "symbol": {
+        "bbox": [60, 132],
+        "shape": "rect",
+        "text": "{kind}"
+      }
+    },
+    "logic.gate": {
+      "label": "Logic Gate",
+      "category": "signal",
+      "description": "Boolean gate (and/or/xor/nand/nor/xnor/not) over its input signals.",
+      "tags": ["logic", "signal", "boolean", "general-simulator"],
+      "main_param": "op",
+      "symbol": {
+        "bbox": [50, 44],
+        "shape": "rect",
+        "text": "{op}"
+      }
+    },
+    "logic.hysteresis": {
+      "label": "Hysteresis",
+      "category": "signal",
+      "description": "Schmitt-trigger hysteresis comparator with separate low and high thresholds.",
+      "tags": ["logic", "signal", "hysteresis", "general-simulator"],
+      "main_param": "high",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "HYST"
+      }
+    },
+    "logic.sr_latch": {
+      "label": "SR Latch",
+      "category": "signal",
+      "description": "Level-triggered set/reset latch with a configurable priority input.",
+      "tags": ["logic", "signal", "latch", "general-simulator"],
+      "main_param": "priority",
+      "symbol": {
+        "bbox": [50, 44],
+        "shape": "rect",
+        "text": "SR"
+      }
+    },
+    "machine.pmsm": {
+      "label": "PMSM",
+      "category": "power",
+      "description": "Permanent-magnet synchronous machine in the dq frame, with mechanical dynamics.",
+      "tags": ["machine", "motor", "power", "dq", "general-simulator"],
+      "main_param": "pole_pairs",
+      "symbol": {
+        "bbox": [80, 88],
+        "shape": "rect",
+        "text": "PMSM"
+      }
+    },
+    "math.fn1": {
+      "label": "Math Function (unary)",
+      "category": "signal",
+      "description": "Unary waveform-arithmetic function applied to one signal.",
+      "tags": ["math", "signal", "arithmetic", "general-simulator"],
+      "main_param": "fn",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "{fn}"
+      }
+    },
+    "math.fn2": {
+      "label": "Math Function (binary)",
+      "category": "signal",
+      "description": "Binary waveform-arithmetic function applied to two signals.",
+      "tags": ["math", "signal", "arithmetic", "general-simulator"],
+      "main_param": "fn",
+      "symbol": {
+        "bbox": [60, 44],
+        "shape": "rect",
+        "text": "{fn}"
+      }
+    },
+    "math.fn3": {
+      "label": "Math Function (ternary)",
+      "category": "signal",
+      "description": "Ternary waveform-arithmetic function applied to three signals.",
+      "tags": ["math", "signal", "arithmetic", "general-simulator"],
+      "main_param": "fn",
+      "symbol": {
+        "bbox": [60, 66],
+        "shape": "rect",
+        "text": "{fn}"
+      }
+    },
+    "math.table_lookup": {
+      "label": "Table Lookup",
+      "category": "signal",
+      "description": "Piecewise-linear lookup table over a list of [x, y] breakpoints.",
+      "tags": ["math", "signal", "lookup", "general-simulator"],
+      "main_param": "points",
+      "symbol": {
+        "bbox": [80, 60],
+        "shape": "rect",
+        "text": "LUT"
+      }
+    },
+    "passive.capacitor": {
+      "label": "Capacitor",
+      "category": "passive",
+      "description": "Linear capacitor. SPICE element C.",
+      "tags": ["passive", "electrical", "capacitor", "linear"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "C"
+      }
+    },
+    "passive.inductor": {
+      "label": "Inductor",
+      "category": "passive",
+      "description": "Linear inductor. SPICE element L.",
+      "tags": ["passive", "electrical", "inductor", "linear"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "L"
+      }
+    },
+    "passive.inductor.coupled": {
+      "label": "Coupled Inductors",
+      "category": "passive",
+      "description": "Coupled inductors (mutual inductance). SPICE element K.",
+      "tags": ["passive", "electrical", "inductor", "coupled", "mutual"],
+      "symbol": {
+        "bbox": [60, 60],
+        "shape": "rect",
+        "text": "K"
+      }
+    },
+    "passive.resistor": {
+      "label": "Resistor",
+      "category": "passive",
+      "description": "Linear resistor. SPICE element R.",
+      "tags": ["passive", "electrical", "resistor", "linear"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "R"
+      }
+    },
+    "passive.mutual_inductor": {
+      "label": "Mutual Inductor",
+      "category": "passive",
+      "description": "Magnetically coupled inductors with coupling coefficient k.",
+      "tags": ["physical", "electrical", "passive"],
+      "symbol": {
+        "bbox": [60, 60],
+        "shape": "rect",
+        "text": "M"
+      }
+    },
+    "passive.transformer": {
+      "label": "Transformer",
+      "category": "passive",
+      "description": "Ideal transformer with turns ratio n.",
+      "tags": ["physical", "electrical", "passive"],
+      "symbol": {
+        "bbox": [60, 60],
+        "shape": "rect",
+        "text": "TX"
+      }
+    },
+    "power.pwm1": {
+      "label": "PWM Modulator",
+      "category": "power",
+      "description": "Fixed-carrier PWM modulator with complementary output and dead time.",
+      "tags": ["power", "pwm", "modulator", "general-simulator"],
+      "main_param": "freq",
+      "symbol": {
+        "bbox": [60, 44],
+        "shape": "rect",
+        "text": "PWM"
+      }
+    },
+    "power.pwm2": {
+      "label": "Phase-Shift PWM Modulator",
+      "category": "power",
+      "description": "Phase-shift PWM modulator driven by live frequency, phase and duty signals.",
+      "tags": ["power", "pwm", "modulator", "phase-shift", "general-simulator"],
+      "main_param": "f_max",
+      "symbol": {
+        "bbox": [70, 66],
+        "shape": "rect",
+        "text": "PS-PWM"
+      }
+    },
+    "routing.from": {
+      "label": "From",
+      "description": "Receives a signal from a matching Goto tag.",
+      "tags": ["routing", "signal-flow", "tag"],
+      "symbol": {
+        "bbox": [70, 40],
+        "shape": "rect",
+        "text": "From"
+      }
+    },
+    "routing.goto": {
+      "label": "Goto",
+      "description": "Routes a signal by tag within local/scoped/global visibility.",
+      "tags": ["routing", "signal-flow", "tag"],
+      "symbol": {
+        "bbox": [70, 40],
+        "shape": "rect",
+        "text": "Goto"
+      }
+    },
+    "routing.ground": {
+      "label": "Ground",
+      "category": "reference",
+      "description": "Circuit ground / 0 V reference node.",
+      "tags": ["routing", "reference", "ground", "electrical"],
+      "symbol": {
+        "bbox": [40, 40],
+        "shape": "rect",
+        "text": "GND"
+      }
+    },
+    "signal.step": {
+      "label": "Step",
+      "category": "signal",
+      "description": "Step input \u2014 outputs `before` for t < t_step, `after` afterwards.",
+      "tags": ["source", "signal", "step"],
+      "main_param": "t_step",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "Step"
+      }
+    },
+    "signal-flow.sink.scope": {
+      "label": "Scope (legacy spelling)",
+      "category": "sinks",
+      "description": "Signal scope sink, under the GSF v2 spelling `signal_flow.sink.scope`. Identical to Scope: both emit no netlist card at all. Kept so a sheet saved under this name still opens; place Scope on a new sheet.",
+      "tags": ["signal-flow", "sink"],
+      "symbol": {
+        "bbox": [70, 40],
+        "shape": "rect",
+        "text": "scope"
+      }
+    },
+    "signal-flow.source.step": {
+      "label": "Step (legacy spelling)",
+      "category": "signal",
+      "description": "Step input, under the GSF v2 spelling `signal_flow.source.step`. Identical to Step: both compile to the same `kind=pulsewave` card. Kept so a sheet saved under this name still opens; place Step on a new sheet.",
+      "tags": ["signal-flow", "source"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "step"
+      }
+    },
+    "sinks.scope": {
+      "label": "Scope",
+      "category": "sinks",
+      "description": "Captures the input signal for display in the waveform viewer.",
+      "tags": ["scope", "sink", "visualization", "output"],
+      "main_param": "t_window",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "Scope"
+      }
+    },
+    "source.const": {
+      "label": "Constant",
+      "category": "sources",
+      "description": "Constant signal source.",
+      "tags": ["source", "signal", "constant", "general-simulator"],
+      "main_param": "value",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "CONST"
+      }
+    },
+    "source.current.dc": {
+      "label": "I (DC)",
+      "category": "sources",
+      "description": "Ideal DC current source. SPICE element I.",
+      "tags": ["source", "electrical", "current", "dc"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "I (DC)"
+      }
+    },
+    "source.current.exp": {
+      "label": "I (EXP)",
+      "category": "sources",
+      "description": "Exponential current source. SPICE element I with EXP waveform.",
+      "tags": ["source", "electrical", "current", "exponential", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "I (EXP)"
+      }
+    },
+    "source.current.pulse": {
+      "label": "I (PULSE)",
+      "category": "sources",
+      "description": "Pulsed current source. SPICE element I with PULSE waveform.",
+      "tags": ["source", "electrical", "current", "pulse", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "I (PULSE)"
+      }
+    },
+    "source.current.pwl": {
+      "label": "I (PWL)",
+      "category": "sources",
+      "description": "Piecewise-linear current source. SPICE element I with PWL waveform.",
+      "tags": ["source", "electrical", "current", "pwl", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "I (PWL)"
+      }
+    },
+    "source.current.sffm": {
+      "label": "I (SFFM)",
+      "category": "sources",
+      "description": "Single-frequency FM current source. SPICE element I with SFFM waveform.",
+      "tags": ["source", "electrical", "current", "sffm", "fm", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "I (SFFM)"
+      }
+    },
+    "source.current.sin": {
+      "label": "I (SIN)",
+      "category": "sources",
+      "description": "Sinusoidal current source. SPICE element I with SIN waveform.",
+      "tags": ["source", "electrical", "current", "sine", "ac", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "I (SIN)"
+      }
+    },
+    "source.dependent.cccs": {
+      "label": "CCCS",
+      "category": "dependent",
+      "description": "Physical electrical Current-Controlled Current Source.",
+      "tags": ["source", "electrical", "dependent", "cccs"],
+      "symbol": {
+        "bbox": [80, 60],
+        "shape": "rect",
+        "text": "CCCS"
+      }
+    },
+    "source.dependent.ccvs": {
+      "label": "CCVS",
+      "category": "dependent",
+      "description": "Physical electrical Current-Controlled Voltage Source.",
+      "tags": ["source", "electrical", "dependent", "ccvs"],
+      "symbol": {
+        "bbox": [80, 60],
+        "shape": "rect",
+        "text": "CCVS"
+      }
+    },
+    "source.dependent.vccs": {
+      "label": "VCCS",
+      "category": "dependent",
+      "description": "Voltage-controlled current source. SPICE element G.",
+      "tags": ["source", "electrical", "dependent", "vccs"],
+      "symbol": {
+        "bbox": [120, 80],
+        "shape": "rect",
+        "text": "G"
+      }
+    },
+    "source.dependent.vcvs": {
+      "label": "VCVS",
+      "category": "dependent",
+      "description": "Voltage-controlled voltage source. SPICE element E.",
+      "tags": ["source", "electrical", "dependent", "vcvs"],
+      "symbol": {
+        "bbox": [120, 80],
+        "shape": "rect",
+        "text": "E"
+      }
+    },
+    "source.expwave": {
+      "label": "Exponential Wave Source",
+      "category": "sources",
+      "description": "Exponential rise/fall signal source, using ngspice EXP() semantics.",
+      "tags": ["source", "signal", "exponential", "transient", "general-simulator"],
+      "main_param": "tau1",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "EXP"
+      }
+    },
+    "source.pulsewave": {
+      "label": "Pulse Wave Source",
+      "category": "sources",
+      "description": "Trapezoidal pulse signal source, using ngspice PULSE() semantics.",
+      "tags": ["source", "signal", "pulse", "transient", "general-simulator"],
+      "main_param": "per",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "PULSE"
+      }
+    },
+    "source.sffmwave": {
+      "label": "SFFM Wave Source",
+      "category": "sources",
+      "description": "Single-frequency FM signal source, using ngspice SFFM() semantics.",
+      "tags": ["source", "signal", "fm", "transient", "general-simulator"],
+      "main_param": "fc",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "SFFM"
+      }
+    },
+    "source.sinwave": {
+      "label": "Sine Wave Source",
+      "category": "sources",
+      "description": "Damped sine signal source, using ngspice SIN() semantics.",
+      "tags": ["source", "signal", "sine", "transient", "general-simulator"],
+      "main_param": "freq",
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "SIN"
+      }
+    },
+    "source.time": {
+      "label": "Simulation Time",
+      "category": "sources",
+      "description": "Emits the current simulation time t as a signal.",
+      "tags": ["source", "signal", "time", "general-simulator"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "rect",
+        "text": "t"
+      }
+    },
+    "source.voltage.dc": {
+      "label": "V (DC)",
+      "category": "sources",
+      "description": "Ideal DC voltage source. SPICE element V.",
+      "tags": ["source", "electrical", "voltage", "dc"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "V (DC)"
+      }
+    },
+    "source.voltage.exp": {
+      "label": "V (EXP)",
+      "category": "sources",
+      "description": "Exponential voltage source. SPICE element V with EXP waveform.",
+      "tags": ["source", "electrical", "voltage", "exponential", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "V (EXP)"
+      }
+    },
+    "source.voltage.pulse": {
+      "label": "V (PULSE)",
+      "category": "sources",
+      "description": "Pulsed voltage source. SPICE element V with PULSE waveform.",
+      "tags": ["source", "electrical", "voltage", "pulse", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "V (PULSE)"
+      }
+    },
+    "source.voltage.pwl": {
+      "label": "V (PWL)",
+      "category": "sources",
+      "description": "Piecewise-linear voltage source. SPICE element V with PWL waveform.",
+      "tags": ["source", "electrical", "voltage", "pwl", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "V (PWL)"
+      }
+    },
+    "source.voltage.sffm": {
+      "label": "V (SFFM)",
+      "category": "sources",
+      "description": "Single-frequency FM voltage source. SPICE element V with SFFM waveform.",
+      "tags": ["source", "electrical", "voltage", "sffm", "fm", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "V (SFFM)"
+      }
+    },
+    "source.voltage.sin": {
+      "label": "V (SIN)",
+      "category": "sources",
+      "description": "Sinusoidal voltage source. SPICE element V with SIN waveform.",
+      "tags": ["source", "electrical", "voltage", "sine", "ac", "transient"],
+      "symbol": {
+        "bbox": [60, 40],
+        "shape": "circle",
+        "text": "V (SIN)"
+      }
+    },
+    "source.file": {
+      "label": "File Source",
+      "category": "sources",
+      "description": "A measured waveform read from a file: one output per value column, interpolated or held between samples.",
+      "tags": ["source", "signal", "file", "measurement", "general-simulator"],
+      "main_param": "path",
+      "symbol": {
+        "bbox": [70, 40],
+        "shape": "rect",
+        "text": "FILE"
+      }
+    }
+  }
+}
