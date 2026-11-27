@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased — Omni Schematics
+
+**The committed engine is rebuilt from
+[gsim-core 0.9.0](https://github.com/GLODI-Engineering/gsim-core/releases/tag/v0.9.0),
+so a parameterised subcircuit can reach a deck.**
+
+### Install it
+
+1. The `.vsix` from this release.
+2. A `general-simulator` binary, **v0.11.0** —
+   [here](https://github.com/GLODI-Engineering/general-simulator/releases).
+   This is not optional for a sheet that uses a parameterised subcircuit: it is
+   the release that *binds* the parameters the engine now emits. An older
+   solver parses the `.subckt` card's parameter list, binds nothing, and stops
+   with `missing value for symbol`.
+3. `"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"`
+
+### What the new engine does
+
+**A parameterised `.subckt` emits its parameters.** The definition's declared
+parameters go on the `.subckt` card and each `X` card carries its own
+`name=value` tail, so one definition is a reusable component rather than a
+named group of statements. Before this, two instances of one definition
+compiled byte-identically — the values the document held were emitted nowhere,
+with no note. That is the mechanism a composite component is built out of: a
+real resistor is two terminals outside, three devices inside, three
+independently editable values on the outer block.
+
+**A parameter reference inside a definition resolves.** A resistor inside a
+`.subckt` valued `{Rload}` used to reach the deck verbatim and fail in the
+solver as a symbol nothing declares, while the same reference one line outside
+the definition resolved to its number.
+
+**A new refusal**, `undeclared-subckt-param`, for an instance parameter the
+definition does not declare. Dropping it would solve one circuit while the
+document describes another.
+
+Nothing in this editor changed: there is still no sub-schematic UI, which is
+its own issue. What changed is that the engine inside the extension can now
+compile one.
+
+### Verified
+
+`check-gsim-wasm-fresh` green against the 0.9.0 commit, 1,740 tests passing,
+and all five committed examples still compile through the bundle byte for byte
+— **the only change in any recorded netlist is the version comment**, in all
+five, so the new engine compiles every existing sheet to exactly what it did
+before.
+
 ## 2026-11-27 — Omni Schematics (0.11.0)
 
 **The editor owns what it draws, a gate asserts the compiler and the editor
