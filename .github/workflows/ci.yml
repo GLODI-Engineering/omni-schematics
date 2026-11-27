@@ -200,10 +200,14 @@ jobs:
   # for a Python half that no longer exists.
   # ---------------------------------------------------------------------------
   engine-catalogue-drift:
-    # The engine owns the component library — what the palette shows, what each component's
-    # parameters are, and whether this engine can compile it. The front end's copy is
-    # generated from it. This fails when the copy stops matching, which is the only thing
-    # keeping it a cache rather than a second opinion.
+    # Since gsim-core decision 0010 the compiler declares *what it compiles* -- a component's
+    # ports, their domains, its parameters, whether this engine can compile it -- and this
+    # repository owns *how one is drawn and described*. The merged copy in the front end is
+    # generated from both halves. This job fails when the copy stops matching, which is the
+    # only thing keeping it a cache rather than a second opinion, and it also asserts that the
+    # engine's two answers about a component agree with each other (gsim-core#110): the
+    # component library and the compile registry declare the same terminals in the same order,
+    # and no inspector offers a field no card reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -226,8 +230,13 @@ jobs:
           python -m pip install --upgrade maturin
           maturin build --release --manifest-path /tmp/gsim-core/crates/gsim-py/Cargo.toml --out /tmp/wheels
           python -m pip install /tmp/wheels/gsim_py-*.whl
-      - name: engine catalogue drift
-        run: GSIM_PYTHON=$(which python) node scripts/gen-engine-catalog.mjs --check
+      # `--require-engine`: this job's whole value is that it asked the engine, and without the
+      # flag the script reports "gsim_py is not importable, leaving the committed files alone"
+      # and exits 0 -- right for a developer's checkout, fatal here. That is not hypothetical:
+      # a regeneration while landing decision 0010 printed success, had checked nothing, and
+      # this job went red afterwards for the reason the regeneration was meant to remove.
+      - name: engine catalogue drift and compiler/editor agreement
+        run: GSIM_PYTHON=$(which python) node scripts/gen-engine-catalog.mjs --check --require-engine
 
   cscript-abi-drift:
     # The C stub this editor writes for a `cscript` block declares the engine's ABI by hand,
