@@ -3,10 +3,10 @@
   "engine": {
     "repository": "https://github.com/GLODI-Engineering/gsim-core.git",
     "crate": "crates/gsim-wasm",
-    "version": "0.8.0",
-    "commit": "130cbb6e8a47f8849dd5122502b7444690c7481f",
+    "version": "0.9.0",
+    "commit": "69f92eed57c293bfa722db079ccc293eb87ce61e",
     "code_fingerprint": {
-      "digest": "1b8aa263da7e2804ba28265e8db68d56603625174ab06022d761c9dd55e850b5",
+      "digest": "b8ccd9e4ffc8c15d5a1e27b0c902ad635630d60bf619eb57581e50aabace9b0b",
       "paths": 39,
       "inputs": [
         "crates/gsim-wasm/",
@@ -58,8 +58,8 @@
       "sha256": "f9d70d3d91bddfcb54bc1819d0ed97b174b1b2fc552c719dc7cb977aa79083a0"
     },
     "pkg/gsim_wasm_bg.wasm": {
-      "bytes": 1892398,
-      "sha256": "3a6d94f838edadcce796651d95c8a155989861898f69c40dc06412e3b80d998e"
+      "bytes": 1899747,
+      "sha256": "14c875d6d3185eb89f9776f98d91379d17718e14ba01feecf5c33cf5014dd52c"
     },
     "pkg/gsim_wasm_bg.wasm.d.ts": {
       "bytes": 2584,
