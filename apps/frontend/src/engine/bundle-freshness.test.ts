@@ -170,7 +170,10 @@ describe("a gsim-core merge that does move engine code", () => {
 describe("the bundle in this repository", () => {
   const provenance = JSON.parse(
     readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "../../../../packages/gsim-wasm/provenance.json"),
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../../packages/gsim-wasm/provenance.json",
+      ),
       "utf8",
     ),
   );
