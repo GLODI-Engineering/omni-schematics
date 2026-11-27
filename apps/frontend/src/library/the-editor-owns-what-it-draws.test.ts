@@ -115,3 +115,72 @@ describe("the editor owns what it draws (gsim-core decision 0010)", () => {
     expect(r?.metadata.label).toBe(display["passive.resistor"]?.label);
   });
 });
+
+/**
+ * Two rules that arrive from `gsim-core` with the data they are about.
+ *
+ * Both were asserted in the engine's `compile/library.rs`, and the corner rule said why in its
+ * own comment: *"The geometry means nothing to this crate, which is exactly why the rule has to
+ * be asserted here rather than left to whichever generator wrote the file: the data is embedded
+ * from this repository, so this is the only place a fifth cannot slip past."*
+ *
+ * That reasoning is what moves them. After decision 0010 the data is no longer embedded there,
+ * so the only place a fifth cannot slip past is here.
+ *
+ * And the corner rule had to move rather than merely being allowed to: with `symbol` gone from
+ * the engine's half, its loop finds no bounding box, `continue`s past all 78 components and
+ * passes while testing nothing -- which is the failure mode this repository has shipped four
+ * times. A vacuous green is worse than a deleted test, because it still reads as coverage.
+ */
+describe("the drawing rules moved with the drawings", () => {
+  it("no port sits on a face corner", () => {
+    // A symbol is drawn inside its bbox, so a port declared on a face *corner* can only be met
+    // by artwork running into that corner -- which no symbol does. The port marker then draws
+    // as a loose circle beside the component with nothing joining the two, and a reader cannot
+    // tell which terminal belongs to what.
+    //
+    // Four components shipped that way: both dependent current-controlled sources with p and n
+    // on the same face's two corners, the comparator carrying the ideal opamp's offsets in a
+    // shorter box, and the n-MESFET putting all three terminals at the far corner of their
+    // faces.
+    const offenders: string[] = [];
+    let checked = 0;
+    for (const [id, entry] of Object.entries(display)) {
+      const bbox = (entry.symbol as { bbox?: unknown })?.bbox;
+      if (!Array.isArray(bbox)) continue;
+      const [w, h] = bbox as number[];
+      if (typeof w !== "number" || typeof h !== "number") continue;
+      const ports = merged.get(id)?.ports as Record<string, unknown> | undefined;
+      if (ports === undefined) continue;
+      for (const group of ["inputs", "outputs"] as const) {
+        const list = ports[group];
+        if (!Array.isArray(list)) continue;
+        for (const port of list as { side?: string; offset?: number; id?: string }[]) {
+          const { side, offset } = port;
+          if (typeof side !== "string" || typeof offset !== "number") continue;
+          checked += 1;
+          const span = side === "left" || side === "right" ? h : w;
+          if (offset <= 0 || offset >= span) {
+            offenders.push(`${id}.${port.id ?? "?"} at ${side} ${offset} of ${span}`);
+          }
+        }
+      }
+    }
+    // The guard the engine's version lacked once its data moved: a loop that checks nothing
+    // reports success, so the count is asserted before the result is trusted.
+    expect(checked).toBeGreaterThan(50);
+    expect(offenders).toEqual([]);
+  });
+
+  it("the ideal family is its own palette group", () => {
+    // The group is what carries the distinction, so it has to reach a front end -- and now it
+    // starts here. The diode used to sit under `semiconductor`, which is the one word that
+    // invites reading it as a SPICE model's variant.
+    for (const id of ["ideal.diode", "ideal.switch"]) {
+      const entry = display[id];
+      expect(entry, `${id} is in the display catalogue`).toBeDefined();
+      expect(entry?.category, `${id} must be grouped as ideal`).toBe("ideal");
+      expect(entry?.tags ?? [], `${id} must not be tagged passive`).not.toContain("passive");
+    }
+  });
+});
