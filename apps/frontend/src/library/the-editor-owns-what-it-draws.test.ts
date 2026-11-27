@@ -105,14 +105,28 @@ describe("the editor owns what it draws (gsim-core decision 0010)", () => {
     }).not.toThrow();
   });
 
-  it("does not let the engine's own display fields back in", () => {
-    // The engine still sends `label`, `category`, `description`, `tags`, `main_param` and
-    // `symbol` today and the generator drops them on the floor. If it ever stopped dropping
-    // them, the editor would silently go back to rendering the engine's opinion and this split
-    // would be undone without anything failing.
-    const r = engineCatalog.find((e) => e.metadata.engineId === "passive.resistor");
-    expect(r).toBeDefined();
-    expect(r?.metadata.label).toBe(display["passive.resistor"]?.label);
+  it("takes all six display fields from here and none from the engine", () => {
+    // gsim-core 0.7.1 stopped sending the six (its #115), so the merged catalogue must carry
+    // this repository's value for each of them -- and carry *nothing* where this repository
+    // says nothing. The absent half is what makes the assertion falsifiable now that the
+    // engine sends none: `main_param` is in 37 of the 78 display entries, so an engine that
+    // declared it again would leak through for the other 41 and the split would be undone
+    // with nothing failing. `gen-engine-catalog.mjs` refuses such a submission outright; this
+    // asserts the result in the file a reader actually loads.
+    const mismatched: string[] = [];
+    let compared = 0;
+    for (const id of engineIds) {
+      const mine = (display[id] ?? {}) as Record<string, unknown>;
+      const merged_ = (merged.get(id) ?? {}) as Record<string, unknown>;
+      for (const field of ["label", "category", "description", "tags", "main_param", "symbol"]) {
+        compared += 1;
+        const expected = JSON.stringify(mine[field] ?? null);
+        const actual = JSON.stringify(merged_[field] ?? null);
+        if (expected !== actual) mismatched.push(`${id}.${field}: ${actual} is not ${expected}`);
+      }
+    }
+    expect(compared).toBe(engineIds.length * 6);
+    expect(mismatched).toEqual([]);
   });
 });
 

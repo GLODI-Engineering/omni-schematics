@@ -13,7 +13,12 @@
  *   engine-capabilities.json  the compile facts, per engine type
  *
  * Needs `gsim_py` importable. Without it the committed files stand and `--check` says so
- * rather than failing: a checkout without the Rust toolchain is a working checkout.
+ * rather than failing: a checkout without the Rust toolchain is a working checkout. CI passes
+ * `--require-engine`, which turns that into a failure -- in a gate, "I could not ask the
+ * engine" must not be reported the same way as "the engine agrees". A green run that checked
+ * nothing is how this repository shipped four gates that were never doing their job, and it
+ * caught me once more while landing decision 0010: a regeneration printed success, had done
+ * nothing, and the drift job failed afterwards.
  *
  * Every component the engine submits is validated against the block-metadata
  * schema before anything is written. The drift check answers "did the engine's
@@ -22,11 +27,14 @@
  * used to flow through here into the front end untouched, to be discovered as
  * a blank symbol or a missing port on somebody's sheet.
  *
- *   node scripts/gen-engine-catalog.mjs           # write
- *   node scripts/gen-engine-catalog.mjs --check   # verify, exit 1 on drift
+ *   node scripts/gen-engine-catalog.mjs                            # write
+ *   node scripts/gen-engine-catalog.mjs --check                    # verify, exit 1 on drift
+ *   node scripts/gen-engine-catalog.mjs --check --require-engine   # ...and on no engine
  */
 
 import Ajv from "ajv/dist/2020.js";
+
+import { DISPLAY_FIELDS, catalogueDisagreements } from "./catalogue-agreement.mjs";
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -40,6 +48,7 @@ const LIB = join(REPO_ROOT, "apps/frontend/src/library");
 // because a label and a symbol are decisions somebody makes rather than facts to derive.
 const DISPLAY = JSON.parse(readFileSync(join(LIB, "display-catalog.json"), "utf8"));
 const CHECK = process.argv.includes("--check");
+const REQUIRE_ENGINE = process.argv.includes("--require-engine");
 
 /** Ask the engine. `null` when `gsim_py` is not importable here. */
 function fromEngine(call) {
@@ -64,22 +73,18 @@ function fromEngine(call) {
  */
 function toCatalogEntries(catalog) {
   const missing = [];
+  const reclaimed = [];
   const entries = catalog.components.map((component) => {
-    const {
-      id,
-      compilable,
-      compiles_to: compilesTo,
-      // Dropped on the floor, deliberately: this repository owns how a component is drawn and
-      // described (gsim-core decision 0010). The engine still sends these today and they are
-      // ignored, which is what makes the split real here before the engine stops sending them.
-      label: _label,
-      category: _category,
-      description: _description,
-      tags: _tags,
-      main_param: _mainParam,
-      symbol: _symbol,
-      ...rest
-    } = component;
+    const { id, compilable, compiles_to: compilesTo, ...rest } = component;
+    // The split, asserted from this side. gsim-core 0.7.1 stopped sending these six (its
+    // #115), and this repository owns them now. If the engine ever declares one again there
+    // would be two owners of a label, and the overlay below would silently prefer one of them
+    // per component -- `label` is in every display entry so the editor's would win, while
+    // `main_param` is in 37 of 78, so the engine's would leak through for the other 41. That
+    // is the split being undone with nothing failing, which is what this refuses.
+    for (const field of DISPLAY_FIELDS) {
+      if (field in rest) reclaimed.push(`${id}.${field}`);
+    }
     const display = DISPLAY.components[id];
     if (display === undefined) {
       missing.push(id);
@@ -99,6 +104,15 @@ function toCatalogEntries(catalog) {
       },
     };
   });
+  if (reclaimed.length > 0) {
+    console.error(
+      `gen-engine-catalog: the engine declares ${reclaimed.length} display field(s) that this ` +
+        `repository owns (gsim-core decision 0010):\n  ${reclaimed.join("\n  ")}` +
+        "\n\nRemove them from the engine's component library, or amend 0010 if the ownership " +
+        "itself should change. Two owners of one field is the drift the split was made to end.",
+    );
+    process.exit(1);
+  }
   // Loudly, because a component that reaches a palette with nothing to draw is the failure this
   // split could introduce. Not a warning: the catalogue is not writable without an answer.
   if (missing.length > 0) {
@@ -115,6 +129,15 @@ function toCatalogEntries(catalog) {
 const catalogRaw = fromEngine("catalog");
 const capabilitiesRaw = fromEngine("capabilities");
 if (catalogRaw === null || capabilitiesRaw === null) {
+  if (REQUIRE_ENGINE) {
+    console.error(
+      "gen-engine-catalog: --require-engine was passed and gsim_py is not importable, so " +
+        "nothing here was checked against the engine.\n\n" +
+        `Tried ${process.env.GSIM_PYTHON ?? "python3"}. Build the wheel from gsim-core's ` +
+        "crates/gsim-py with maturin and point GSIM_PYTHON at the interpreter that has it.",
+    );
+    process.exit(1);
+  }
   console.log(
     "gen-engine-catalog: gsim_py is not importable here — leaving the committed files " +
       "alone. Set GSIM_PYTHON to an interpreter that has it to regenerate.",
@@ -200,6 +223,61 @@ if (offenders.length > 0) {
   console.error(
     "\nThe engine owns which components exist; this schema owns how one is described. " +
       "Fix the engine's declaration, or change the schema if the contract itself should widen.",
+  );
+  process.exit(1);
+}
+
+/**
+ * The compiler agrees with itself about a component (gsim-core#110).
+ *
+ * The schema check above asks whether a declaration is *well shaped*. This asks whether the
+ * engine's two answers about the same component *say the same thing*: the component library
+ * declares a component's terminals, their domains and its parameters, and the compile registry
+ * declares the card that gets written, the terminals it writes positionally and the parameters
+ * it reads. A netlist is positional, so two orders of the same four terminals are two
+ * different circuits -- and nothing compared those two lists until this check, which found
+ * that two components disagree (#281) and that six parameters are read by nothing (#283).
+ *
+ * It lives here because here is where both answers are in hand: `catalog()` and
+ * `capabilities()` are two calls into the same engine, and comparing the committed copies
+ * instead would be comparing this script's own output with itself.
+ */
+const agreement = catalogueDisagreements(catalog, JSON.parse(capabilitiesRaw));
+// Before the empty result is believed. A loop that runs zero times reports agreement, and
+// that is the shape of every gate this repository has shipped green while checking nothing.
+const tooLittleChecked = Object.entries({ components: 60, terminals: 40, outputs: 40, params: 150 })
+  .filter(([key, floor]) => (agreement.checked[key] ?? 0) < floor)
+  .map(([key, floor]) => `${key}: ${agreement.checked[key] ?? 0}, expected at least ${floor}`);
+if (tooLittleChecked.length > 0) {
+  console.error(
+    "gen-engine-catalog: the agreement check ran but examined far less than it should have, " +
+      "so its result means nothing:\n  " +
+      tooLittleChecked.join("\n  "),
+  );
+  process.exit(1);
+}
+if (agreement.unexpected.length > 0) {
+  console.error(
+    `gen-engine-catalog: ${agreement.unexpected.length} new disagreement(s) between the ` +
+      "engine's component library and its compile registry:",
+  );
+  for (const finding of agreement.unexpected) console.error(`  ${finding}`);
+  console.error(
+    "\nEach line is `rule|component|detail`. Fix the disagreement, or -- if it is a defect " +
+      "that has to be lived with for now -- file it and add its exact line to " +
+      "KNOWN_DISAGREEMENTS in scripts/catalogue-agreement.mjs with the issue number.",
+  );
+  process.exit(1);
+}
+if (agreement.repaired.length > 0) {
+  console.error(
+    `gen-engine-catalog: ${agreement.repaired.length} known disagreement(s) no longer ` +
+      "disagree, so KNOWN_DISAGREEMENTS is now listing things that are fixed:",
+  );
+  for (const finding of agreement.repaired) console.error(`  ${finding}`);
+  console.error(
+    "\nRemove each one from KNOWN_DISAGREEMENTS in scripts/catalogue-agreement.mjs. A ratchet " +
+      "that is never released stops saying anything about the present.",
   );
   process.exit(1);
 }
