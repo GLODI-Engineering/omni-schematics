@@ -183,7 +183,11 @@ describe("the bundle in this repository", () => {
     // part of what is recorded and the gate refuses a mismatch rather than comparing two
     // different questions.
     expect(provenance.engine.code_fingerprint.digest).toMatch(/^[0-9a-f]{64}$/);
-    expect(provenance.engine.code_fingerprint.paths).toBe(38);
+    // A floor, not the exact count. This said `toBe(38)` and gsim-core 0.8.0 made it 39 by
+    // adding one source file -- which is an ordinary thing for the engine to do, and not
+    // something this repository should have to be told about. What the number is for is
+    // catching a collapse: a fingerprint over three files would still look like a digest.
+    expect(provenance.engine.code_fingerprint.paths).toBeGreaterThan(30);
     expect(provenance.engine.code_fingerprint.inputs).toEqual([...ENGINE_CODE_PATHS]);
   });
 

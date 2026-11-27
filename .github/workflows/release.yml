@@ -160,15 +160,22 @@ jobs:
       # free to drift -- and silent in the direction that matters, since a changelog
       # pointing at an engine older than the one in the package is a release that works
       # and documents something else.
+      #
+      # Scoped to the newest `## ` section since 0.11.0. It read the whole file, which
+      # required every release to *delete* the previous one's engine link to keep the
+      # count at one -- so the changelog was losing the record of which engine each
+      # version carried, and the gate was what forced that. The claim is about the
+      # release being built, so the newest entry is where to ask it.
       - name: The engine in the package is the engine the changelog names
         run: |
-          # Exactly one match, or the gate stops: zero means the instructions stopped
+          # Exactly one match, or the gate stops: zero means the newest entry stopped
           # naming a release and nothing would be pinned; more than one means two links
-          # disagree and picking either is a guess.
-          found=$(grep -o "https://github.com/GLODI-Engineering/gsim-core/releases/tag/v[0-9][0-9.]*" \
-                    CHANGELOG.md | sed 's|.*/tag/v||' | sort -u)
+          # in it disagree and picking either is a guess.
+          found=$(awk '/^## /{n++} n==1' CHANGELOG.md \
+                    | grep -o "https://github.com/GLODI-Engineering/gsim-core/releases/tag/v[0-9][0-9.]*" \
+                    | sed 's|.*/tag/v||' | sort -u)
           if [ "$(printf '%s\n' "$found" | grep -c .)" -ne 1 ]; then
-            echo "::error::CHANGELOG.md must name exactly one gsim-core release; found: ${found:-none}"
+            echo "::error::CHANGELOG.md's newest entry must name exactly one gsim-core release; found: ${found:-none}"
             exit 1
           fi
           shipped=$(node -p "require('./packages/gsim-wasm/provenance.json').engine.version")
