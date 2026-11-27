@@ -286,7 +286,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: the bundle is what it says it is, and the engine has not moved
+      # `GH_TOKEN`: since #280 this arm reads the engine's git tree from the GitHub API to
+      # compare file *content* rather than commit identity. gsim-core is public so the call
+      # needs no credentials, but unauthenticated requests are limited to 60 an hour per IP and
+      # runner IPs are shared -- an unauthenticated 403 would be a gate failing for a reason
+      # that has nothing to do with the bundle.
+      - name: the bundle is what it says it is, and the engine's code has not moved
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/check-gsim-wasm-fresh.mjs --check --against-engine
       - uses: dtolnay/rust-toolchain@stable
         with:
