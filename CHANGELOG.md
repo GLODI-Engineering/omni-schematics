@@ -1,5 +1,106 @@
 # Changelog
 
+## 2026-11-27 — Omni Schematics (0.11.0)
+
+**The editor owns what it draws, a gate asserts the compiler and the editor
+agree about a component, and a number carries the form the catalogue declares
+for it.**
+
+### Install it
+
+1. `omni-schematics-0.11.0.vsix` from this release.
+2. A `general-simulator` binary, **v0.10.0** —
+   [here](https://github.com/GLODI-Engineering/general-simulator/releases).
+3. `"omniSchematics.generalSimulatorPath": "/path/to/general-simulator"`
+
+### The editor owns what it draws
+
+A framing error, corrected. The front end never sees the simulator — it sees
+**the compiler**. So the compiler declares which components it supports and
+what each one needs, and **this editor owns how one is drawn and described**.
+
+`apps/frontend/src/library/display-catalog.json` now holds the label,
+category, description, tags, main parameter and symbol for all 78 components,
+keyed on the engine's component id. The engine stopped declaring them:
+1,467 lines left its data file and four typed fields left its Rust.
+
+Nothing about the editor looks different, and that is the point — the merged
+catalogue is deep-equal to what it was, so none of the 803 label reads or 226
+symbol reads changed. What changed is **where you edit a drawing**. The
+palette's component sizes, a symbol that renders too small, the toolbar: all
+of those are decisions in this repository now, not in a Rust crate's data
+file.
+
+An entry with no compiler declaration stays legal, and is tested. That is what
+the universal components become — something a front end must draw that no
+engine compiles.
+
+### A gate asserts the compiler and the editor agree
+
+Two owners can drift, and drift between a symbol and a specification is this
+project's recurring defect. So the split is only safe while something asserts
+agreement, and that something compares the **engine's two independent answers**
+about the same component: its component library, a data file, against its
+compile registry, which is Rust code. A netlist is positional, so two orders of
+the same four terminals are two different circuits.
+
+Nothing had ever compared those two answers. On its first run the gate found
+three defects, now filed:
+
+- both dependent voltage-controlled sources declare their terminals
+  `cp cn p n` and write them `p n cp cn`. A SPICE `E`/`G` card is
+  `Exxx n+ n- nc+ nc-`, so the card is right and the catalogue shows an order
+  the netlist does not use (#281);
+- a **composite** card declares no terminal list at all, so a transformer's
+  winding order is checked by nothing (#282);
+- six parameters are offered in the inspector and read by no card — among
+  them `IC` on the capacitor and the inductor, a dropped initial condition,
+  and `control.integrator`, which compiles to a card that reads *nothing at
+  all*, so its initial value and both clamps are discarded (#283).
+
+All thirteen of today's disagreements are a ratchet rather than a list of
+excuses: the gate fails on anything new **and** on anything in its table that
+has stopped disagreeing, so the list can only shrink.
+
+### A number carries the form the catalogue declares
+
+The engine moves to
+[**gsim-core 0.8.0**](https://github.com/GLODI-Engineering/gsim-core/releases/tag/v0.8.0),
+which attaches a parameter's declared form where the value **enters** a
+document rather than when it leaves.
+
+0.10.0 fixed this editor's writer. This fixes the other two: a sheet written by
+`gsim-tools` or by an example generator, with `5` where the catalogue says the
+parameter is real, is now loaded — and saved — as `5.0`. The number is
+unchanged; 5 and 5.0 are the same double. What changes is that a Python reader
+is no longer told the author meant an integer.
+
+And a fractional value written to a parameter declared `integer` is refused
+where it was written, naming the block and the parameter, instead of being
+truncated silently or discovered at compile.
+
+### Three gates that were green while checking nothing
+
+Found and repaired: a rule about where a port may sit, which stopped having
+any bounding box to look at once symbols moved here; a rule that every main
+parameter names a real parameter, which stopped having any `main_param` to
+look at once they moved; and a check that the engine's display fields cannot
+come back, which could no longer fail once the engine stopped sending them.
+
+Each was green. Each is now asserted against data that exists, and the port
+rule counts the 197 ports it checked before trusting its own result.
+
+### The bundle-freshness gate stops crying wolf
+
+`check-gsim-wasm-fresh` required the committed engine's pinned commit to *be*
+gsim-core's latest. It went red on every merge over there — including a
+**decision record** — and clearing it means rebuilding and committing a 1.8 MB
+binary, which is how people learn to merge past a red gate.
+
+It compares the **content** of the 39 files the bundle is built from now, by
+git blob hash. A docs merge or a netlist regeneration leaves it green; an
+engine change reds it and names the files that moved.
+
 ## 2026-11-26 — Omni Schematics (0.10.0)
 
 **A float stays a float, the engine resolves its own expressions, and a sheet
